@@ -88,7 +88,11 @@ cd bishe/demo
 2. 配置数据库
 ```sql
 CREATE DATABASE crop_forecast CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE crop_forecast;
+SOURCE demo/database_full_setup.sql;
 ```
+
+> 提示：`demo/database_full_setup.sql` 会创建所有表结构并插入与当前代码匹配的基础数据，包含已经使用 BCrypt 加密的默认用户密码。
 
 3. 修改配置文件
 ```properties
@@ -131,6 +135,8 @@ npm run serve
 | 管理员 | admin | admin123 | 全部权限 |
 | 研究员 | researcher | researcher123 | 数据分析、预测 |
 | 农户 | farmer | farmer123 | 查看预测结果 |
+
+> 数据库脚本中默认账号的密码均已使用 BCrypt 加密存储，登录时仍然使用表格中的明文密码。
 
 ## 项目结构
 
