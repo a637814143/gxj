@@ -35,11 +35,6 @@ public class SecurityConfig {
     }
     
     @Bean
-    public nongye.example.demo.service.SimplePasswordEncoder simplePasswordEncoder() {
-        return new nongye.example.demo.service.SimplePasswordEncoder();
-    }
-    
-    @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();
     }
