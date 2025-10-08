@@ -21,6 +21,36 @@ mvn spring-boot:run
 
 项目默认使用内存 H2 数据库，并开放 `http://localhost:8080` 的基础 REST 接口。
 
+#### 连接到 MySQL 等外部数据库
+
+1. 创建或修改 `demo/src/main/resources/application-mysql.yml` 中的数据库连接信息：
+
+   ```yaml
+   spring:
+     datasource:
+       url: jdbc:mysql://数据库地址:3306/库名?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8
+       username: 数据库账号
+       password: 数据库密码
+   ```
+
+2. 在启动命令中指定使用 `mysql` 配置文件：
+
+   ```bash
+   cd demo
+   mvn spring-boot:run -Dspring-boot.run.profiles=mysql
+   ```
+
+   或者在部署环境中设置环境变量：
+
+   ```bash
+   export SPRING_PROFILES_ACTIVE=mysql
+   export SPRING_DATASOURCE_URL=jdbc:mysql://...
+   export SPRING_DATASOURCE_USERNAME=...
+   export SPRING_DATASOURCE_PASSWORD=...
+   ```
+
+   Spring Boot 会自动读取环境变量覆盖 `application-mysql.yml` 中的默认值，实现与实际数据库的连接。
+
 ### 前端
 
 ```bash
