@@ -1,8 +1,10 @@
 import request from './request'
 
+const AUTH_BASE_PATH = '/api/auth'
+
 export function login(data) {
   return request({
-    url: '/auth/login',
+    url: `${AUTH_BASE_PATH}/login`,
     method: 'post',
     data
   })
@@ -10,7 +12,7 @@ export function login(data) {
 
 export function logout(token) {
   return request({
-    url: '/auth/logout',
+    url: `${AUTH_BASE_PATH}/logout`,
     method: 'post',
     headers: {
       'Authorization': `Bearer ${token}`
@@ -20,7 +22,7 @@ export function logout(token) {
 
 export function refreshToken(token) {
   return request({
-    url: '/auth/refresh',
+    url: `${AUTH_BASE_PATH}/refresh`,
     method: 'post',
     headers: {
       'Authorization': `Bearer ${token}`
@@ -30,7 +32,7 @@ export function refreshToken(token) {
 
 export function getUserInfo(token) {
   return request({
-    url: '/users/profile',
+    url: '/api/users/profile',
     method: 'get',
     headers: {
       'Authorization': `Bearer ${token}`

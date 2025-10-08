@@ -5,6 +5,7 @@ import nongye.example.demo.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
@@ -23,6 +24,16 @@ public class UserController {
     public ResponseEntity<List<User>> getAllUsers() {
         List<User> users = userService.getAllUsers();
         return ResponseEntity.ok(users);
+    }
+
+    @GetMapping("/profile")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<User> getCurrentUserProfile(Authentication authentication) {
+        Object principal = authentication.getPrincipal();
+        if (principal instanceof User currentUser) {
+            return ResponseEntity.ok(currentUser);
+        }
+        throw new RuntimeException("无法获取当前用户信息");
     }
     
     @GetMapping("/{id}")
