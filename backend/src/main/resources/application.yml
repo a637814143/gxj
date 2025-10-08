@@ -1,0 +1,15 @@
+spring:
+  application:
+    name: crop-yield-backend
+  profiles:
+    active: dev
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+server:
+  port: 8080
+  servlet:
+    context-path: /
+logging:
+  level:
+    com.dali.cropyield: INFO
