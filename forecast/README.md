@@ -10,3 +10,5 @@ npm run dev
 ```
 
 默认启动地址为 `http://localhost:5173`。
+
+> 提示：若直接执行 `npm run dev` 或 `npm run build`，项目会自动检测并补齐缺失的核心依赖，确保本地环境可以正常启动。
