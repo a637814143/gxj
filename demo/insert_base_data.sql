@@ -61,9 +61,9 @@ AND p.name IN (
     'report:read'
 );
 
--- 创建默认管理员用户
-INSERT IGNORE INTO users (username, password, email, real_name, phone_number, organization, status) VALUES 
-('admin', '$2a$10$rE5XzKzC6Q8Q8Q8Q8Q8Q8uF8Q8Q8Q8Q8Q8Q8Q8Q8Q8Q8Q8Q8Q8Q8Q8Q8Q8Q8', 'admin@example.com', '系统管理员', '13800000000', '农业系统', 'ACTIVE');
+-- 使用明文密码，便于与取消加密后的登录逻辑保持一致
+INSERT IGNORE INTO users (username, password, email, real_name, phone_number, organization, status) VALUES
+('admin', 'admin123', 'admin@example.com', '系统管理员', '13800000000', '农业系统', 'ACTIVE');
 
 -- 为管理员分配角色
 INSERT IGNORE INTO user_roles (user_id, role_id) 

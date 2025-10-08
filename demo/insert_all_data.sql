@@ -33,25 +33,23 @@ INSERT INTO role_permissions (role_id, permission_id)
 SELECT r.id, p.id FROM roles r, permissions p 
 WHERE r.name = 'FARMER' AND p.name = 'data:read';
 
--- 6. 创建默认管理员用户 (密码: admin123)
-INSERT INTO users (username, password, email, real_name, organization, region_code, status) VALUES 
-('admin', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVEFDi', 'admin@example.com', '系统管理员', '农业部门', 'BJ', 'ACTIVE');
+-- 与应用中关闭加密的逻辑保持一致，直接写入明文密码
+INSERT INTO users (username, password, email, real_name, organization, region_code, status) VALUES
+('admin', 'admin123', 'admin@example.com', '系统管理员', '农业部门', 'BJ', 'ACTIVE');
 
 -- 7. 为管理员用户分配管理员角色
 INSERT INTO user_roles (user_id, role_id) 
 SELECT u.id, r.id FROM users u, roles r WHERE u.username = 'admin' AND r.name = 'ADMIN';
 
--- 8. 创建默认研究员用户 (密码: researcher123)
-INSERT INTO users (username, password, email, real_name, organization, region_code, status) VALUES 
-('researcher', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVEFDi', 'researcher@example.com', '研究员', '农业科研所', 'SH', 'ACTIVE');
+INSERT INTO users (username, password, email, real_name, organization, region_code, status) VALUES
+('researcher', 'researcher123', 'researcher@example.com', '研究员', '农业科研所', 'SH', 'ACTIVE');
 
 -- 9. 为研究员用户分配研究员角色
 INSERT INTO user_roles (user_id, role_id) 
 SELECT u.id, r.id FROM users u, roles r WHERE u.username = 'researcher' AND r.name = 'RESEARCHER';
 
--- 10. 创建默认农户用户 (密码: farmer123)
-INSERT INTO users (username, password, email, real_name, organization, region_code, status) VALUES 
-('farmer', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVEFDi', 'farmer@example.com', '农户', '农业合作社', 'GZ', 'ACTIVE');
+INSERT INTO users (username, password, email, real_name, organization, region_code, status) VALUES
+('farmer', 'farmer123', 'farmer@example.com', '农户', '农业合作社', 'GZ', 'ACTIVE');
 
 -- 11. 为农户用户分配农户角色
 INSERT INTO user_roles (user_id, role_id) 

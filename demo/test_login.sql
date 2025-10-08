@@ -17,8 +17,8 @@ JOIN permissions p ON rp.permission_id = p.id
 WHERE r.name = 'ADMIN';
 
 -- 4. 如果用户不存在，重新创建
-INSERT IGNORE INTO users (username, password, email, real_name, organization, region_code, status) VALUES 
-('admin', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVEFDi', 'admin@example.com', '系统管理员', '农业部门', 'BJ', 'ACTIVE');
+INSERT IGNORE INTO users (username, password, email, real_name, organization, region_code, status) VALUES
+('admin', '123456', 'admin@example.com', '系统管理员', '农业部门', 'BJ', 'ACTIVE');
 
 -- 5. 重新分配角色
 INSERT IGNORE INTO user_roles (user_id, role_id) 
