@@ -3,9 +3,9 @@ package nongye.example.demo.config;
 import nongye.example.demo.security.JwtAuthenticationEntryPoint;
 import nongye.example.demo.security.JwtAuthenticationFilter;
 import nongye.example.demo.service.AuthService;
+import nongye.example.demo.service.SimplePasswordEncoder;
 import nongye.example.demo.service.UserService;
 import nongye.example.demo.util.JwtUtil;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -14,7 +14,6 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
@@ -30,13 +29,8 @@ import java.util.Arrays;
 public class SecurityConfig {
     
     @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
-    }
-    
-    @Bean
-    public nongye.example.demo.service.SimplePasswordEncoder simplePasswordEncoder() {
-        return new nongye.example.demo.service.SimplePasswordEncoder();
+    public PasswordEncoder passwordEncoder(SimplePasswordEncoder simplePasswordEncoder) {
+        return simplePasswordEncoder;
     }
     
     @Bean
