@@ -1,5 +1,12 @@
-# Vue 3 + Vite
+# 农作物产量预测前端（forecast）
 
-This template should help get you started developing with Vue 3 in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+基于 Vite + Vue 3 + Element Plus 的单页应用，提供仪表盘、数据中心、预测中心、报告中心与系统设置等页面骨架，用于对接后端服务。
 
-Learn more about IDE Support for Vue in the [Vue Docs Scaling up Guide](https://vuejs.org/guide/scaling-up/tooling.html#ide-support).
+## 本地开发
+
+```bash
+npm install
+npm run dev
+```
+
+默认启动地址为 `http://localhost:5173`。

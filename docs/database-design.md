@@ -1,105 +1,63 @@
 # 数据库设计说明
 
-## 1. 概览
-- **数据库名称**：`crop_yield`
-- **使用场景**：支撑云南省农作物产量预测与可视化分析系统的数据管理、模型预测、报告存档等业务需求。
-- **设计原则**：满足第三范式、可扩展性、历史版本管理需求，关键业务表预留冗余字段用于后续扩展。
+## 1. 概述
 
-## 2. 模块划分
-1. **基础信息层**：作物、地区、指标、数据来源等基础字典表。
-2. **数据资源层**：历史产量、价格、数据文件等业务数据表。
-3. **预测分析层**：预测模型、预测任务、预测结果、评估指标。
-4. **报告输出层**：报告档案、报告明细、模板配置。
-5. **权限审计层**：用户、角色、权限、操作日志。
+数据库采用 MySQL 兼容设计，覆盖基础信息、数据资源、预测任务、报告输出与权限控制等核心模块。整体遵循以下原则：
 
-## 3. 核心表结构
+- **模块化**：不同业务域分库表（前缀区分 base/dataset/forecast/report/sys）。
+- **可扩展**：字段预留描述、参数、扩展 JSON 等，便于后续功能拓展。
+- **审计性**：所有表继承公共字段 `id`、`created_at`、`updated_at`，支撑数据追踪。
 
-### 3.1 基础信息表
-| 表名 | 描述 | 关键字段 |
-| --- | --- | --- |
-| `ag_crop` | 作物字典 | `name`、`category`、`unit`、`description` |
-| `ag_region` | 行政区划 | `code`(唯一编码)、`name`、`level`(省/州/县) 、`parent_id` |
-| `ag_indicator` | 指标定义 | `indicator_code`、`name`、`unit`、`description` |
-| `ag_datasource` | 数据来源 | `source_code`、`name`、`contact`、`remark` |
+## 2. 表结构概览
 
-### 3.2 数据资源表
-| 表名 | 描述 | 关键字段 |
-| --- | --- | --- |
-| `ag_yield_record` | 历史产量/面积记录 | `crop_id`、`region_id`、`year`、`sown_area`、`harvested_area`、`production`、`yield_per_mu` |
-| `ag_price_record` | 市场价格记录 | `crop_id`、`year`、`average_price`、`unit`、`data_source` |
-| `ag_dataset_file` | 数据文件档案 | `file_name`、`file_type`、`storage_path`、`description`、`imported_at` |
-| `ag_quality_issue` | 数据质量问题 | `dataset_id`、`issue_type`、`description`、`status` |
+| 模块 | 表名 | 说明 |
+| ---- | ---- | ---- |
+| 基础信息 | `base_crop` | 作物基础信息（编码、名称、描述等） |
+|  | `base_region` | 区域基础信息（编码、名称、气候描述） |
+| 数据资源 | `dataset_file` | 数据文件元数据（类型、路径、描述） |
+|  | `dataset_yield_record` | 历史产量记录（作物、区域、年份、产量） |
+|  | `dataset_price_record` | 市场价格记录（作物、区域、日期、价格） |
+| 预测分析 | `forecast_model` | 预测模型定义（名称、类型、描述） |
+|  | `forecast_task` | 预测任务配置（模型、作物、区域、参数、状态） |
+|  | `forecast_result` | 预测输出结果（目标年份、预测值、评价） |
+| 报告输出 | `report_summary` | 分析报告（标题、摘要、关联预测结果） |
+| 权限审计 | `sys_user` | 系统用户（账号、姓名、邮箱） |
+|  | `sys_role` | 角色定义 |
+|  | `sys_permission` | 权限点 |
+|  | `sys_user_role` | 用户-角色关联 |
+|  | `sys_role_permission` | 角色-权限关联 |
 
-### 3.3 预测分析表
-| 表名 | 描述 | 关键字段 |
-| --- | --- | --- |
-| `fc_model` | 模型管理 | `name`、`algorithm`、`hyper_parameters`、`description` |
-| `fc_task` | 预测任务 | `crop_id`、`region_id`、`model_id`、`start_year`、`end_year`、`horizon_years`、`status` |
-| `fc_result` | 预测结果 | `task_id`、`target_year`、`predicted_production`、`predicted_yield_per_mu`、`confidence_lower/upper` |
-| `fc_metric` | 模型评估指标 | `task_id`、`metric_name`、`metric_value` |
-| `fc_scenario` | 情景模拟记录 | `task_id`、`scenario_type`、`assumption_json`、`recommendation` |
+## 3. 关键表字段说明
 
-### 3.4 报告输出表
-| 表名 | 描述 | 关键字段 |
-| --- | --- | --- |
-| `report_archive` | 报告档案 | `title`、`summary`、`file_url`、`generated_at`、`generated_by`、`status` |
-| `report_section` | 报告章节 | `report_id`、`section_title`、`content`、`order_no` |
+### 3.1 `dataset_yield_record`
+- `crop_id` / `region_id`：外键关联作物与区域，支持多区域多作物组合。
+- `year`：年份，整型便于范围查询。
+- `yield_per_hectare`：单位面积产量（吨/公顷），支持浮点。
 
-### 3.5 权限审计表
-| 表名 | 描述 | 关键字段 |
-| --- | --- | --- |
-| `sys_user` | 用户 | `username`、`password`、`email`、`enabled`、`locked` |
-| `sys_role` | 角色 | `code`、`name`、`description` |
-| `sys_permission` | 权限 | `code`、`name`、`description` |
-| `sys_user_role` | 用户角色关联 | `user_id`、`role_id` |
-| `sys_role_permission` | 角色权限关联 | `role_id`、`permission_id` |
-| `sys_operation_log` | 操作日志 | `user_id`、`action`、`module`、`ip`、`created_at` |
+### 3.2 `forecast_task`
+- `model_id`、`crop_id`、`region_id`：关联模型与数据域。
+- `status`：任务状态（PENDING、RUNNING、SUCCESS、FAILED）。
+- `parameters`：JSON 字符串，记录特征字段、时间范围等动态参数。
 
-## 4. 表字段设计示例
+### 3.3 `forecast_result`
+- `task_id`：关联来源任务。
+- `target_year`：预测目标年份。
+- `predicted_yield`：预测产量数值。
+- `evaluation`：评价指标或说明。
 
-### 4.1 `ag_yield_record`
-| 字段 | 类型 | 约束 | 说明 |
-| --- | --- | --- | --- |
-| `id` | BIGINT | PK, AI | 主键 |
-| `crop_id` | BIGINT | FK `ag_crop.id` | 作物 |
-| `region_id` | BIGINT | FK `ag_region.id` | 地区 |
-| `year` | INT | NOT NULL | 年份 |
-| `sown_area` | DECIMAL(16,4) | NULL | 播种面积(万亩) |
-| `harvested_area` | DECIMAL(16,4) | NULL | 收获面积(万亩) |
-| `production` | DECIMAL(16,4) | NULL | 总产量(万吨) |
-| `yield_per_mu` | DECIMAL(16,4) | NULL | 单产(公斤/亩) |
-| `data_source` | VARCHAR(64) | NULL | 数据来源标识 |
-| `data_version` | VARCHAR(32) | NULL | 数据版本 |
-| `created_at` | DATETIME | 默认当前 | 创建时间 |
-| `updated_at` | DATETIME | 默认当前 | 更新时间 |
+### 3.4 权限表
+- `sys_user` 与 `sys_role`、`sys_permission` 采用多对多关系，满足多角色、多权限管理需求。
 
-### 4.2 `fc_task`
-| 字段 | 类型 | 约束 | 说明 |
-| --- | --- | --- | --- |
-| `id` | BIGINT | PK, AI | 主键 |
-| `crop_id` | BIGINT | FK `ag_crop.id` | 预测作物 |
-| `region_id` | BIGINT | FK `ag_region.id` | 预测地区 |
-| `model_id` | BIGINT | FK `fc_model.id` | 使用模型 |
-| `start_year` | INT | NOT NULL | 训练起始年份 |
-| `end_year` | INT | NOT NULL | 训练结束年份 |
-| `horizon_years` | INT | NOT NULL | 预测期数 |
-| `status` | VARCHAR(32) | NOT NULL | 任务状态（CREATED/RUNNING/COMPLETED/FAILED） |
-| `started_at` | DATETIME | NULL | 启动时间 |
-| `completed_at` | DATETIME | NULL | 完成时间 |
-| `error_message` | VARCHAR(256) | NULL | 异常信息 |
+## 4. 约束与索引
 
-## 5. 索引设计
-- `ag_yield_record`: 复合索引 `(crop_id, region_id, year)`，用于趋势分析与预测训练的快速检索。
-- `ag_price_record`: 索引 `(crop_id, year)`。
-- `fc_task`: 索引 `(status)` 便于任务调度扫描；`(created_at)` 支持时间序列统计。
-- `report_archive`: 索引 `(status, generated_at)` 加速报告检索。
-- `sys_user`: 唯一索引 `username`；`sys_role` 唯一索引 `code`。
+- 所有基础信息表在 `code` 字段上设置唯一索引，确保编码唯一性。
+- 关联表建立外键约束，确保数据一致性，可根据实际部署在高并发场景下调整为逻辑约束。
+- 常用查询字段（如 `dataset_yield_record.year`、`dataset_price_record.record_date`）建立普通索引以提升性能。
 
-## 6. 数据一致性与审计
-- 所有主数据表继承审计字段 `created_at`、`updated_at`，并使用触发器或应用层逻辑自动维护。
-- 对关键业务操作（数据导入、模型训练、报告发布）写入 `sys_operation_log`，记录操作人、模块、耗时、结果。
+## 5. 初始化数据建议
 
-## 7. 扩展规划
-- **时序扩展**：如需更高效的时间序列分析，可引入 TimescaleDB 或 Doris，现阶段通过物化视图加速。
-- **多源数据融合**：在 `ag_dataset_file` 中增加 `metadata_json` 字段存储额外信息，方便接入遥感、气象等数据。
-- **数据湖对接**：预留与对象存储（OSS、MinIO）同步的机制，支持大文件存储与AI训练。
+- `sys_role` 预置「管理员」「分析员」「查看者」三个角色。
+- `sys_permission` 预置菜单、接口权限分类，初期可与角色一一绑定。
+- `base_crop`、`base_region` 可导入典型作物与重点区域基础数据，为预测模型准备输入。
+
+详细建表 SQL 见 `docs/database-schema.sql`。

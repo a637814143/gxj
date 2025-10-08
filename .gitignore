@@ -1,6 +1,6 @@
-/backend/target/
-/frontend/node_modules/
-/frontend/dist/
+/demo/target/
+/forecast/node_modules/
+/forecast/dist/
 *.log
 *.iml
 .idea/
