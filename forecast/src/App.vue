@@ -18,6 +18,8 @@ const state = reactive({
     records: [],
     crops: [],
     regions: [],
+    exportError: null,
+    exporting: '',
     filters: {
       cropId: '',
       regionId: '',
@@ -36,6 +38,8 @@ const state = reactive({
     querying: false,
     lastFileName: '',
     initialized: false,
+    exportError: null,
+    exporting: '',
     filters: {
       cropId: '',
       regionId: '',
@@ -102,6 +106,27 @@ const formatDate = value => {
   return new Intl.DateTimeFormat('zh-CN').format(date)
 }
 
+const buildQueryParams = filters => {
+  const params = new URLSearchParams()
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      params.append(key, value)
+    }
+  })
+  return params
+}
+
+const triggerFileDownload = (blob, filename) => {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
 const fetchSummary = async () => {
   state.overview.loading = true
   state.overview.error = null
@@ -148,14 +173,10 @@ const fetchRegions = async () => {
 const fetchRecords = async () => {
   state.dataCenter.loading = true
   state.dataCenter.error = null
+  state.dataCenter.exportError = null
   try {
-    const params = new URLSearchParams()
-    const { cropId, regionId, startYear, endYear } = state.dataCenter.filters
-    if (cropId) params.append('cropId', cropId)
-    if (regionId) params.append('regionId', regionId)
-    if (startYear) params.append('startYear', startYear)
-    if (endYear) params.append('endYear', endYear)
-    const query = params.toString()
+    const queryParams = buildQueryParams(state.dataCenter.filters)
+    const query = queryParams.toString()
     const response = await fetch(`http://localhost:8080/api/yields${query ? `?${query}` : ''}`)
     if (!response.ok) {
       throw new Error('获取历史数据失败')
@@ -229,14 +250,10 @@ const uploadDataset = async file => {
 const queryImportedData = async () => {
   state.dataImport.querying = true
   state.dataImport.queryError = null
+  state.dataImport.exportError = null
   try {
-    const params = new URLSearchParams()
-    const { cropId, regionId, startYear, endYear } = state.dataImport.filters
-    if (cropId) params.append('cropId', cropId)
-    if (regionId) params.append('regionId', regionId)
-    if (startYear) params.append('startYear', startYear)
-    if (endYear) params.append('endYear', endYear)
-    const query = params.toString()
+    const queryParams = buildQueryParams(state.dataImport.filters)
+    const query = queryParams.toString()
     const response = await fetch(`http://localhost:8080/api/yields${query ? `?${query}` : ''}`)
     if (!response.ok) {
       throw new Error('查询导入结果失败')
@@ -248,6 +265,27 @@ const queryImportedData = async () => {
     state.dataImport.results = []
   } finally {
     state.dataImport.querying = false
+  }
+}
+
+const exportImportedData = async format => {
+  if (!['excel', 'pdf'].includes(format)) return
+  state.dataImport.exportError = null
+  state.dataImport.exporting = format
+  try {
+    const queryParams = buildQueryParams(state.dataImport.filters)
+    const query = queryParams.toString()
+    const response = await fetch(`http://localhost:8080/api/yields/export/${format}${query ? `?${query}` : ''}`)
+    if (!response.ok) {
+      throw new Error('导出失败')
+    }
+    const blob = await response.blob()
+    const suffix = format === 'excel' ? 'xlsx' : 'pdf'
+    triggerFileDownload(blob, `导入数据_${new Date().toISOString().slice(0, 10)}.${suffix}`)
+  } catch (error) {
+    state.dataImport.exportError = error.message || '导出失败'
+  } finally {
+    state.dataImport.exporting = ''
   }
 }
 
@@ -288,6 +326,27 @@ const resetFilters = async () => {
   state.dataCenter.filters.startYear = ''
   state.dataCenter.filters.endYear = ''
   await fetchRecords()
+}
+
+const exportDataCenter = async format => {
+  if (!['excel', 'pdf'].includes(format)) return
+  state.dataCenter.exportError = null
+  state.dataCenter.exporting = format
+  try {
+    const queryParams = buildQueryParams(state.dataCenter.filters)
+    const query = queryParams.toString()
+    const response = await fetch(`http://localhost:8080/api/yields/export/${format}${query ? `?${query}` : ''}`)
+    if (!response.ok) {
+      throw new Error('导出失败')
+    }
+    const blob = await response.blob()
+    const suffix = format === 'excel' ? 'xlsx' : 'pdf'
+    triggerFileDownload(blob, `历史数据_${new Date().toISOString().slice(0, 10)}.${suffix}`)
+  } catch (error) {
+    state.dataCenter.exportError = error.message || '导出失败'
+  } finally {
+    state.dataCenter.exporting = ''
+  }
 }
 
 const refreshSection = async () => {
@@ -598,37 +657,58 @@ onMounted(fetchSummary)
 
             <div v-if="state.dataImport.querying" class="loading loading--sub">查询中...</div>
             <div v-else-if="state.dataImport.queryError" class="error">{{ state.dataImport.queryError }}</div>
-            <div v-else-if="state.dataImport.results.length" class="table-wrapper">
-              <table class="table">
-                <thead>
-                  <tr>
-                    <th>作物</th>
-                    <th>类别</th>
-                    <th>地区</th>
-                    <th>年份</th>
-                    <th>播种面积(千公顷)</th>
-                    <th>产量(万吨)</th>
-                    <th>单产(吨/公顷)</th>
-                    <th>平均价格(元/公斤)</th>
-                    <th>采集日期</th>
-                    <th>预估产值(亿元)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="item in state.dataImport.results" :key="item.id">
-                    <td>{{ item.cropName }}</td>
-                    <td>{{ item.cropCategory }}</td>
-                    <td>{{ item.regionName }}</td>
-                    <td>{{ item.year }}</td>
-                    <td>{{ formatNumber(item.sownArea) }}</td>
-                    <td>{{ formatNumber(item.production) }}</td>
-                    <td>{{ formatNumber(item.yieldPerHectare) }}</td>
-                    <td>{{ item.averagePrice ? `${item.averagePrice.toFixed(2)} 元/公斤` : '-' }}</td>
-                    <td>{{ formatDate(item.collectedAt) }}</td>
-                    <td>{{ formatRevenue(item.estimatedRevenue) }}</td>
-                  </tr>
-                </tbody>
-              </table>
+            <div v-else-if="state.dataImport.results.length">
+              <div class="export-actions">
+                <button
+                  class="secondary"
+                  type="button"
+                  :disabled="!!state.dataImport.exporting"
+                  @click="exportImportedData('excel')"
+                >
+                  {{ state.dataImport.exporting === 'excel' ? '导出中...' : '导出 Excel' }}
+                </button>
+                <button
+                  class="secondary"
+                  type="button"
+                  :disabled="!!state.dataImport.exporting"
+                  @click="exportImportedData('pdf')"
+                >
+                  {{ state.dataImport.exporting === 'pdf' ? '导出中...' : '导出 PDF' }}
+                </button>
+              </div>
+              <p v-if="state.dataImport.exportError" class="error error--inline export-actions__error">{{ state.dataImport.exportError }}</p>
+              <div class="table-wrapper">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>作物</th>
+                      <th>类别</th>
+                      <th>地区</th>
+                      <th>年份</th>
+                      <th>播种面积(千公顷)</th>
+                      <th>产量(万吨)</th>
+                      <th>单产(吨/公顷)</th>
+                      <th>平均价格(元/公斤)</th>
+                      <th>采集日期</th>
+                      <th>预估产值(亿元)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="item in state.dataImport.results" :key="item.id">
+                      <td>{{ item.cropName }}</td>
+                      <td>{{ item.cropCategory }}</td>
+                      <td>{{ item.regionName }}</td>
+                      <td>{{ item.year }}</td>
+                      <td>{{ formatNumber(item.sownArea) }}</td>
+                      <td>{{ formatNumber(item.production) }}</td>
+                      <td>{{ formatNumber(item.yieldPerHectare) }}</td>
+                      <td>{{ item.averagePrice ? `${item.averagePrice.toFixed(2)} 元/公斤` : '-' }}</td>
+                      <td>{{ formatDate(item.collectedAt) }}</td>
+                      <td>{{ formatRevenue(item.estimatedRevenue) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
             <p v-else class="empty-hint">暂无导入数据记录，可导入文件或调整筛选条件。</p>
           </section>
@@ -677,35 +757,56 @@ onMounted(fetchSummary)
             </div>
             <div v-if="state.dataCenter.loading" class="loading loading--sub">数据加载中...</div>
             <div v-else-if="state.dataCenter.error" class="error">{{ state.dataCenter.error }}</div>
-            <div v-else-if="state.dataCenter.records.length" class="table-wrapper">
-              <table class="table">
-                <thead>
-                  <tr>
-                    <th>作物</th>
-                    <th>类别</th>
-                    <th>地区</th>
-                    <th>年份</th>
-                    <th>播种面积(千公顷)</th>
-                    <th>产量(万吨)</th>
-                    <th>平均单产</th>
-                    <th>平均价格</th>
-                    <th>预估产值(亿元)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="item in state.dataCenter.records" :key="item.id">
-                    <td>{{ item.cropName }}</td>
-                    <td>{{ item.cropCategory }}</td>
-                    <td>{{ item.regionName }}</td>
-                    <td>{{ item.year }}</td>
-                    <td>{{ formatNumber(item.sownArea) }}</td>
-                    <td>{{ formatNumber(item.production) }}</td>
-                    <td>{{ formatNumber(item.yieldPerHectare) }} 吨/公顷</td>
-                    <td>{{ item.averagePrice ? `${item.averagePrice.toFixed(2)} 元/公斤` : '-' }}</td>
-                    <td>{{ formatRevenue(item.estimatedRevenue) }}</td>
-                  </tr>
-                </tbody>
-              </table>
+            <div v-else-if="state.dataCenter.records.length">
+              <div class="export-actions">
+                <button
+                  class="secondary"
+                  type="button"
+                  :disabled="!!state.dataCenter.exporting"
+                  @click="exportDataCenter('excel')"
+                >
+                  {{ state.dataCenter.exporting === 'excel' ? '导出中...' : '导出 Excel' }}
+                </button>
+                <button
+                  class="secondary"
+                  type="button"
+                  :disabled="!!state.dataCenter.exporting"
+                  @click="exportDataCenter('pdf')"
+                >
+                  {{ state.dataCenter.exporting === 'pdf' ? '导出中...' : '导出 PDF' }}
+                </button>
+              </div>
+              <p v-if="state.dataCenter.exportError" class="error error--inline export-actions__error">{{ state.dataCenter.exportError }}</p>
+              <div class="table-wrapper">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>作物</th>
+                      <th>类别</th>
+                      <th>地区</th>
+                      <th>年份</th>
+                      <th>播种面积(千公顷)</th>
+                      <th>产量(万吨)</th>
+                      <th>平均单产</th>
+                      <th>平均价格</th>
+                      <th>预估产值(亿元)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="item in state.dataCenter.records" :key="item.id">
+                      <td>{{ item.cropName }}</td>
+                      <td>{{ item.cropCategory }}</td>
+                      <td>{{ item.regionName }}</td>
+                      <td>{{ item.year }}</td>
+                      <td>{{ formatNumber(item.sownArea) }}</td>
+                      <td>{{ formatNumber(item.production) }}</td>
+                      <td>{{ formatNumber(item.yieldPerHectare) }} 吨/公顷</td>
+                      <td>{{ item.averagePrice ? `${item.averagePrice.toFixed(2)} 元/公斤` : '-' }}</td>
+                      <td>{{ formatRevenue(item.estimatedRevenue) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
             <p v-else class="empty-hint">暂无满足条件的数据，请调整筛选后重试</p>
           </section>
