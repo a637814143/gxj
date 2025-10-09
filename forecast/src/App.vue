@@ -237,6 +237,7 @@ const uploadDataset = async file => {
     state.dataImport.preview = result.preview ?? []
     state.dataImport.warnings = result.warnings ?? []
     state.dataImport.lastFileName = file.name
+    await fetchSummary()
     await refreshReferenceData()
     await queryImportedData()
     await fetchRecords()
