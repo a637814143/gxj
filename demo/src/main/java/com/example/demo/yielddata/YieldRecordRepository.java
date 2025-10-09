@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface YieldRecordRepository extends JpaRepository<YieldRecord, Long> {
 
@@ -24,4 +25,6 @@ public interface YieldRecordRepository extends JpaRepository<YieldRecord, Long> 
     );
 
     List<YieldRecord> findTop5ByOrderByYearDesc();
+
+    Optional<YieldRecord> findByCropIdAndRegionIdAndYear(Long cropId, Long regionId, Integer year);
 }

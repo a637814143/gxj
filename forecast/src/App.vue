@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import BarChart from './components/charts/BarChart.vue'
 import LineChart from './components/charts/LineChart.vue'
 import PieChart from './components/charts/PieChart.vue'
@@ -24,13 +24,37 @@ const state = reactive({
       startYear: '',
       endYear: ''
     }
+  },
+  dataImport: {
+    uploading: false,
+    uploadError: null,
+    queryError: null,
+    summary: null,
+    warnings: [],
+    preview: [],
+    results: [],
+    querying: false,
+    lastFileName: '',
+    initialized: false,
+    filters: {
+      cropId: '',
+      regionId: '',
+      startYear: '',
+      endYear: ''
+    }
   }
 })
+
+const importFileInput = ref(null)
 
 const sectionMeta = {
   overview: {
     title: '云南农作物产量驾驶舱',
     subtitle: '汇聚省市县产量、面积与预测指标，为农业管理提供决策依据'
+  },
+  import: {
+    title: '数据导入与清洗',
+    subtitle: '支持 Excel/CSV 批量入库、自动清洗与质检预览'
   },
   data: {
     title: '数据管理中心',
@@ -67,6 +91,17 @@ const formatRevenue = value => {
   return `${formatNumber(number)} 亿元`
 }
 
+const formatDate = value => {
+  if (!value) {
+    return '-'
+  }
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+  return new Intl.DateTimeFormat('zh-CN').format(date)
+}
+
 const fetchSummary = async () => {
   state.overview.loading = true
   state.overview.error = null
@@ -85,6 +120,7 @@ const fetchSummary = async () => {
 }
 
 const fetchCrops = async () => {
+  state.dataCenter.error = null
   try {
     const response = await fetch('http://localhost:8080/api/crops')
     if (!response.ok) {
@@ -97,6 +133,7 @@ const fetchCrops = async () => {
 }
 
 const fetchRegions = async () => {
+  state.dataCenter.error = null
   try {
     const response = await fetch('http://localhost:8080/api/regions')
     if (!response.ok) {
@@ -132,6 +169,96 @@ const fetchRecords = async () => {
   }
 }
 
+const ensureReferenceData = async () => {
+  if (!state.dataCenter.initialized) {
+    await initDataCenter()
+  }
+}
+
+const refreshReferenceData = async () => {
+  await Promise.all([fetchCrops(), fetchRegions()])
+}
+
+const handleImportFileChange = async event => {
+  const [file] = event.target.files || []
+  if (!file) {
+    return
+  }
+  await uploadDataset(file)
+  if (importFileInput.value) {
+    importFileInput.value.value = ''
+  }
+}
+
+const uploadDataset = async file => {
+  state.dataImport.uploading = true
+  state.dataImport.uploadError = null
+  state.dataImport.summary = null
+  state.dataImport.preview = []
+  state.dataImport.warnings = []
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await fetch('http://localhost:8080/api/data-import/upload', {
+      method: 'POST',
+      body: formData
+    })
+    if (!response.ok) {
+      throw new Error('数据导入失败')
+    }
+    const result = await response.json()
+    state.dataImport.summary = {
+      totalRows: result.totalRows,
+      insertedRows: result.insertedRows,
+      updatedRows: result.updatedRows,
+      skippedRows: result.skippedRows
+    }
+    state.dataImport.preview = result.preview ?? []
+    state.dataImport.warnings = result.warnings ?? []
+    state.dataImport.lastFileName = file.name
+    await refreshReferenceData()
+    await queryImportedData()
+    await fetchRecords()
+  } catch (error) {
+    state.dataImport.uploadError = error.message || '导入失败，请稍后重试'
+  } finally {
+    state.dataImport.uploading = false
+  }
+}
+
+const queryImportedData = async () => {
+  state.dataImport.querying = true
+  state.dataImport.queryError = null
+  try {
+    const params = new URLSearchParams()
+    const { cropId, regionId, startYear, endYear } = state.dataImport.filters
+    if (cropId) params.append('cropId', cropId)
+    if (regionId) params.append('regionId', regionId)
+    if (startYear) params.append('startYear', startYear)
+    if (endYear) params.append('endYear', endYear)
+    const query = params.toString()
+    const response = await fetch(`http://localhost:8080/api/yields${query ? `?${query}` : ''}`)
+    if (!response.ok) {
+      throw new Error('查询导入结果失败')
+    }
+    state.dataImport.results = await response.json()
+    state.dataImport.initialized = true
+  } catch (error) {
+    state.dataImport.queryError = error.message || '查询失败'
+    state.dataImport.results = []
+  } finally {
+    state.dataImport.querying = false
+  }
+}
+
+const resetImportFilters = async () => {
+  state.dataImport.filters.cropId = ''
+  state.dataImport.filters.regionId = ''
+  state.dataImport.filters.startYear = ''
+  state.dataImport.filters.endYear = ''
+  await queryImportedData()
+}
+
 const initDataCenter = async () => {
   if (state.dataCenter.initialized) return
   await Promise.all([fetchCrops(), fetchRegions()])
@@ -143,6 +270,11 @@ const changeSection = async section => {
   state.activeSection = section
   if (section === 'data') {
     await initDataCenter()
+  } else if (section === 'import') {
+    await ensureReferenceData()
+    if (!state.dataImport.initialized) {
+      await queryImportedData()
+    }
   }
 }
 
@@ -163,6 +295,10 @@ const refreshSection = async () => {
     await fetchSummary()
   } else if (state.activeSection === 'data') {
     await fetchRecords()
+  } else if (state.activeSection === 'import') {
+    if (state.dataImport.summary) {
+      await queryImportedData()
+    }
   }
 }
 
@@ -189,6 +325,7 @@ onMounted(fetchSummary)
         <p class="menu__title">功能导航</p>
         <ul>
           <li :class="{ active: state.activeSection === 'overview' }" @click="changeSection('overview')">数据驾驶舱</li>
+          <li :class="{ active: state.activeSection === 'import' }" @click="changeSection('import')">数据导入</li>
           <li :class="{ active: state.activeSection === 'data' }" @click="changeSection('data')">数据管理</li>
           <li :class="{ active: state.activeSection === 'prediction' }" @click="changeSection('prediction')">预测工坊</li>
           <li :class="{ active: state.activeSection === 'decision' }" @click="changeSection('decision')">决策支持</li>
@@ -323,6 +460,178 @@ onMounted(fetchSummary)
               </section>
             </div>
           </template>
+        </template>
+
+        <template v-else-if="state.activeSection === 'import'">
+          <section class="panel">
+            <div class="panel__header">
+              <h2>数据导入</h2>
+              <span class="panel__hint">上传 Excel/CSV 文件，系统自动完成缺失值处理、异常检测与标准化</span>
+            </div>
+            <div class="import-uploader">
+              <input
+                ref="importFileInput"
+                accept=".csv,.xls,.xlsx"
+                class="import-uploader__input"
+                type="file"
+                @change="handleImportFileChange"
+              />
+              <div class="import-uploader__actions">
+                <button
+                  class="primary"
+                  type="button"
+                  :disabled="state.dataImport.uploading"
+                  @click="importFileInput && importFileInput.value && importFileInput.value.click()"
+                >
+                  {{ state.dataImport.uploading ? '正在导入...' : '选择文件并导入' }}
+                </button>
+                <span v-if="state.dataImport.lastFileName" class="import-uploader__filename">
+                  已选择：{{ state.dataImport.lastFileName }}
+                </span>
+              </div>
+              <p class="import-uploader__tip">
+                支持字段：作物、作物类别、地区、地区级别、年份、播种面积、产量、单产、平均价格、数据来源、采集日期等，可自动识别常见中文表头。
+              </p>
+              <p v-if="state.dataImport.uploadError" class="error error--inline">{{ state.dataImport.uploadError }}</p>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel__header">
+              <h2>清洗与入库结果</h2>
+              <span class="panel__hint">汇总导入批次的有效行、更新行与异常提示</span>
+            </div>
+            <template v-if="state.dataImport.summary">
+              <div class="import-summary-grid">
+                <article class="summary-card">
+                  <p class="summary-card__label">解析总行数</p>
+                  <p class="summary-card__value">{{ formatNumber(state.dataImport.summary.totalRows) }}</p>
+                  <p class="summary-card__hint">包含自动过滤前的全部记录</p>
+                </article>
+                <article class="summary-card">
+                  <p class="summary-card__label">新增入库</p>
+                  <p class="summary-card__value">{{ formatNumber(state.dataImport.summary.insertedRows) }}</p>
+                  <p class="summary-card__hint">首次导入的作物-地区-年份组合</p>
+                </article>
+                <article class="summary-card">
+                  <p class="summary-card__label">覆盖更新</p>
+                  <p class="summary-card__value">{{ formatNumber(state.dataImport.summary.updatedRows) }}</p>
+                  <p class="summary-card__hint">已存在记录的字段最新覆盖</p>
+                </article>
+                <article class="summary-card">
+                  <p class="summary-card__label">清洗后跳过</p>
+                  <p class="summary-card__value">{{ formatNumber(state.dataImport.summary.skippedRows) }}</p>
+                  <p class="summary-card__hint">因缺失或异常被剔除的行</p>
+                </article>
+              </div>
+
+              <ul v-if="state.dataImport.warnings.length" class="import-warnings">
+                <li v-for="(warning, index) in state.dataImport.warnings" :key="warning + index">{{ warning }}</li>
+              </ul>
+
+              <div v-if="state.dataImport.preview.length" class="table-wrapper">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>作物</th>
+                      <th>地区</th>
+                      <th>年份</th>
+                      <th>播种面积(千公顷)</th>
+                      <th>产量(万吨)</th>
+                      <th>单产(吨/公顷)</th>
+                      <th>平均价格(元/公斤)</th>
+                      <th>采集日期</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="item in state.dataImport.preview" :key="item.id ?? item.cropName + item.regionName + item.year">
+                      <td>{{ item.cropName }}</td>
+                      <td>{{ item.regionName }}</td>
+                      <td>{{ item.year }}</td>
+                      <td>{{ formatNumber(item.sownArea) }}</td>
+                      <td>{{ formatNumber(item.production) }}</td>
+                      <td>{{ formatNumber(item.yieldPerHectare) }}</td>
+                      <td>{{ item.averagePrice ? item.averagePrice.toFixed(2) : '-' }}</td>
+                      <td>{{ formatDate(item.collectedAt) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p v-else class="empty-hint">未读取到可用于预览的记录，请检查数据文件。</p>
+            </template>
+            <p v-else class="empty-hint">暂未导入数据，请先上传文件。</p>
+          </section>
+
+          <section class="panel">
+            <div class="panel__header">
+              <h2>导入数据查询</h2>
+              <span class="panel__hint">与数据中心共享底层库，可继续筛选、导出或用于预测建模</span>
+            </div>
+            <form class="filter-form" @submit.prevent="queryImportedData">
+              <label>
+                作物
+                <select v-model="state.dataImport.filters.cropId">
+                  <option value="">全部作物</option>
+                  <option v-for="crop in state.dataCenter.crops" :key="crop.id" :value="crop.id">{{ crop.name }}</option>
+                </select>
+              </label>
+              <label>
+                地区
+                <select v-model="state.dataImport.filters.regionId">
+                  <option value="">全部地区</option>
+                  <option v-for="region in state.dataCenter.regions" :key="region.id" :value="region.id">{{ region.name }}</option>
+                </select>
+              </label>
+              <label>
+                起始年份
+                <input v-model="state.dataImport.filters.startYear" placeholder="如 2018" type="number" />
+              </label>
+              <label>
+                截止年份
+                <input v-model="state.dataImport.filters.endYear" placeholder="如 2023" type="number" />
+              </label>
+              <div class="filter-actions">
+                <button class="primary" type="submit" :disabled="state.dataImport.querying">查询</button>
+                <button type="button" @click="resetImportFilters">重置</button>
+              </div>
+            </form>
+
+            <div v-if="state.dataImport.querying" class="loading loading--sub">查询中...</div>
+            <div v-else-if="state.dataImport.queryError" class="error">{{ state.dataImport.queryError }}</div>
+            <div v-else-if="state.dataImport.results.length" class="table-wrapper">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>作物</th>
+                    <th>类别</th>
+                    <th>地区</th>
+                    <th>年份</th>
+                    <th>播种面积(千公顷)</th>
+                    <th>产量(万吨)</th>
+                    <th>单产(吨/公顷)</th>
+                    <th>平均价格(元/公斤)</th>
+                    <th>采集日期</th>
+                    <th>预估产值(亿元)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in state.dataImport.results" :key="item.id">
+                    <td>{{ item.cropName }}</td>
+                    <td>{{ item.cropCategory }}</td>
+                    <td>{{ item.regionName }}</td>
+                    <td>{{ item.year }}</td>
+                    <td>{{ formatNumber(item.sownArea) }}</td>
+                    <td>{{ formatNumber(item.production) }}</td>
+                    <td>{{ formatNumber(item.yieldPerHectare) }}</td>
+                    <td>{{ item.averagePrice ? `${item.averagePrice.toFixed(2)} 元/公斤` : '-' }}</td>
+                    <td>{{ formatDate(item.collectedAt) }}</td>
+                    <td>{{ formatRevenue(item.estimatedRevenue) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p v-else class="empty-hint">暂无导入数据记录，可导入文件或调整筛选条件。</p>
+          </section>
         </template>
 
         <template v-else-if="state.activeSection === 'data'">

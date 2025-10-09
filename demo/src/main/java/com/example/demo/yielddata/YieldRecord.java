@@ -84,35 +84,71 @@ public class YieldRecord {
         return crop;
     }
 
+    public void setCrop(Crop crop) {
+        this.crop = crop;
+    }
+
     public Region getRegion() {
         return region;
+    }
+
+    public void setRegion(Region region) {
+        this.region = region;
     }
 
     public Integer getYear() {
         return year;
     }
 
+    public void setYear(Integer year) {
+        this.year = year;
+    }
+
     public Double getSownArea() {
         return sownArea;
+    }
+
+    public void setSownArea(Double sownArea) {
+        this.sownArea = sownArea;
     }
 
     public Double getProduction() {
         return production;
     }
 
+    public void setProduction(Double production) {
+        this.production = production;
+    }
+
     public Double getYieldPerHectare() {
         return yieldPerHectare;
+    }
+
+    public void setYieldPerHectare(Double yieldPerHectare) {
+        this.yieldPerHectare = yieldPerHectare;
     }
 
     public Double getAveragePrice() {
         return averagePrice;
     }
 
+    public void setAveragePrice(Double averagePrice) {
+        this.averagePrice = averagePrice;
+    }
+
     public String getDataSource() {
         return dataSource;
     }
 
+    public void setDataSource(String dataSource) {
+        this.dataSource = dataSource;
+    }
+
     public LocalDate getCollectedAt() {
         return collectedAt;
+    }
+
+    public void setCollectedAt(LocalDate collectedAt) {
+        this.collectedAt = collectedAt;
     }
 }
