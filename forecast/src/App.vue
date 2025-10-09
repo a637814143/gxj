@@ -1,103 +1,70 @@
 <script setup>
 import { computed, onMounted, reactive } from 'vue'
-import TrendChart from './components/TrendChart.vue'
+import BarChart from './components/charts/BarChart.vue'
+import LineChart from './components/charts/LineChart.vue'
+import PieChart from './components/charts/PieChart.vue'
 
 const state = reactive({
   activeSection: 'overview',
   overview: {
     loading: true,
     error: null,
-    summary: null
+    data: null
   },
-  assets: {
+  dataCenter: {
     initialized: false,
     loading: false,
     error: null,
-    items: [],
-    categories: [],
-    categoryLoading: false,
-    categoryError: null,
+    records: [],
+    crops: [],
+    regions: [],
     filters: {
-      search: '',
-      categoryId: '',
-      status: '',
-      expiringSoon: false
+      cropId: '',
+      regionId: '',
+      startYear: '',
+      endYear: ''
     }
   }
 })
 
 const sectionMeta = {
   overview: {
-    title: '概览数据',
-    subtitle: '实时掌握软件资产运行与预测状况'
+    title: '云南农作物产量驾驶舱',
+    subtitle: '汇聚省市县产量、面积与预测指标，为农业管理提供决策依据'
   },
-  statistics: {
-    title: '统计中心',
-    subtitle: '更多可视化统计即将上线'
-  },
-  finance: {
-    title: '财务中心',
-    subtitle: '费用与预算模块建设中'
+  data: {
+    title: '数据管理中心',
+    subtitle: '多维筛选历史产量、播种面积等基础数据'
   },
   prediction: {
-    title: '预测中心',
-    subtitle: '高级预测功能正在规划中'
+    title: '预测模型工坊',
+    subtitle: 'ARIMA、Prophet、XGBoost、LSTM 等模型集成规划中'
   },
-  assets: {
-    title: '资产中心',
-    subtitle: '查看资产清单与分类概览'
-  },
-  placeholder: {
-    title: '功能建设中',
-    subtitle: '敬请期待更多内容'
+  decision: {
+    title: '决策支持实验室',
+    subtitle: '收益测算、种植推荐、情景模拟功能即将上线'
   }
 }
 
-const currentSection = computed(() => sectionMeta[state.activeSection] ?? sectionMeta.placeholder)
+const currentSection = computed(() => sectionMeta[state.activeSection] ?? sectionMeta.overview)
 
-const statusLabels = {
-  ACTIVE: '正常运行',
-  MAINTENANCE: '维护中',
-  RETIRED: '已退役'
-}
-
-const formatDate = value => {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-  return new Intl.DateTimeFormat('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  }).format(date)
-}
-
-const formatCurrency = value => {
-  if (value === null || value === undefined) return '-'
+const formatNumber = value => {
   const number = Number(value)
   if (Number.isNaN(number)) {
-    return value
+    return '-'
   }
   return new Intl.NumberFormat('zh-CN', {
-    style: 'currency',
-    currency: 'CNY',
-    maximumFractionDigits: 0
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
   }).format(number)
 }
 
-const formatStatus = value => {
-  if (!value) return '-'
-  return statusLabels[value] ?? value
-}
-
-const formatDays = value => {
-  if (value === null || value === undefined) return '-'
-  if (value < 0) {
-    return `逾期 ${Math.abs(value)} 天`
+const formatRevenue = value => {
+  const number = Number(value)
+  if (Number.isNaN(number)) {
+    return '-'
   }
-  return `${value} 天`
+  return `${formatNumber(number)} 亿元`
 }
 
 const fetchSummary = async () => {
@@ -106,101 +73,104 @@ const fetchSummary = async () => {
   try {
     const response = await fetch('http://localhost:8080/api/dashboard/summary')
     if (!response.ok) {
-      throw new Error('获取概览信息失败，请稍后重试')
+      throw new Error('获取驾驶舱数据失败')
     }
-    state.overview.summary = await response.json()
+    state.overview.data = await response.json()
   } catch (error) {
-    state.overview.error = error.message || '数据加载异常'
+    state.overview.error = error.message || '数据加载异常，请稍后再试'
+    state.overview.data = null
   } finally {
     state.overview.loading = false
   }
 }
 
-const fetchAssetCategories = async () => {
-  state.assets.categoryLoading = true
-  state.assets.categoryError = null
+const fetchCrops = async () => {
   try {
-    const response = await fetch('http://localhost:8080/api/software/categories')
+    const response = await fetch('http://localhost:8080/api/crops')
     if (!response.ok) {
-      throw new Error('获取分类统计失败，请稍后再试')
+      throw new Error('获取作物列表失败')
     }
-    state.assets.categories = await response.json()
+    state.dataCenter.crops = await response.json()
   } catch (error) {
-    state.assets.categoryError = error.message || '分类数据加载异常'
-  } finally {
-    state.assets.categoryLoading = false
+    state.dataCenter.error = error.message || '作物列表加载失败'
   }
 }
 
-const fetchAssets = async () => {
-  state.assets.loading = true
-  state.assets.error = null
+const fetchRegions = async () => {
+  try {
+    const response = await fetch('http://localhost:8080/api/regions')
+    if (!response.ok) {
+      throw new Error('获取地区列表失败')
+    }
+    state.dataCenter.regions = await response.json()
+  } catch (error) {
+    state.dataCenter.error = error.message || '地区列表加载失败'
+  }
+}
+
+const fetchRecords = async () => {
+  state.dataCenter.loading = true
+  state.dataCenter.error = null
   try {
     const params = new URLSearchParams()
-    const { search, categoryId, status, expiringSoon } = state.assets.filters
-    if (search && search.trim()) {
-      params.append('search', search.trim())
-    }
-    if (categoryId) {
-      params.append('categoryId', categoryId)
-    }
-    if (status) {
-      params.append('status', status)
-    }
-    if (expiringSoon) {
-      params.append('expiringSoon', 'true')
-    }
+    const { cropId, regionId, startYear, endYear } = state.dataCenter.filters
+    if (cropId) params.append('cropId', cropId)
+    if (regionId) params.append('regionId', regionId)
+    if (startYear) params.append('startYear', startYear)
+    if (endYear) params.append('endYear', endYear)
     const query = params.toString()
-    const response = await fetch(`http://localhost:8080/api/software${query ? `?${query}` : ''}`)
+    const response = await fetch(`http://localhost:8080/api/yields${query ? `?${query}` : ''}`)
     if (!response.ok) {
-      throw new Error('获取软件资产失败，请稍后再试')
+      throw new Error('获取历史数据失败')
     }
-    state.assets.items = await response.json()
+    state.dataCenter.records = await response.json()
   } catch (error) {
-    state.assets.error = error.message || '资产数据加载异常'
-    state.assets.items = []
+    state.dataCenter.error = error.message || '数据加载异常'
+    state.dataCenter.records = []
   } finally {
-    state.assets.loading = false
+    state.dataCenter.loading = false
   }
 }
 
-const loadAssetsSection = async () => {
-  if (state.assets.initialized) {
-    return
-  }
-  await Promise.all([fetchAssetCategories(), fetchAssets()])
-  state.assets.initialized = true
+const initDataCenter = async () => {
+  if (state.dataCenter.initialized) return
+  await Promise.all([fetchCrops(), fetchRegions()])
+  await fetchRecords()
+  state.dataCenter.initialized = true
 }
 
 const changeSection = async section => {
   state.activeSection = section
-  if (section === 'assets') {
-    await loadAssetsSection()
+  if (section === 'data') {
+    await initDataCenter()
   }
 }
 
-const applyAssetFilters = async () => {
-  if (!state.assets.initialized) {
-    state.assets.initialized = true
-  }
-  await fetchAssets()
+const applyFilters = async () => {
+  await fetchRecords()
 }
 
-const resetAssetFilters = async () => {
-  state.assets.filters.search = ''
-  state.assets.filters.categoryId = ''
-  state.assets.filters.status = ''
-  state.assets.filters.expiringSoon = false
-  await fetchAssets()
+const resetFilters = async () => {
+  state.dataCenter.filters.cropId = ''
+  state.dataCenter.filters.regionId = ''
+  state.dataCenter.filters.startYear = ''
+  state.dataCenter.filters.endYear = ''
+  await fetchRecords()
 }
 
 const refreshSection = async () => {
   if (state.activeSection === 'overview') {
     await fetchSummary()
-  } else if (state.activeSection === 'assets') {
-    await Promise.all([fetchAssetCategories(), fetchAssets()])
+  } else if (state.activeSection === 'data') {
+    await fetchRecords()
   }
 }
+
+const productionTrend = computed(() => state.overview.data?.productionTrend ?? [])
+const cropStructure = computed(() => state.overview.data?.cropStructure ?? [])
+const regionComparisons = computed(() => state.overview.data?.regionComparisons ?? [])
+const forecastOutlook = computed(() => state.overview.data?.forecastOutlook ?? [])
+const recentRecords = computed(() => state.overview.data?.recentRecords ?? [])
 
 onMounted(fetchSummary)
 </script>
@@ -209,47 +179,36 @@ onMounted(fetchSummary)
   <div class="app-shell">
     <aside class="sidebar">
       <div class="sidebar__brand">
-        <span class="brand__logo">软</span>
+        <span class="brand__logo">农</span>
         <div>
-          <p class="brand__title">软件资产预测平台</p>
-          <p class="brand__subtitle">Software Asset Forecast</p>
+          <p class="brand__title">云南农作物分析系统</p>
+          <p class="brand__subtitle">Yunnan Crop Intelligence</p>
         </div>
       </div>
       <nav class="sidebar__menu">
-        <p class="menu__title">导航中心</p>
+        <p class="menu__title">功能导航</p>
         <ul>
-          <li :class="{ active: state.activeSection === 'overview' }" @click="changeSection('overview')">
-            概览看板
-          </li>
-          <li :class="{ active: state.activeSection === 'statistics' }" @click="changeSection('statistics')">
-            统计中心
-          </li>
-          <li :class="{ active: state.activeSection === 'finance' }" @click="changeSection('finance')">
-            财务中心
-          </li>
-          <li :class="{ active: state.activeSection === 'prediction' }" @click="changeSection('prediction')">
-            预测中心
-          </li>
-          <li :class="{ active: state.activeSection === 'assets' }" @click="changeSection('assets')">
-            资产中心
-          </li>
+          <li :class="{ active: state.activeSection === 'overview' }" @click="changeSection('overview')">数据驾驶舱</li>
+          <li :class="{ active: state.activeSection === 'data' }" @click="changeSection('data')">数据管理</li>
+          <li :class="{ active: state.activeSection === 'prediction' }" @click="changeSection('prediction')">预测工坊</li>
+          <li :class="{ active: state.activeSection === 'decision' }" @click="changeSection('decision')">决策支持</li>
         </ul>
       </nav>
       <div class="sidebar__footer">
-        <p class="footer__title">预测进度</p>
-        <p class="footer__value">76% 本月计划完成</p>
+        <p class="footer__title">系统说明</p>
+        <p class="footer__value">支持作物产量分析、模型预测、收益测算等核心功能建设</p>
       </div>
     </aside>
+
     <main class="content">
       <header class="topbar">
         <div>
           <h1>{{ currentSection.title }}</h1>
           <p class="topbar__subtitle">{{ currentSection.subtitle }}</p>
         </div>
-        <button class="refresh-button" type="button" @click="refreshSection">
-          刷新数据
-        </button>
+        <button class="refresh-button" type="button" @click="refreshSection">刷新</button>
       </header>
+
       <section class="main-area">
         <template v-if="state.activeSection === 'overview'">
           <div v-if="state.overview.loading" class="loading">数据加载中...</div>
@@ -257,697 +216,199 @@ onMounted(fetchSummary)
           <template v-else>
             <section class="stats-grid">
               <article class="stat-card">
-                <p class="stat-card__label">软件数量</p>
-                <p class="stat-card__value">{{ state.overview.summary?.softwareCount ?? '-' }}</p>
-                <p class="stat-card__hint">包含所有纳管软件资产</p>
+                <p class="stat-card__label">统计产量</p>
+                <p class="stat-card__value">{{ formatNumber(state.overview.data?.totalProduction) }} 万吨</p>
+                <p class="stat-card__hint">覆盖省内主要粮经作物</p>
               </article>
               <article class="stat-card">
-                <p class="stat-card__label">已预测软件</p>
-                <p class="stat-card__value">{{ state.overview.summary?.predictedSoftwareCount ?? '-' }}</p>
-                <p class="stat-card__hint">至少拥有一条预测记录的软件</p>
+                <p class="stat-card__label">播种面积</p>
+                <p class="stat-card__value">{{ formatNumber(state.overview.data?.totalSownArea) }} 千公顷</p>
+                <p class="stat-card__hint">包含省、市州统计口径</p>
               </article>
               <article class="stat-card">
-                <p class="stat-card__label">预测次数</p>
-                <p class="stat-card__value">{{ state.overview.summary?.predictionCount ?? '-' }}</p>
-                <p class="stat-card__hint">近周期内系统生成的预测</p>
+                <p class="stat-card__label">平均单产</p>
+                <p class="stat-card__value">{{ formatNumber(state.overview.data?.averageYield) }} 吨/公顷</p>
+                <p class="stat-card__hint">依据最新年度数据测算</p>
               </article>
               <article class="stat-card">
-                <p class="stat-card__label">软件类别</p>
-                <p class="stat-card__value">{{ state.overview.summary?.categoryCount ?? '-' }}</p>
-                <p class="stat-card__hint">当前纳管的分类维度</p>
+                <p class="stat-card__label">历史记录</p>
+                <p class="stat-card__value">{{ formatNumber(state.overview.data?.recordCount) }}</p>
+                <p class="stat-card__hint">累计采集县级以上数据</p>
               </article>
             </section>
 
             <div class="panel-grid">
               <section class="panel">
                 <div class="panel__header">
-                  <h2>近期预测趋势</h2>
-                  <span class="panel__hint">展示最近六个月预测生成情况</span>
+                  <h2>年度产量趋势</h2>
+                  <span class="panel__hint">近年全省主要作物合计产量</span>
                 </div>
-                <TrendChart :points="state.overview.summary?.recentPredictionTrend ?? []" />
+                <LineChart :points="productionTrend" />
               </section>
 
               <section class="panel">
                 <div class="panel__header">
-                  <h2>即将到期的维护</h2>
-                  <span class="panel__hint">未来 120 天需要关注的资产</span>
+                  <h2>作物结构占比</h2>
+                  <span class="panel__hint">展示重点作物的产量与面积占比</span>
                 </div>
-                <div class="table-wrapper" v-if="state.overview.summary?.upcomingRenewals?.length">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>软件名称</th>
-                        <th>类别</th>
-                        <th>维护到期</th>
-                        <th>剩余天数</th>
-                        <th>授权类型</th>
-                        <th>预测覆盖</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="item in state.overview.summary.upcomingRenewals" :key="item.softwareName">
-                        <td>
-                          <span class="name">{{ item.softwareName }}</span>
-                          <span class="muted">{{ item.vendor }}</span>
-                        </td>
-                        <td>{{ item.categoryName || '-' }}</td>
-                        <td>{{ formatDate(item.maintenanceExpiryDate) }}</td>
-                        <td>
-                          <span :class="['days', item.daysRemaining <= 30 ? 'danger' : '']">
-                            {{ Math.max(item.daysRemaining ?? 0, 0) }} 天
-                          </span>
-                        </td>
-                        <td>{{ item.licenseType || '-' }}</td>
-                        <td>
-                          <span :class="['badge', item.hasRecentPrediction ? 'badge--success' : 'badge--warning']">
-                            {{ item.hasRecentPrediction ? '已纳入' : '待预测' }}
-                          </span>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-                <p v-else class="empty-hint">暂无需要关注的维护计划</p>
+                <PieChart :slices="cropStructure" />
               </section>
 
               <section class="panel">
                 <div class="panel__header">
-                  <h2>最新预测记录</h2>
-                  <span class="panel__hint">按预测时间倒序展示最近 5 条</span>
+                  <h2>地区对比分析</h2>
+                  <span class="panel__hint">对比主要州市产量与播种面积</span>
                 </div>
-                <div class="table-wrapper" v-if="state.overview.summary?.latestPredictions?.length">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>软件名称</th>
-                        <th>预测日期</th>
-                        <th>年度成本</th>
-                        <th>活跃用户</th>
-                        <th>置信度</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr
-                        v-for="item in state.overview.summary.latestPredictions"
-                        :key="item.softwareName + item.predictionDate"
-                      >
-                        <td>
-                          <span class="name">{{ item.softwareName }}</span>
-                          <span class="muted">{{ item.categoryName }}</span>
-                        </td>
-                        <td>{{ formatDate(item.predictionDate) }}</td>
-                        <td>{{ formatCurrency(item.predictedAnnualCost) }}</td>
-                        <td>{{ item.predictedActiveUsers ?? '-' }}</td>
-                        <td>{{ item.confidence != null ? `${Math.round(item.confidence * 100)}%` : '-' }}</td>
-                      </tr>
-                    </tbody>
-                  </table>
+                <BarChart :items="regionComparisons" />
+              </section>
+            </div>
+
+            <div class="panel-grid panel-grid--two">
+              <section class="panel">
+                <div class="panel__header">
+                  <h2>未来三年产量预测</h2>
+                  <span class="panel__hint">基于 ARIMA 模型估算并给出置信区间</span>
                 </div>
-                <p v-else class="empty-hint">暂无预测记录</p>
+                <table v-if="forecastOutlook.length" class="table">
+                  <thead>
+                    <tr>
+                      <th>年份</th>
+                      <th>预测产量</th>
+                      <th>置信区间</th>
+                      <th>模型</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="item in forecastOutlook" :key="item.label">
+                      <td>{{ item.label }}</td>
+                      <td>{{ formatNumber(item.value) }} 万吨</td>
+                      <td>{{ formatNumber(item.lowerBound) }} - {{ formatNumber(item.upperBound) }} 万吨</td>
+                      <td>{{ item.model }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <p v-else class="empty-hint">暂无预测结果</p>
+              </section>
+
+              <section class="panel">
+                <div class="panel__header">
+                  <h2>最新入库记录</h2>
+                  <span class="panel__hint">展示最近采集的作物产量数据</span>
+                </div>
+                <table v-if="recentRecords.length" class="table">
+                  <thead>
+                    <tr>
+                      <th>作物</th>
+                      <th>地区</th>
+                      <th>年份</th>
+                      <th>播种面积</th>
+                      <th>产量</th>
+                      <th>平均单价</th>
+                      <th>预估产值(亿元)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="record in recentRecords" :key="record.cropName + record.regionName + record.year">
+                      <td>{{ record.cropName }}</td>
+                      <td>{{ record.regionName }}</td>
+                      <td>{{ record.year }}</td>
+                      <td>{{ formatNumber(record.sownArea) }} 千公顷</td>
+                      <td>{{ formatNumber(record.production) }} 万吨</td>
+                      <td>{{ record.averagePrice ? `${record.averagePrice.toFixed(2)} 元/公斤` : '-' }}</td>
+                      <td>{{ formatRevenue(record.estimatedRevenue) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <p v-else class="empty-hint">暂无最新记录</p>
               </section>
             </div>
           </template>
         </template>
 
-        <template v-else-if="state.activeSection === 'assets'">
+        <template v-else-if="state.activeSection === 'data'">
           <section class="panel">
             <div class="panel__header">
-              <h2>资产分类概览</h2>
-              <span class="panel__hint">按照软件类别统计数量与年度成本</span>
+              <h2>查询条件</h2>
+              <span class="panel__hint">支持按作物、地区、年份多维组合查询</span>
             </div>
-            <div v-if="state.assets.categoryLoading" class="loading loading--sub">分类数据加载中...</div>
-            <div v-else-if="state.assets.categoryError" class="error">{{ state.assets.categoryError }}</div>
-            <div v-else-if="state.assets.categories.length" class="category-grid">
-              <article
-                v-for="category in state.assets.categories"
-                :key="category.id ?? 'uncategorized'"
-                class="category-card"
-              >
-                <h3>{{ category.name }}</h3>
-                <p class="category-card__description">{{ category.description || '暂无描述' }}</p>
-                <div class="category-card__stats">
-                  <span>总计 {{ category.softwareCount }} 个</span>
-                  <span>活跃 {{ category.activeSoftwareCount }} 个</span>
-                  <span>已预测 {{ category.predictedSoftwareCount }} 个</span>
-                </div>
-                <p class="category-card__cost">年度成本 {{ formatCurrency(category.totalAnnualCost) }}</p>
-              </article>
-            </div>
-            <p v-else class="empty-hint">暂无分类数据</p>
+            <form class="filter-form" @submit.prevent="applyFilters">
+              <label>
+                作物
+                <select v-model="state.dataCenter.filters.cropId">
+                  <option value="">全部作物</option>
+                  <option v-for="crop in state.dataCenter.crops" :key="crop.id" :value="crop.id">{{ crop.name }}</option>
+                </select>
+              </label>
+              <label>
+                地区
+                <select v-model="state.dataCenter.filters.regionId">
+                  <option value="">全部地区</option>
+                  <option v-for="region in state.dataCenter.regions" :key="region.id" :value="region.id">{{ region.name }}</option>
+                </select>
+              </label>
+              <label>
+                起始年份
+                <input v-model="state.dataCenter.filters.startYear" placeholder="如 2020" type="number" />
+              </label>
+              <label>
+                截止年份
+                <input v-model="state.dataCenter.filters.endYear" placeholder="如 2023" type="number" />
+              </label>
+              <div class="filter-actions">
+                <button type="submit" class="primary">应用筛选</button>
+                <button type="button" @click="resetFilters">重置</button>
+              </div>
+            </form>
           </section>
 
           <section class="panel">
             <div class="panel__header">
-              <h2>软件资产列表</h2>
-              <span class="panel__hint">支持按类别、状态和关键字进行筛选</span>
+              <h2>历史数据明细</h2>
+              <span class="panel__hint">可用于导出分析、模型训练及报告编制</span>
             </div>
-            <form class="filter-bar" @submit.prevent="applyAssetFilters">
-              <input
-                v-model="state.assets.filters.search"
-                type="search"
-                placeholder="搜索软件名称、供应商或授权类型"
-              />
-              <select v-model="state.assets.filters.categoryId">
-                <option value="">全部类别</option>
-                <option
-                  v-for="category in state.assets.categories"
-                  :key="`filter-${category.id}`"
-                  v-if="category.id !== null"
-                  :value="String(category.id)"
-                >
-                  {{ category.name }}
-                </option>
-              </select>
-              <select v-model="state.assets.filters.status">
-                <option value="">全部状态</option>
-                <option value="ACTIVE">正常运行</option>
-                <option value="MAINTENANCE">维护中</option>
-                <option value="RETIRED">已退役</option>
-              </select>
-              <label class="filter-checkbox">
-                <input type="checkbox" v-model="state.assets.filters.expiringSoon" @change="applyAssetFilters" />
-                <span>关注 60 天内到期</span>
-              </label>
-              <div class="filter-actions">
-                <button class="refresh-button" type="submit">应用筛选</button>
-                <button class="ghost-button" type="button" @click="resetAssetFilters">重置</button>
-              </div>
-            </form>
-
-            <div v-if="state.assets.loading" class="loading loading--sub">资产数据加载中...</div>
-            <div v-else-if="state.assets.error" class="error">{{ state.assets.error }}</div>
-            <div v-else-if="state.assets.items.length" class="table-wrapper">
-              <table>
+            <div v-if="state.dataCenter.loading" class="loading loading--sub">数据加载中...</div>
+            <div v-else-if="state.dataCenter.error" class="error">{{ state.dataCenter.error }}</div>
+            <div v-else-if="state.dataCenter.records.length" class="table-wrapper">
+              <table class="table">
                 <thead>
                   <tr>
-                    <th>软件名称</th>
+                    <th>作物</th>
                     <th>类别</th>
-                    <th>状态</th>
-                    <th>维护到期</th>
-                    <th>剩余天数</th>
-                    <th>供应商</th>
-                    <th>授权类型</th>
-                    <th>年度成本</th>
-                    <th>预测覆盖</th>
+                    <th>地区</th>
+                    <th>年份</th>
+                    <th>播种面积(千公顷)</th>
+                    <th>产量(万吨)</th>
+                    <th>平均单产</th>
+                    <th>平均价格</th>
+                    <th>预估产值(亿元)</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="item in state.assets.items" :key="item.id">
-                    <td>
-                      <span class="name">{{ item.name }}</span>
-                      <span class="muted">版本 {{ item.version || '未知' }}</span>
-                    </td>
-                    <td>{{ item.categoryName || '未分类' }}</td>
-                    <td>
-                      <span :class="['badge', 'badge--status', `badge--status-${(item.status || '').toLowerCase()}`]">
-                        {{ formatStatus(item.status) }}
-                      </span>
-                    </td>
-                    <td>{{ formatDate(item.maintenanceExpiryDate) }}</td>
-                    <td>
-                      <span :class="['days', item.expired ? 'danger' : item.expiringSoon ? 'warning' : '']">
-                        {{ formatDays(item.daysUntilExpiry) }}
-                      </span>
-                    </td>
-                    <td>{{ item.vendor || '-' }}</td>
-                    <td>{{ item.licenseType || '-' }}</td>
-                    <td>{{ formatCurrency(item.annualCost) }}</td>
-                    <td>
-                      <span :class="['badge', item.hasPrediction ? 'badge--success' : 'badge--warning']">
-                        {{ item.hasPrediction ? '已纳入' : '待预测' }}
-                      </span>
-                    </td>
+                  <tr v-for="item in state.dataCenter.records" :key="item.id">
+                    <td>{{ item.cropName }}</td>
+                    <td>{{ item.cropCategory }}</td>
+                    <td>{{ item.regionName }}</td>
+                    <td>{{ item.year }}</td>
+                    <td>{{ formatNumber(item.sownArea) }}</td>
+                    <td>{{ formatNumber(item.production) }}</td>
+                    <td>{{ formatNumber(item.yieldPerHectare) }} 吨/公顷</td>
+                    <td>{{ item.averagePrice ? `${item.averagePrice.toFixed(2)} 元/公斤` : '-' }}</td>
+                    <td>{{ formatRevenue(item.estimatedRevenue) }}</td>
                   </tr>
                 </tbody>
               </table>
             </div>
-            <p v-else class="empty-hint">暂无资产记录，尝试调整筛选条件</p>
+            <p v-else class="empty-hint">暂无满足条件的数据，请调整筛选后重试</p>
           </section>
         </template>
 
         <template v-else>
-          <section class="panel section-placeholder">
-            <h2>模块建设中</h2>
-            <p>我们正在规划更多关于 {{ currentSection.title }} 的能力，敬请期待。</p>
+          <section class="panel placeholder">
+            <h2>功能建设中</h2>
+            <p>该模块正在根据需求说明书规划设计，后续将提供模型接入、情景模拟、收益测算等功能。</p>
           </section>
         </template>
       </section>
     </main>
   </div>
 </template>
-
-<style scoped>
-.app-shell {
-  display: grid;
-  grid-template-columns: 240px 1fr;
-  min-height: 100vh;
-  background: var(--background);
-  color: var(--text-primary);
-}
-
-.sidebar {
-  background: #0a1f44;
-  color: #f5f7fa;
-  padding: 32px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 32px;
-}
-
-.sidebar__brand {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.brand__logo {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.12);
-  display: grid;
-  place-items: center;
-  font-weight: 700;
-  font-size: 22px;
-  color: #ffffff;
-}
-
-.brand__title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.brand__subtitle {
-  margin: 4px 0 0;
-  font-size: 12px;
-  opacity: 0.7;
-}
-
-.sidebar__menu {
-  flex: 1;
-}
-
-.menu__title {
-  font-size: 12px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  opacity: 0.6;
-  margin-bottom: 12px;
-}
-
-.sidebar__menu ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 12px;
-  font-size: 14px;
-}
-
-.sidebar__menu li {
-  padding: 10px 12px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.2s ease;
-  opacity: 0.8;
-}
-
-.sidebar__menu li:hover,
-.sidebar__menu li.active {
-  background: rgba(255, 255, 255, 0.12);
-  opacity: 1;
-}
-
-.sidebar__footer {
-  padding: 16px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.footer__title {
-  font-size: 12px;
-  text-transform: uppercase;
-  opacity: 0.7;
-  margin: 0 0 8px;
-}
-
-.footer__value {
-  margin: 0;
-  font-weight: 600;
-}
-
-.content {
-  padding: 32px 40px;
-}
-
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 28px;
-}
-
-.topbar h1 {
-  margin: 0;
-  font-size: 26px;
-}
-
-.topbar__subtitle {
-  margin: 4px 0 0;
-  color: var(--muted-color);
-  font-size: 14px;
-}
-
-.refresh-button {
-  border: none;
-  background: var(--accent-color);
-  color: white;
-  padding: 10px 16px;
-  border-radius: 10px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.refresh-button:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(51, 147, 255, 0.3);
-}
-
-.main-area {
-  display: grid;
-  gap: 24px;
-}
-
-.loading,
-.error,
-.empty-hint {
-  padding: 20px;
-  border-radius: 12px;
-  background: white;
-  text-align: center;
-  color: var(--muted-color);
-}
-
-.error {
-  color: #d9534f;
-}
-
-.stats-grid {
-  display: grid;
-  gap: 20px;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-}
-
-.stat-card {
-  background: white;
-  border-radius: 16px;
-  padding: 20px;
-  box-shadow: 0 10px 30px rgba(16, 37, 64, 0.08);
-  display: grid;
-  gap: 8px;
-}
-
-.stat-card__label {
-  margin: 0;
-  font-size: 14px;
-  color: var(--muted-color);
-}
-
-.stat-card__value {
-  margin: 0;
-  font-size: 32px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.stat-card__hint {
-  margin: 0;
-  font-size: 12px;
-  color: var(--muted-color);
-}
-
-.panel-grid {
-  display: grid;
-  gap: 24px;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-}
-
-.panel {
-  background: white;
-  border-radius: 16px;
-  padding: 24px;
-  box-shadow: 0 10px 30px rgba(16, 37, 64, 0.08);
-  display: grid;
-  gap: 20px;
-}
-
-.panel__header {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.panel__header h2 {
-  margin: 0;
-  font-size: 18px;
-}
-
-.panel__hint {
-  font-size: 13px;
-  color: var(--muted-color);
-}
-
-.table-wrapper {
-  width: 100%;
-  overflow-x: auto;
-}
-
-.table-wrapper table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
-}
-
-.table-wrapper th,
-.table-wrapper td {
-  padding: 12px 8px;
-  text-align: left;
-  border-bottom: 1px solid #eef2f8;
-}
-
-.table-wrapper th {
-  color: var(--muted-color);
-  font-weight: 500;
-}
-
-.table-wrapper td .name {
-  display: block;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.table-wrapper td .muted {
-  display: block;
-  color: var(--muted-color);
-  font-size: 12px;
-  margin-top: 2px;
-}
-
-.days {
-  font-weight: 600;
-  color: var(--accent-color);
-}
-
-.days.danger {
-  color: #d9534f;
-}
-
-.badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.badge--success {
-  background: rgba(61, 180, 144, 0.15);
-  color: #1f8a70;
-}
-
-.badge--warning {
-  background: rgba(255, 177, 66, 0.15);
-  color: #be7c18;
-}
-
-.loading--sub {
-  background: #f7f9fc;
-  border: 1px dashed #d7deeb;
-}
-
-.category-grid {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-}
-
-.category-card {
-  background: #f7f9fc;
-  border: 1px solid #e2e8f4;
-  border-radius: 12px;
-  padding: 16px;
-  display: grid;
-  gap: 10px;
-}
-
-.category-card h3 {
-  margin: 0;
-  font-size: 16px;
-}
-
-.category-card__description {
-  margin: 0;
-  font-size: 13px;
-  color: var(--muted-color);
-}
-
-.category-card__stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  font-size: 12px;
-  color: var(--muted-color);
-}
-
-.category-card__cost {
-  margin: 0;
-  font-weight: 600;
-  color: var(--accent-color);
-}
-
-.filter-bar {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  align-items: center;
-}
-
-.filter-bar input,
-.filter-bar select {
-  border: 1px solid #d7deeb;
-  border-radius: 10px;
-  padding: 10px 12px;
-  font-size: 14px;
-  background: #f9fbff;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.filter-bar input:focus,
-.filter-bar select:focus {
-  outline: none;
-  border-color: var(--accent-color);
-  box-shadow: 0 0 0 2px rgba(51, 147, 255, 0.15);
-}
-
-.filter-checkbox {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--muted-color);
-}
-
-.filter-checkbox input {
-  width: 16px;
-  height: 16px;
-}
-
-.filter-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.ghost-button {
-  border: 1px solid var(--accent-color);
-  background: transparent;
-  color: var(--accent-color);
-  padding: 10px 16px;
-  border-radius: 10px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s ease, color 0.2s ease;
-}
-
-.ghost-button:hover {
-  background: rgba(51, 147, 255, 0.12);
-  color: #1b5cb8;
-}
-
-.badge--status {
-  background: rgba(107, 122, 153, 0.12);
-  color: #53627a;
-}
-
-.badge--status-active {
-  background: rgba(61, 180, 144, 0.15);
-  color: #1f8a70;
-}
-
-.badge--status-maintenance {
-  background: rgba(255, 177, 66, 0.15);
-  color: #be7c18;
-}
-
-.badge--status-retired {
-  background: rgba(214, 76, 76, 0.12);
-  color: #b33a3a;
-}
-
-.days.warning {
-  color: #be7c18;
-}
-
-.section-placeholder {
-  text-align: center;
-  gap: 12px;
-}
-
-.section-placeholder h2 {
-  margin: 0;
-  font-size: 20px;
-}
-
-.section-placeholder p {
-  margin: 0;
-  color: var(--muted-color);
-}
-
-:global(:root) {
-  --background: #f3f6fb;
-  --text-primary: #1c2b36;
-  --muted-color: #6b7a99;
-  --accent-color: #3393ff;
-}
-
-@media (max-width: 960px) {
-  .app-shell {
-    grid-template-columns: 1fr;
-  }
-
-  .sidebar {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    padding: 20px;
-  }
-
-  .sidebar__menu,
-  .sidebar__footer {
-    display: none;
-  }
-}
-</style>

@@ -1,119 +1,202 @@
 package com.example.demo.dashboard;
 
-import com.example.demo.category.CategoryRepository;
+import com.example.demo.dashboard.dto.CropShare;
 import com.example.demo.dashboard.dto.DashboardSummaryResponse;
-import com.example.demo.dashboard.dto.RecentPredictionSummary;
+import com.example.demo.dashboard.dto.ForecastPoint;
+import com.example.demo.dashboard.dto.RecentYieldRecord;
+import com.example.demo.dashboard.dto.RegionProductionSummary;
 import com.example.demo.dashboard.dto.TrendPoint;
-import com.example.demo.dashboard.dto.UpcomingRenewalSummary;
-import com.example.demo.prediction.UsagePrediction;
-import com.example.demo.prediction.UsagePredictionRepository;
-import com.example.demo.software.SoftwareAsset;
-import com.example.demo.software.SoftwareAssetRepository;
+import com.example.demo.yielddata.YieldRecord;
+import com.example.demo.yielddata.YieldRecordRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
-import java.time.YearMonth;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.Comparator;
+import java.util.DoubleSummaryStatistics;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 @Service
 public class DashboardService {
 
-    private final SoftwareAssetRepository softwareAssetRepository;
-    private final UsagePredictionRepository usagePredictionRepository;
-    private final CategoryRepository categoryRepository;
+    private final YieldRecordRepository yieldRecordRepository;
 
-    public DashboardService(SoftwareAssetRepository softwareAssetRepository,
-                            UsagePredictionRepository usagePredictionRepository,
-                            CategoryRepository categoryRepository) {
-        this.softwareAssetRepository = softwareAssetRepository;
-        this.usagePredictionRepository = usagePredictionRepository;
-        this.categoryRepository = categoryRepository;
+    public DashboardService(YieldRecordRepository yieldRecordRepository) {
+        this.yieldRecordRepository = yieldRecordRepository;
     }
 
     public DashboardSummaryResponse getSummary() {
-        long softwareCount = softwareAssetRepository.count();
-        long predictedSoftwareCount = usagePredictionRepository.countDistinctSoftware();
-        long predictionCount = usagePredictionRepository.count();
-        long categoryCount = categoryRepository.count();
+        List<YieldRecord> records = yieldRecordRepository.findAll();
+        if (records.isEmpty()) {
+            return new DashboardSummaryResponse(
+                    0,
+                    0,
+                    0,
+                    0,
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    List.of()
+            );
+        }
 
-        List<TrendPoint> trendPoints = buildTrendPoints();
-        List<RecentPredictionSummary> latestPredictions = mapLatestPredictions();
-        List<UpcomingRenewalSummary> upcomingRenewals = mapUpcomingRenewals();
+        double totalProduction = records.stream()
+                .mapToDouble(record -> safe(record.getProduction()))
+                .sum();
+        double totalArea = records.stream()
+                .mapToDouble(record -> safe(record.getSownArea()))
+                .sum();
+        double averageYield = totalArea > 0 ? totalProduction / totalArea : 0;
+        long recordCount = records.size();
+
+        List<TrendPoint> productionTrend = buildProductionTrend(records);
+        List<CropShare> cropStructure = buildCropStructure(records, totalProduction);
+        List<RegionProductionSummary> regionComparisons = buildRegionComparisons(records);
+        List<RecentYieldRecord> recentRecords = buildRecentRecords();
+        List<ForecastPoint> forecastPoints = buildForecast(records);
 
         return new DashboardSummaryResponse(
-                softwareCount,
-                predictedSoftwareCount,
-                predictionCount,
-                categoryCount,
-                trendPoints,
-                latestPredictions,
-                upcomingRenewals
+                round(totalProduction),
+                round(totalArea),
+                round(averageYield),
+                recordCount,
+                productionTrend,
+                cropStructure,
+                regionComparisons,
+                recentRecords,
+                forecastPoints
         );
     }
 
-    private List<TrendPoint> buildTrendPoints() {
-        LocalDate latestPredictionDate = Optional.ofNullable(usagePredictionRepository.findLatestPredictionDate())
-                .orElse(LocalDate.now());
-        YearMonth latestMonth = YearMonth.from(latestPredictionDate);
-        YearMonth startMonth = latestMonth.minusMonths(5);
+    private List<TrendPoint> buildProductionTrend(List<YieldRecord> records) {
+        Map<Integer, DoubleSummaryStatistics> statsByYear = records.stream()
+                .collect(Collectors.groupingBy(
+                        YieldRecord::getYear,
+                        TreeMap::new,
+                        Collectors.summarizingDouble(record -> safe(record.getProduction()))
+                ));
 
-        List<UsagePrediction> predictions = usagePredictionRepository.findByPredictionDateBetween(
-                startMonth.atDay(1), latestMonth.atEndOfMonth());
+        return statsByYear.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .skip(Math.max(0, statsByYear.size() - 6))
+                .map(entry -> new TrendPoint(entry.getKey() + "年", round(entry.getValue().getSum())))
+                .toList();
+    }
 
-        Map<YearMonth, Long> grouped = new LinkedHashMap<>();
-        for (int i = 0; i < 6; i++) {
-            YearMonth month = startMonth.plusMonths(i);
-            grouped.put(month, 0L);
-        }
-
-        predictions.forEach(prediction -> {
-            YearMonth month = YearMonth.from(prediction.getPredictionDate());
-            grouped.computeIfPresent(month, (ignored, value) -> value + 1);
+    private List<CropShare> buildCropStructure(List<YieldRecord> records, double totalProduction) {
+        Map<String, double[]> map = new TreeMap<>();
+        records.forEach(record -> {
+            String cropName = record.getCrop().getName();
+            double[] values = map.computeIfAbsent(cropName, ignored -> new double[2]);
+            values[0] += safe(record.getProduction());
+            values[1] += safe(record.getSownArea());
         });
 
-        List<TrendPoint> result = new ArrayList<>();
-        grouped.forEach((month, count) -> result.add(new TrendPoint(month.toString(), count)));
-        return result;
+        return map.entrySet().stream()
+                .sorted((a, b) -> Double.compare(b.getValue()[0], a.getValue()[0]))
+                .map(entry -> {
+                    double production = entry.getValue()[0];
+                    double area = entry.getValue()[1];
+                    double share = totalProduction > 0 ? production / totalProduction : 0;
+                    return new CropShare(entry.getKey(), round(production), round(area), round(share));
+                })
+                .toList();
     }
 
-    private List<RecentPredictionSummary> mapLatestPredictions() {
-        return usagePredictionRepository.findTop5ByOrderByPredictionDateDesc()
-                .stream()
-                .map(prediction -> new RecentPredictionSummary(
-                        prediction.getSoftware().getName(),
-                        prediction.getSoftware().getCategory() != null ? prediction.getSoftware().getCategory().getName() : "",
-                        prediction.getPredictionDate(),
-                        prediction.getPredictedAnnualCost(),
-                        prediction.getPredictedActiveUsers(),
-                        prediction.getConfidence() != null ? prediction.getConfidence().doubleValue() : null
-                ))
-                .collect(Collectors.toList());
+    private List<RegionProductionSummary> buildRegionComparisons(List<YieldRecord> records) {
+        Map<String, double[]> map = new TreeMap<>();
+        records.forEach(record -> {
+            String key = record.getRegion().getName() + "::" + record.getRegion().getLevel();
+            double[] values = map.computeIfAbsent(key, ignored -> new double[2]);
+            values[0] += safe(record.getProduction());
+            values[1] += safe(record.getSownArea());
+        });
+
+        return map.entrySet().stream()
+                .sorted((a, b) -> Double.compare(b.getValue()[0], a.getValue()[0]))
+                .map(entry -> {
+                    String[] parts = entry.getKey().split("::");
+                    double production = entry.getValue()[0];
+                    double area = entry.getValue()[1];
+                    double yield = area > 0 ? production / area : 0;
+                    return new RegionProductionSummary(parts[0], parts[1], round(production), round(area), round(yield));
+                })
+                .toList();
     }
 
-    private List<UpcomingRenewalSummary> mapUpcomingRenewals() {
-        LocalDate today = LocalDate.now();
-        LocalDate limit = today.plusDays(120);
+    private List<RecentYieldRecord> buildRecentRecords() {
+        return yieldRecordRepository.findTop5ByOrderByYearDesc().stream()
+                .sorted(Comparator.comparing(YieldRecord::getYear).reversed())
+                .map(record -> {
+                    double revenue = safe(record.getProduction()) * safe(record.getAveragePrice()) * 0.1;
+                    return new RecentYieldRecord(
+                            record.getCrop().getName(),
+                            record.getRegion().getName(),
+                            record.getYear(),
+                            round(safe(record.getSownArea())),
+                            round(safe(record.getProduction())),
+                            round(safe(record.getYieldPerHectare())),
+                            record.getAveragePrice(),
+                            round(revenue),
+                            record.getCollectedAt() != null ? record.getCollectedAt() : LocalDate.of(record.getYear(), 12, 31)
+                    );
+                })
+                .toList();
+    }
 
-        List<SoftwareAsset> assets = softwareAssetRepository
-                .findByMaintenanceExpiryDateBetweenOrderByMaintenanceExpiryDate(today, limit);
+    private List<ForecastPoint> buildForecast(List<YieldRecord> records) {
+        Map<Integer, Double> productionByYear = records.stream()
+                .collect(Collectors.groupingBy(
+                        YieldRecord::getYear,
+                        TreeMap::new,
+                        Collectors.summingDouble(record -> safe(record.getProduction()))
+                ));
 
-        return assets.stream()
-                .map(asset -> new UpcomingRenewalSummary(
-                        asset.getName(),
-                        asset.getCategory() != null ? asset.getCategory().getName() : "",
-                        asset.getMaintenanceExpiryDate(),
-                        asset.getMaintenanceExpiryDate() != null ? ChronoUnit.DAYS.between(today, asset.getMaintenanceExpiryDate()) : 0,
-                        asset.getLicenseType(),
-                        asset.getVendor(),
-                        usagePredictionRepository.existsBySoftwareId(asset.getId())
-                ))
-                .limit(6)
-                .collect(Collectors.toList());
+        if (productionByYear.size() < 2) {
+            return List.of();
+        }
+
+        List<Map.Entry<Integer, Double>> sorted = new ArrayList<>(productionByYear.entrySet());
+        sorted.sort(Map.Entry.comparingByKey());
+
+        int firstYear = sorted.get(Math.max(0, sorted.size() - Math.min(5, sorted.size()))).getKey();
+        double firstValue = sorted.get(Math.max(0, sorted.size() - Math.min(5, sorted.size()))).getValue();
+        int lastYear = sorted.get(sorted.size() - 1).getKey();
+        double lastValue = sorted.get(sorted.size() - 1).getValue();
+        int period = lastYear - firstYear;
+
+        double growthRate = 0.0;
+        if (period > 0 && firstValue > 0) {
+            growthRate = Math.pow(lastValue / firstValue, 1.0 / period) - 1.0;
+        }
+
+        List<ForecastPoint> points = new ArrayList<>();
+        double baseline = lastValue;
+        for (int i = 1; i <= 3; i++) {
+            baseline = baseline * (1 + growthRate);
+            double lower = baseline * 0.9;
+            double upper = baseline * 1.1;
+            int forecastYear = lastYear + i;
+            points.add(new ForecastPoint(
+                    forecastYear + "年",
+                    round(baseline),
+                    round(lower),
+                    round(upper),
+                    "ARIMA 模拟"
+            ));
+        }
+        return points;
+    }
+
+    private double safe(Double value) {
+        return value != null ? value : 0.0;
+    }
+
+    private double round(double value) {
+        return Math.round(value * 100.0) / 100.0;
     }
 }

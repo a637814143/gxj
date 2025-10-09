@@ -1,4 +1,7 @@
 package com.example.demo.dashboard.dto;
 
-public record TrendPoint(String label, long count) {
+public record TrendPoint(
+        String label,
+        double value
+) {
 }
