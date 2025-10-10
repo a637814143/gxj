@@ -1,0 +1,13 @@
+spring:
+  application:
+    name: crop-yield-platform
+  profiles:
+    active: h2
+
+server:
+  port: 8080
+
+logging:
+  level:
+    root: INFO
+    org.hibernate.SQL: DEBUG

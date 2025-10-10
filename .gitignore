@@ -1,0 +1,10 @@
+/demo/target/
+/forecast/node_modules/
+/forecast/dist/
+*.log
+*.iml
+.idea/
+.DS_Store
+
+# generated docs
+*.docx~
