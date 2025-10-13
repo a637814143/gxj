@@ -14,7 +14,6 @@ CREATE TABLE sys_permission (
     id           BIGINT PRIMARY KEY AUTO_INCREMENT,
     code         VARCHAR(64)  NOT NULL UNIQUE,
     name         VARCHAR(128) NOT NULL,
-    description  VARCHAR(256),
     created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
@@ -23,7 +22,6 @@ CREATE TABLE sys_role (
     id           BIGINT PRIMARY KEY AUTO_INCREMENT,
     code         VARCHAR(64)  NOT NULL UNIQUE,
     name         VARCHAR(128) NOT NULL,
-    description  VARCHAR(256),
     created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
@@ -34,7 +32,6 @@ CREATE TABLE sys_user (
     password     VARCHAR(128) NOT NULL,
     full_name    VARCHAR(128),
     email        VARCHAR(128),
-    status       TINYINT      NOT NULL DEFAULT 1,
     created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
@@ -174,21 +171,35 @@ CREATE TABLE report_summary (
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- 6. 初始化示例数据
-INSERT INTO sys_role (code, name, description) VALUES
- ('ADMIN', '系统管理员', '拥有系统全部权限'),
- ('ANALYST', '业务分析员', '负责数据管理与模型分析'),
- ('VIEWER', '决策查看者', '仅查看仪表盘和报告');
+INSERT INTO sys_permission (code, name) VALUES
+ ('DASHBOARD_VIEW', '查看仪表盘'),
+ ('DATA_MANAGE', '数据管理'),
+ ('FORECAST_MANAGE', '预测任务管理');
+
+INSERT INTO sys_role (code, name) VALUES
+ ('ADMIN', '系统管理员'),
+ ('ANALYST', '业务分析员'),
+ ('VIEWER', '决策查看者');
+
+INSERT INTO sys_role_permission (role_id, permission_id)
+SELECT (SELECT id FROM sys_role WHERE code = 'ADMIN'), id FROM sys_permission;
+
+INSERT INTO sys_role_permission (role_id, permission_id)
+SELECT (SELECT id FROM sys_role WHERE code = 'ANALYST'), id FROM sys_permission WHERE code IN ('DASHBOARD_VIEW', 'DATA_MANAGE');
+
+INSERT INTO sys_role_permission (role_id, permission_id)
+SELECT (SELECT id FROM sys_role WHERE code = 'VIEWER'), id FROM sys_permission WHERE code = 'DASHBOARD_VIEW';
 
 INSERT INTO sys_user (username, password, full_name, email) VALUES
  ('admin', '$2a$10$wF2oTObgGJE0E7E5Wdl66uYcmGeXgnz9K/Y/xFdVtOfvtTDHkJ/xS', '平台管理员', 'admin@example.com');
 
 INSERT INTO sys_user_role (user_id, role_id)
-SELECT u.id, r.id FROM sys_user u, sys_role r WHERE u.username = 'admin' AND r.code = 'ADMIN';
+SELECT u.id, r.id FROM sys_user u CROSS JOIN sys_role r WHERE u.username = 'admin' AND r.code = 'ADMIN';
 
 INSERT INTO base_crop (code, name, description) VALUES
- ('WHEAT', '小麦', '主要粮食作物'),
- ('CORN', '玉米', '饲料及工业用途广泛');
+ ('RICE', '水稻', '云南主粮之一，集中分布在滇中和滇南稻区'),
+ ('CORN', '玉米', '适宜山地丘陵地区，兼顾粮饲双用');
 
 INSERT INTO base_region (code, name, description) VALUES
- ('HN', '河南省', '中原粮仓，温带季风气候'),
- ('HLJ', '黑龙江省', '高纬度寒温带，适宜大豆玉米');
+ ('YN', '云南省', '省级统计总览'),
+ ('YN-KM', '昆明市', '滇中城市群核心城市');
