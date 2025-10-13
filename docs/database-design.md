@@ -60,4 +60,4 @@
 - `sys_permission` 预置菜单、接口权限分类，初期可与角色一一绑定。
 - `base_crop`、`base_region` 可导入典型作物与重点区域基础数据，为预测模型准备输入。
 
-详细建表 SQL 见 `docs/database-schema.sql`。
+详细建表 SQL 见 `docs/database-schema.sql`，H2 环境初始化示例可参考 `docs/h2-auth-init.sql`。
