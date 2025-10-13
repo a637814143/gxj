@@ -59,5 +59,6 @@
 - `sys_role` 预置「管理员」「分析员」「查看者」三个角色。
 - `sys_permission` 预置菜单、接口权限分类，初期可与角色一一绑定。
 - `base_crop`、`base_region` 可导入典型作物与重点区域基础数据，为预测模型准备输入。
+- `docs/init-auth-data.sql` 提供 H2 环境下的权限与默认管理员账号初始化脚本，可在需要时手动执行。
 
 详细建表 SQL 见 `docs/database-schema.sql`。
