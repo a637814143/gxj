@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import BarChart from './components/charts/BarChart.vue'
 import LineChart from './components/charts/LineChart.vue'
 import PieChart from './components/charts/PieChart.vue'
@@ -48,6 +48,29 @@ const state = reactive({
     }
   }
 })
+const auth = reactive({
+  loading: true,
+  user: null,
+  error: null
+})
+
+const loginForm = reactive({
+  username: '',
+  password: ''
+})
+
+const loggingIn = ref(false)
+const logoutPending = ref(false)
+
+const roleLabels = {
+  ADMIN: '系统管理员',
+  AGRICULTURE_DEPARTMENT: '农业部门',
+  ENTERPRISE: '农业企业',
+  FARMER: '农户'
+}
+
+const mapRole = role => roleLabels[role] ?? role
+
 
 const importFileInput = ref(null)
 
@@ -75,6 +98,155 @@ const sectionMeta = {
 }
 
 const currentSection = computed(() => sectionMeta[state.activeSection] ?? sectionMeta.overview)
+
+const userRoleBadges = computed(() => (auth.user?.roles ?? []).map(mapRole))
+
+const resetState = () => {
+  state.activeSection = 'overview'
+  state.overview.loading = false
+  state.overview.error = null
+  state.overview.data = null
+
+  state.dataCenter.initialized = false
+  state.dataCenter.loading = false
+  state.dataCenter.error = null
+  state.dataCenter.records = []
+  state.dataCenter.crops = []
+  state.dataCenter.regions = []
+  state.dataCenter.exportError = null
+  state.dataCenter.exporting = ''
+  state.dataCenter.filters.cropId = ''
+  state.dataCenter.filters.regionId = ''
+  state.dataCenter.filters.startYear = ''
+  state.dataCenter.filters.endYear = ''
+
+  state.dataImport.uploading = false
+  state.dataImport.uploadError = null
+  state.dataImport.queryError = null
+  state.dataImport.summary = null
+  state.dataImport.warnings = []
+  state.dataImport.preview = []
+  state.dataImport.results = []
+  state.dataImport.querying = false
+  state.dataImport.lastFileName = ''
+  state.dataImport.initialized = false
+  state.dataImport.exportError = null
+  state.dataImport.exporting = ''
+  state.dataImport.filters.cropId = ''
+  state.dataImport.filters.regionId = ''
+  state.dataImport.filters.startYear = ''
+  state.dataImport.filters.endYear = ''
+}
+
+const handleUnauthorized = message => {
+  auth.error = message ?? '登录状态已过期，请重新登录'
+  auth.user = null
+}
+
+const authorizedFetch = async (url, options = {}) => {
+  const init = { ...options, credentials: 'include' }
+  if (options?.headers) {
+    init.headers = { ...options.headers }
+  }
+  const response = await fetch(url, init)
+  if (response.status === 401) {
+    handleUnauthorized('登录状态已过期，请重新登录')
+    throw new Error('未登录或会话已过期')
+  }
+  return response
+}
+
+const fetchCurrentUser = async () => {
+  auth.loading = true
+  auth.error = null
+  try {
+    const response = await fetch('http://localhost:8080/api/auth/me', { credentials: 'include' })
+    if (response.status === 401) {
+      auth.user = null
+      return
+    }
+    if (!response.ok) {
+      throw new Error('获取登录状态失败')
+    }
+    auth.user = await response.json()
+  } catch (error) {
+    auth.error = error.message || '获取登录状态失败'
+    auth.user = null
+  } finally {
+    auth.loading = false
+  }
+}
+
+const login = async () => {
+  if (!loginForm.username || !loginForm.password) {
+    auth.error = '请输入用户名和密码'
+    return
+  }
+  loggingIn.value = true
+  auth.error = null
+  try {
+    const response = await fetch('http://localhost:8080/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        username: loginForm.username.trim(),
+        password: loginForm.password
+      })
+    })
+    if (response.status === 401) {
+      throw new Error('账号或密码不正确')
+    }
+    if (!response.ok) {
+      throw new Error('登录失败，请稍后重试')
+    }
+    const profile = await response.json()
+    auth.user = profile
+    loginForm.username = ''
+    loginForm.password = ''
+  } catch (error) {
+    auth.error = error.message || '登录失败，请稍后重试'
+  } finally {
+    loggingIn.value = false
+  }
+}
+
+const logout = async () => {
+  logoutPending.value = true
+  try {
+    await fetch('http://localhost:8080/api/auth/logout', {
+      method: 'POST',
+      credentials: 'include'
+    })
+  } catch (error) {
+    console.error('注销失败', error)
+  } finally {
+    logoutPending.value = false
+    auth.error = null
+    auth.user = null
+  }
+}
+
+const initializeAfterLogin = async () => {
+  await fetchSummary()
+  await refreshReferenceData()
+  await queryImportedData()
+}
+
+watch(
+  () => auth.user,
+  async user => {
+    if (user) {
+      try {
+        await initializeAfterLogin()
+      } catch (error) {
+        console.error('初始化数据失败', error)
+      }
+    } else {
+      resetState()
+    }
+  }
+)
 
 const formatNumber = value => {
   const number = Number(value)
@@ -128,10 +300,16 @@ const triggerFileDownload = (blob, filename) => {
 }
 
 const fetchSummary = async () => {
+  if (!auth.user) {
+    state.overview.loading = false
+    state.overview.error = null
+    state.overview.data = null
+    return
+  }
   state.overview.loading = true
   state.overview.error = null
   try {
-    const response = await fetch('http://localhost:8080/api/dashboard/summary')
+    const response = await authorizedFetch('http://localhost:8080/api/dashboard/summary')
     if (!response.ok) {
       throw new Error('获取驾驶舱数据失败')
     }
@@ -145,9 +323,14 @@ const fetchSummary = async () => {
 }
 
 const fetchCrops = async () => {
+  if (!auth.user) {
+    state.dataCenter.crops = []
+    state.dataCenter.error = null
+    return
+  }
   state.dataCenter.error = null
   try {
-    const response = await fetch('http://localhost:8080/api/crops')
+    const response = await authorizedFetch('http://localhost:8080/api/crops')
     if (!response.ok) {
       throw new Error('获取作物列表失败')
     }
@@ -158,9 +341,14 @@ const fetchCrops = async () => {
 }
 
 const fetchRegions = async () => {
+  if (!auth.user) {
+    state.dataCenter.regions = []
+    state.dataCenter.error = null
+    return
+  }
   state.dataCenter.error = null
   try {
-    const response = await fetch('http://localhost:8080/api/regions')
+    const response = await authorizedFetch('http://localhost:8080/api/regions')
     if (!response.ok) {
       throw new Error('获取地区列表失败')
     }
@@ -171,13 +359,20 @@ const fetchRegions = async () => {
 }
 
 const fetchRecords = async () => {
+  if (!auth.user) {
+    state.dataCenter.records = []
+    state.dataCenter.loading = false
+    state.dataCenter.error = null
+    state.dataCenter.exportError = null
+    return
+  }
   state.dataCenter.loading = true
   state.dataCenter.error = null
   state.dataCenter.exportError = null
   try {
     const queryParams = buildQueryParams(state.dataCenter.filters)
     const query = queryParams.toString()
-    const response = await fetch(`http://localhost:8080/api/yields${query ? `?${query}` : ''}`)
+    const response = await authorizedFetch(`http://localhost:8080/api/yields${query ? `?${query}` : ''}`)
     if (!response.ok) {
       throw new Error('获取历史数据失败')
     }
@@ -212,6 +407,10 @@ const handleImportFileChange = async event => {
 }
 
 const uploadDataset = async file => {
+  if (!auth.user) {
+    state.dataImport.uploadError = '请先登录后再导入数据'
+    return
+  }
   state.dataImport.uploading = true
   state.dataImport.uploadError = null
   state.dataImport.summary = null
@@ -220,7 +419,7 @@ const uploadDataset = async file => {
   try {
     const formData = new FormData()
     formData.append('file', file)
-    const response = await fetch('http://localhost:8080/api/data-import/upload', {
+    const response = await authorizedFetch('http://localhost:8080/api/data-import/upload', {
       method: 'POST',
       body: formData
     })
@@ -249,13 +448,20 @@ const uploadDataset = async file => {
 }
 
 const queryImportedData = async () => {
+  if (!auth.user) {
+    state.dataImport.results = []
+    state.dataImport.querying = false
+    state.dataImport.queryError = null
+    state.dataImport.exportError = null
+    return
+  }
   state.dataImport.querying = true
   state.dataImport.queryError = null
   state.dataImport.exportError = null
   try {
     const queryParams = buildQueryParams(state.dataImport.filters)
     const query = queryParams.toString()
-    const response = await fetch(`http://localhost:8080/api/yields${query ? `?${query}` : ''}`)
+    const response = await authorizedFetch(`http://localhost:8080/api/yields${query ? `?${query}` : ''}`)
     if (!response.ok) {
       throw new Error('查询导入结果失败')
     }
@@ -271,12 +477,16 @@ const queryImportedData = async () => {
 
 const exportImportedData = async format => {
   if (!['excel', 'pdf'].includes(format)) return
+  if (!auth.user) {
+    state.dataImport.exportError = '请登录后再导出数据'
+    return
+  }
   state.dataImport.exportError = null
   state.dataImport.exporting = format
   try {
     const queryParams = buildQueryParams(state.dataImport.filters)
     const query = queryParams.toString()
-    const response = await fetch(`http://localhost:8080/api/yields/export/${format}${query ? `?${query}` : ''}`)
+    const response = await authorizedFetch(`http://localhost:8080/api/yields/export/${format}${query ? `?${query}` : ''}`)
     if (!response.ok) {
       throw new Error('导出失败')
     }
@@ -331,12 +541,16 @@ const resetFilters = async () => {
 
 const exportDataCenter = async format => {
   if (!['excel', 'pdf'].includes(format)) return
+  if (!auth.user) {
+    state.dataCenter.exportError = '请登录后再导出数据'
+    return
+  }
   state.dataCenter.exportError = null
   state.dataCenter.exporting = format
   try {
     const queryParams = buildQueryParams(state.dataCenter.filters)
     const query = queryParams.toString()
-    const response = await fetch(`http://localhost:8080/api/yields/export/${format}${query ? `?${query}` : ''}`)
+    const response = await authorizedFetch(`http://localhost:8080/api/yields/export/${format}${query ? `?${query}` : ''}`)
     if (!response.ok) {
       throw new Error('导出失败')
     }
@@ -368,11 +582,43 @@ const regionComparisons = computed(() => state.overview.data?.regionComparisons 
 const forecastOutlook = computed(() => state.overview.data?.forecastOutlook ?? [])
 const recentRecords = computed(() => state.overview.data?.recentRecords ?? [])
 
-onMounted(fetchSummary)
+onMounted(fetchCurrentUser)
 </script>
 
 <template>
-  <div class="app-shell">
+  <div v-if="auth.loading" class="fullscreen-loading">
+    正在加载登录状态...
+  </div>
+  <div v-else-if="!auth.user" class="login-page">
+    <div class="login-card">
+      <div class="login-card__header">
+        <span class="brand__logo brand__logo--large">农</span>
+        <div>
+          <h1>云南农作物产量分析与预测系统</h1>
+          <p>支持多角色协同的农业数据平台</p>
+        </div>
+      </div>
+      <form class="login-form" @submit.prevent="login">
+        <label>
+          用户名
+          <input v-model.trim="loginForm.username" type="text" placeholder="请输入用户名" autocomplete="username" />
+        </label>
+        <label>
+          密码
+          <input v-model="loginForm.password" type="password" placeholder="请输入密码" autocomplete="current-password" />
+        </label>
+        <button class="primary" type="submit" :disabled="loggingIn">
+          {{ loggingIn ? '登录中...' : '登录' }}
+        </button>
+        <p class="login-hint">管理员账号：admin / Admin@123</p>
+        <p class="login-hint">农业部门账号：manager / Manager@123</p>
+        <p class="login-hint">企业账号：analyst / Analyst@123</p>
+        <p class="login-hint">农户账号：farmer / Farmer@123</p>
+      </form>
+      <p v-if="auth.error" class="error error--inline">{{ auth.error }}</p>
+    </div>
+  </div>
+  <div v-else class="app-shell">
     <aside class="sidebar">
       <div class="sidebar__brand">
         <span class="brand__logo">农</span>
@@ -403,7 +649,20 @@ onMounted(fetchSummary)
           <h1>{{ currentSection.title }}</h1>
           <p class="topbar__subtitle">{{ currentSection.subtitle }}</p>
         </div>
-        <button class="refresh-button" type="button" @click="refreshSection">刷新</button>
+        <div class="topbar__actions">
+          <button class="refresh-button" type="button" @click="refreshSection">刷新</button>
+          <div class="topbar__user">
+            <div class="user-meta">
+              <p class="user-meta__name">{{ auth.user.displayName || auth.user.username }}</p>
+              <div class="user-meta__roles">
+                <span v-for="role in userRoleBadges" :key="role" class="role-badge">{{ role }}</span>
+              </div>
+            </div>
+            <button class="secondary" type="button" @click="logout" :disabled="logoutPending">
+              {{ logoutPending ? '注销中...' : '退出登录' }}
+            </button>
+          </div>
+        </div>
       </header>
 
       <section class="main-area">
@@ -823,3 +1082,4 @@ onMounted(fetchSummary)
     </main>
   </div>
 </template>
+
