@@ -9,6 +9,9 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.Customizer;
@@ -92,5 +95,21 @@ public class SecurityConfig {
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         ApiResponse<Void> body = ApiResponse.failure(code, message);
         response.getWriter().write(objectMapper.writeValueAsString(body));
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowCredentials(true);
+        configuration.setAllowedOriginPatterns(java.util.List.of(
+            "http://localhost:*",
+            "http://127.0.0.1:*"
+        ));
+        configuration.addAllowedHeader(CorsConfiguration.ALL);
+        configuration.addAllowedMethod(CorsConfiguration.ALL);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
     }
 }
