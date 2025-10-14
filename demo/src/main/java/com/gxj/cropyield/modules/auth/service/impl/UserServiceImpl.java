@@ -126,7 +126,13 @@ public class UserServiceImpl implements UserService {
 
         String token = jwtTokenProvider.generateToken(authenticationToken);
         auditLogger.recordForUser(user.getUsername(), "用户登录", "登录成功");
-        return new LoginResponse(token, user.getUsername(), roleCodes);
+        return new LoginResponse(
+            user.getId(),
+            user.getUsername(),
+            user.getFullName(),
+            token,
+            roleCodes
+        );
     }
 
     @Override
