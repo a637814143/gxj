@@ -22,7 +22,7 @@ public class YieldRecord extends BaseEntity {
     @JoinColumn(name = "region_id", nullable = false)
     private Region region;
 
-    @Column(nullable = false)
+    @Column(name = "record_year", nullable = false)
     private Integer year;
 
     @Column(nullable = false)
