@@ -177,11 +177,18 @@ SET FOREIGN_KEY_CHECKS = 1;
 INSERT INTO sys_role (code, name, description) VALUES
  ('ADMIN', '系统管理员', '拥有系统全部权限'),
  ('AGRICULTURE_DEPT', '农业部门用户', '可访问数据中心、高级预测与报告导出'),
- ('FARMER', '企业/农户用户', '可查看基础数据、基础预测与推荐方案');
+ ('FARMER', '企业/农户用户', '可查看基础数据、基础预测与推荐方案')
+ON DUPLICATE KEY UPDATE
+ name = VALUES(name),
+ description = VALUES(description);
 
 -- 默认管理员密码：Admin@123（BCrypt 加密）
 INSERT INTO sys_user (username, password, full_name, email) VALUES
- ('admin', '$2b$12$85erHaIH0YDAkpgK0xcyEObkFZP9p0D1nhRgYxQSDIZW0Y8.DGMI2', '平台管理员', 'admin@example.com');
+ ('admin', '$2b$12$85erHaIH0YDAkpgK0xcyEObkFZP9p0D1nhRgYxQSDIZW0Y8.DGMI2', '平台管理员', 'admin@example.com')
+ON DUPLICATE KEY UPDATE
+ password = VALUES(password),
+ full_name = VALUES(full_name),
+ email = VALUES(email);
 
 INSERT INTO sys_user_role (user_id, role_id)
 SELECT u.id, r.id FROM sys_user u, sys_role r WHERE u.username = 'admin' AND r.code = 'ADMIN';
