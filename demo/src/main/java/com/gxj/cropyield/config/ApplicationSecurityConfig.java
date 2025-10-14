@@ -28,15 +28,15 @@ import java.nio.charset.StandardCharsets;
 
 @Configuration
 @EnableWebSecurity
-public class SecurityConfig {
+public class ApplicationSecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final CustomUserDetailsService userDetailsService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
-                          CustomUserDetailsService userDetailsService) {
+    public ApplicationSecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
+                                     CustomUserDetailsService userDetailsService) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.userDetailsService = userDetailsService;
     }
