@@ -1,5 +1,6 @@
 package com.gxj.cropyield.modules.forecast.service.impl;
 
+import com.gxj.cropyield.common.logging.AuditLogger;
 import com.gxj.cropyield.modules.forecast.dto.ForecastModelRequest;
 import com.gxj.cropyield.modules.forecast.entity.ForecastModel;
 import com.gxj.cropyield.modules.forecast.repository.ForecastModelRepository;
@@ -12,9 +13,11 @@ import java.util.List;
 public class ForecastModelServiceImpl implements ForecastModelService {
 
     private final ForecastModelRepository forecastModelRepository;
+    private final AuditLogger auditLogger;
 
-    public ForecastModelServiceImpl(ForecastModelRepository forecastModelRepository) {
+    public ForecastModelServiceImpl(ForecastModelRepository forecastModelRepository, AuditLogger auditLogger) {
         this.forecastModelRepository = forecastModelRepository;
+        this.auditLogger = auditLogger;
     }
 
     @Override
@@ -28,6 +31,8 @@ public class ForecastModelServiceImpl implements ForecastModelService {
         model.setName(request.name());
         model.setType(request.type());
         model.setDescription(request.description());
-        return forecastModelRepository.save(model);
+        ForecastModel saved = forecastModelRepository.save(model);
+        auditLogger.record("高级预测模型配置", "创建预测模型:" + saved.getName());
+        return saved;
     }
 }

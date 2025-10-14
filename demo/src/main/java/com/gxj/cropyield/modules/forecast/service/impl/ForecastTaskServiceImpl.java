@@ -1,6 +1,7 @@
 package com.gxj.cropyield.modules.forecast.service.impl;
 
 import com.gxj.cropyield.common.exception.BusinessException;
+import com.gxj.cropyield.common.logging.AuditLogger;
 import com.gxj.cropyield.common.response.ResultCode;
 import com.gxj.cropyield.modules.base.entity.Crop;
 import com.gxj.cropyield.modules.base.entity.Region;
@@ -24,15 +25,18 @@ public class ForecastTaskServiceImpl implements ForecastTaskService {
     private final ForecastModelRepository forecastModelRepository;
     private final CropRepository cropRepository;
     private final RegionRepository regionRepository;
+    private final AuditLogger auditLogger;
 
     public ForecastTaskServiceImpl(ForecastTaskRepository forecastTaskRepository,
                                    ForecastModelRepository forecastModelRepository,
                                    CropRepository cropRepository,
-                                   RegionRepository regionRepository) {
+                                   RegionRepository regionRepository,
+                                   AuditLogger auditLogger) {
         this.forecastTaskRepository = forecastTaskRepository;
         this.forecastModelRepository = forecastModelRepository;
         this.cropRepository = cropRepository;
         this.regionRepository = regionRepository;
+        this.auditLogger = auditLogger;
     }
 
     @Override
@@ -58,6 +62,8 @@ public class ForecastTaskServiceImpl implements ForecastTaskService {
             task.setStatus(request.status());
         }
         task.setParameters(request.parameters());
-        return forecastTaskRepository.save(task);
+        ForecastTask saved = forecastTaskRepository.save(task);
+        auditLogger.record("执行高级预测", "创建预测任务:" + saved.getId());
+        return saved;
     }
 }

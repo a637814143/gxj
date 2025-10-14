@@ -11,3 +11,8 @@ logging:
   level:
     root: INFO
     org.hibernate.SQL: DEBUG
+
+security:
+  jwt:
+    secret: "cropyield-platform-secret-key-change-me"
+    expiration: 86400000 # 1 day in milliseconds

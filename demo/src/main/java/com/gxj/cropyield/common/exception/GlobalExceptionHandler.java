@@ -17,7 +17,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException ex) {
         ResultCode code = ex.getCode();
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+        HttpStatus status = mapStatus(code);
+        return ResponseEntity.status(status)
             .body(ApiResponse.failure(code, ex.getMessage()));
     }
 
@@ -34,5 +35,16 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleException(Exception ex) {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
             .body(ApiResponse.failure(ResultCode.SERVER_ERROR, ex.getMessage()));
+    }
+
+    private HttpStatus mapStatus(ResultCode code) {
+        return switch (code) {
+            case SUCCESS -> HttpStatus.OK;
+            case BAD_REQUEST -> HttpStatus.BAD_REQUEST;
+            case UNAUTHORIZED -> HttpStatus.UNAUTHORIZED;
+            case FORBIDDEN -> HttpStatus.FORBIDDEN;
+            case NOT_FOUND -> HttpStatus.NOT_FOUND;
+            case SERVER_ERROR -> HttpStatus.INTERNAL_SERVER_ERROR;
+        };
     }
 }

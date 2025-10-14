@@ -1,6 +1,7 @@
 package com.gxj.cropyield.modules.dataset.service.impl;
 
 import com.gxj.cropyield.common.exception.BusinessException;
+import com.gxj.cropyield.common.logging.AuditLogger;
 import com.gxj.cropyield.common.response.ResultCode;
 import com.gxj.cropyield.modules.base.entity.Crop;
 import com.gxj.cropyield.modules.base.entity.Region;
@@ -21,13 +22,16 @@ public class YieldRecordServiceImpl implements YieldRecordService {
     private final YieldRecordRepository yieldRecordRepository;
     private final CropRepository cropRepository;
     private final RegionRepository regionRepository;
+    private final AuditLogger auditLogger;
 
     public YieldRecordServiceImpl(YieldRecordRepository yieldRecordRepository,
                                   CropRepository cropRepository,
-                                  RegionRepository regionRepository) {
+                                  RegionRepository regionRepository,
+                                  AuditLogger auditLogger) {
         this.yieldRecordRepository = yieldRecordRepository;
         this.cropRepository = cropRepository;
         this.regionRepository = regionRepository;
+        this.auditLogger = auditLogger;
     }
 
     @Override
@@ -48,6 +52,8 @@ public class YieldRecordServiceImpl implements YieldRecordService {
         record.setRegion(region);
         record.setYear(request.year());
         record.setYieldPerHectare(request.yieldPerHectare());
-        return yieldRecordRepository.save(record);
+        YieldRecord saved = yieldRecordRepository.save(record);
+        auditLogger.record("数据维护", "新增产量记录:" + saved.getId());
+        return saved;
     }
 }
