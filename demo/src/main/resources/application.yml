@@ -3,6 +3,8 @@ spring:
     name: crop-yield-platform
   profiles:
     active: h2
+  jpa:
+    defer-datasource-initialization: true
 
 server:
   port: 8080
