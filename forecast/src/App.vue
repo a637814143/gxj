@@ -4,7 +4,31 @@ import BarChart from './components/charts/BarChart.vue'
 import LineChart from './components/charts/LineChart.vue'
 import PieChart from './components/charts/PieChart.vue'
 
-const state = reactive({
+const API_BASE_URL = 'http://localhost:8080/api'
+const AUTH_STORAGE_KEY = 'crop-yield-auth'
+const ROLE_LABELS = {
+  ADMIN: '系统管理员',
+  AGRICULTURE_DEPT: '农业部门用户',
+  FARMER: '企业/农户用户'
+}
+
+const storage = typeof window !== 'undefined' ? window.localStorage : null
+
+const readStoredAuth = () => {
+  if (!storage) {
+    return null
+  }
+  try {
+    const raw = storage.getItem(AUTH_STORAGE_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch (error) {
+    return null
+  }
+}
+
+const storedAuth = readStoredAuth()
+
+const createInitialState = () => ({
   activeSection: 'overview',
   overview: {
     loading: true,
@@ -48,6 +72,91 @@ const state = reactive({
     }
   }
 })
+
+const state = reactive(createInitialState())
+
+const auth = reactive({
+  token: storedAuth?.token ?? '',
+  user: storedAuth?.user ?? null,
+  loading: false,
+  error: '',
+  info: '',
+  form: {
+    username: storedAuth?.user?.username ?? '',
+    password: ''
+  }
+})
+
+const isAuthenticated = computed(() => Boolean(auth.token))
+const userDisplayName = computed(() => auth.user?.fullName || auth.user?.username || '未命名用户')
+const userInitial = computed(() => (userDisplayName.value ? userDisplayName.value.charAt(0).toUpperCase() : '用'))
+const userRoleLabel = computed(() => {
+  const roles = auth.user?.roles ?? []
+  if (!roles.length) {
+    return '未分配角色'
+  }
+  return roles.map(role => ROLE_LABELS[role] ?? role).join('、')
+})
+
+const persistAuth = () => {
+  if (!storage) {
+    return
+  }
+  if (auth.token) {
+    storage.setItem(
+      AUTH_STORAGE_KEY,
+      JSON.stringify({
+        token: auth.token,
+        user: auth.user
+      })
+    )
+  } else {
+    storage.removeItem(AUTH_STORAGE_KEY)
+  }
+}
+
+const resetState = () => {
+  Object.assign(state, createInitialState())
+}
+
+const logout = ({ keepInfo = false } = {}) => {
+  auth.token = ''
+  auth.user = null
+  auth.error = ''
+  auth.form.password = ''
+  if (!keepInfo) {
+    auth.info = ''
+  }
+  persistAuth()
+  resetState()
+}
+
+const handleUnauthorized = message => {
+  logout({ keepInfo: true })
+  auth.info = message
+}
+
+const getAuthHeaders = (headers = {}) => {
+  const finalHeaders = { ...headers }
+  if (auth.token) {
+    finalHeaders.Authorization = `Bearer ${auth.token}`
+  }
+  return finalHeaders
+}
+
+const apiFetch = async (path, options = {}) => {
+  const finalOptions = { ...options }
+  finalOptions.headers = getAuthHeaders(options.headers ?? {})
+  const response = await fetch(`${API_BASE_URL}${path}`, finalOptions)
+  if (response.status === 401) {
+    handleUnauthorized('登录已过期，请重新登录')
+    throw new Error('未授权')
+  }
+  if (response.status === 403) {
+    throw new Error('当前账号无权执行此操作')
+  }
+  return response
+}
 
 const importFileInput = ref(null)
 
@@ -127,64 +236,155 @@ const triggerFileDownload = (blob, filename) => {
   URL.revokeObjectURL(url)
 }
 
+const handleLogin = async () => {
+  if (auth.loading) {
+    return
+  }
+
+  const username = auth.form.username.trim()
+  const password = auth.form.password
+
+  if (!username || !password) {
+    auth.error = '请输入用户名和密码'
+    return
+  }
+
+  auth.loading = true
+  auth.error = ''
+  auth.info = ''
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ username, password })
+    })
+
+    let result = null
+    try {
+      result = await response.json()
+    } catch (error) {
+      result = null
+    }
+
+    if (!response.ok) {
+      throw new Error(result?.message || '登录失败，请稍后再试')
+    }
+
+    if (!result?.data?.token) {
+      throw new Error(result?.message || '用户名或密码错误')
+    }
+
+    const { data } = result
+
+    auth.token = data.token
+    auth.user = {
+      userId: data.userId,
+      username: data.username,
+      fullName: data.fullName,
+      roles: Array.isArray(data.roles) ? data.roles : []
+    }
+    auth.form.username = username
+    auth.form.password = ''
+    auth.error = ''
+    auth.info = ''
+
+    persistAuth()
+    resetState()
+
+    await fetchSummary()
+  } catch (error) {
+    if (!auth.info) {
+      auth.error = error.message || '登录失败，请稍后再试'
+    }
+    if (!isAuthenticated.value) {
+      persistAuth()
+    }
+  } finally {
+    auth.loading = false
+  }
+}
+
 const fetchSummary = async () => {
+  if (!isAuthenticated.value) {
+    return
+  }
   state.overview.loading = true
   state.overview.error = null
   try {
-    const response = await fetch('http://localhost:8080/api/dashboard/summary')
+    const response = await apiFetch('/dashboard/summary')
     if (!response.ok) {
       throw new Error('获取驾驶舱数据失败')
     }
     state.overview.data = await response.json()
   } catch (error) {
-    state.overview.error = error.message || '数据加载异常，请稍后再试'
-    state.overview.data = null
+    if (isAuthenticated.value) {
+      state.overview.error = error.message || '数据加载异常，请稍后再试'
+      state.overview.data = null
+    }
   } finally {
     state.overview.loading = false
   }
 }
 
 const fetchCrops = async () => {
+  if (!isAuthenticated.value) {
+    return
+  }
   state.dataCenter.error = null
   try {
-    const response = await fetch('http://localhost:8080/api/crops')
+    const response = await apiFetch('/crops')
     if (!response.ok) {
       throw new Error('获取作物列表失败')
     }
     state.dataCenter.crops = await response.json()
   } catch (error) {
-    state.dataCenter.error = error.message || '作物列表加载失败'
+    if (isAuthenticated.value) {
+      state.dataCenter.error = error.message || '作物列表加载失败'
+    }
   }
 }
 
 const fetchRegions = async () => {
+  if (!isAuthenticated.value) {
+    return
+  }
   state.dataCenter.error = null
   try {
-    const response = await fetch('http://localhost:8080/api/regions')
+    const response = await apiFetch('/regions')
     if (!response.ok) {
       throw new Error('获取地区列表失败')
     }
     state.dataCenter.regions = await response.json()
   } catch (error) {
-    state.dataCenter.error = error.message || '地区列表加载失败'
+    if (isAuthenticated.value) {
+      state.dataCenter.error = error.message || '地区列表加载失败'
+    }
   }
 }
 
 const fetchRecords = async () => {
+  if (!isAuthenticated.value) {
+    return
+  }
   state.dataCenter.loading = true
   state.dataCenter.error = null
   state.dataCenter.exportError = null
   try {
     const queryParams = buildQueryParams(state.dataCenter.filters)
     const query = queryParams.toString()
-    const response = await fetch(`http://localhost:8080/api/yields${query ? `?${query}` : ''}`)
+    const response = await apiFetch(`/yields${query ? `?${query}` : ''}`)
     if (!response.ok) {
       throw new Error('获取历史数据失败')
     }
     state.dataCenter.records = await response.json()
   } catch (error) {
-    state.dataCenter.error = error.message || '数据加载异常'
-    state.dataCenter.records = []
+    if (isAuthenticated.value) {
+      state.dataCenter.error = error.message || '数据加载异常'
+      state.dataCenter.records = []
+    }
   } finally {
     state.dataCenter.loading = false
   }
@@ -212,6 +412,9 @@ const handleImportFileChange = async event => {
 }
 
 const uploadDataset = async file => {
+  if (!isAuthenticated.value) {
+    return
+  }
   state.dataImport.uploading = true
   state.dataImport.uploadError = null
   state.dataImport.summary = null
@@ -220,7 +423,7 @@ const uploadDataset = async file => {
   try {
     const formData = new FormData()
     formData.append('file', file)
-    const response = await fetch('http://localhost:8080/api/data-import/upload', {
+    const response = await apiFetch('/data-import/upload', {
       method: 'POST',
       body: formData
     })
@@ -242,41 +445,48 @@ const uploadDataset = async file => {
     await queryImportedData()
     await fetchRecords()
   } catch (error) {
-    state.dataImport.uploadError = error.message || '导入失败，请稍后重试'
+    if (isAuthenticated.value) {
+      state.dataImport.uploadError = error.message || '导入失败，请稍后重试'
+    }
   } finally {
     state.dataImport.uploading = false
   }
 }
 
 const queryImportedData = async () => {
+  if (!isAuthenticated.value) {
+    return
+  }
   state.dataImport.querying = true
   state.dataImport.queryError = null
   state.dataImport.exportError = null
   try {
     const queryParams = buildQueryParams(state.dataImport.filters)
     const query = queryParams.toString()
-    const response = await fetch(`http://localhost:8080/api/yields${query ? `?${query}` : ''}`)
+    const response = await apiFetch(`/yields${query ? `?${query}` : ''}`)
     if (!response.ok) {
       throw new Error('查询导入结果失败')
     }
     state.dataImport.results = await response.json()
     state.dataImport.initialized = true
   } catch (error) {
-    state.dataImport.queryError = error.message || '查询失败'
-    state.dataImport.results = []
+    if (isAuthenticated.value) {
+      state.dataImport.queryError = error.message || '查询失败'
+      state.dataImport.results = []
+    }
   } finally {
     state.dataImport.querying = false
   }
 }
 
 const exportImportedData = async format => {
-  if (!['excel', 'pdf'].includes(format)) return
+  if (!['excel', 'pdf'].includes(format) || !isAuthenticated.value) return
   state.dataImport.exportError = null
   state.dataImport.exporting = format
   try {
     const queryParams = buildQueryParams(state.dataImport.filters)
     const query = queryParams.toString()
-    const response = await fetch(`http://localhost:8080/api/yields/export/${format}${query ? `?${query}` : ''}`)
+    const response = await apiFetch(`/yields/export/${format}${query ? `?${query}` : ''}`)
     if (!response.ok) {
       throw new Error('导出失败')
     }
@@ -284,7 +494,9 @@ const exportImportedData = async format => {
     const suffix = format === 'excel' ? 'xlsx' : 'pdf'
     triggerFileDownload(blob, `导入数据_${new Date().toISOString().slice(0, 10)}.${suffix}`)
   } catch (error) {
-    state.dataImport.exportError = error.message || '导出失败'
+    if (isAuthenticated.value) {
+      state.dataImport.exportError = error.message || '导出失败'
+    }
   } finally {
     state.dataImport.exporting = ''
   }
@@ -330,13 +542,13 @@ const resetFilters = async () => {
 }
 
 const exportDataCenter = async format => {
-  if (!['excel', 'pdf'].includes(format)) return
+  if (!['excel', 'pdf'].includes(format) || !isAuthenticated.value) return
   state.dataCenter.exportError = null
   state.dataCenter.exporting = format
   try {
     const queryParams = buildQueryParams(state.dataCenter.filters)
     const query = queryParams.toString()
-    const response = await fetch(`http://localhost:8080/api/yields/export/${format}${query ? `?${query}` : ''}`)
+    const response = await apiFetch(`/yields/export/${format}${query ? `?${query}` : ''}`)
     if (!response.ok) {
       throw new Error('导出失败')
     }
@@ -344,7 +556,9 @@ const exportDataCenter = async format => {
     const suffix = format === 'excel' ? 'xlsx' : 'pdf'
     triggerFileDownload(blob, `历史数据_${new Date().toISOString().slice(0, 10)}.${suffix}`)
   } catch (error) {
-    state.dataCenter.exportError = error.message || '导出失败'
+    if (isAuthenticated.value) {
+      state.dataCenter.exportError = error.message || '导出失败'
+    }
   } finally {
     state.dataCenter.exporting = ''
   }
@@ -368,11 +582,56 @@ const regionComparisons = computed(() => state.overview.data?.regionComparisons 
 const forecastOutlook = computed(() => state.overview.data?.forecastOutlook ?? [])
 const recentRecords = computed(() => state.overview.data?.recentRecords ?? [])
 
-onMounted(fetchSummary)
+onMounted(() => {
+  if (isAuthenticated.value) {
+    fetchSummary()
+  }
+})
 </script>
 
 <template>
-  <div class="app-shell">
+  <div v-if="!isAuthenticated" class="auth-container">
+    <div class="auth-card">
+      <div class="auth-card__brand">
+        <span class="auth-card__logo">农</span>
+        <div>
+          <p class="auth-card__title">云南农作物分析系统</p>
+          <p class="auth-card__subtitle">Yunnan Crop Intelligence</p>
+        </div>
+      </div>
+      <form class="auth-form" @submit.prevent="handleLogin">
+        <h1>系统登录</h1>
+        <p class="auth-form__subtitle">请输入账号和密码以访问数据驾驶舱</p>
+        <p v-if="auth.info" class="auth-message auth-message--info">{{ auth.info }}</p>
+        <p v-if="auth.error" class="auth-message auth-message--error">{{ auth.error }}</p>
+        <label>
+          <span>用户名</span>
+          <input
+            v-model.trim="auth.form.username"
+            type="text"
+            placeholder="请输入用户名"
+            autocomplete="username"
+            :disabled="auth.loading"
+          />
+        </label>
+        <label>
+          <span>密码</span>
+          <input
+            v-model="auth.form.password"
+            type="password"
+            placeholder="请输入密码"
+            autocomplete="current-password"
+            :disabled="auth.loading"
+          />
+        </label>
+        <button type="submit" :disabled="auth.loading">
+          {{ auth.loading ? '正在登录...' : '进入系统' }}
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div v-else class="app-shell">
     <aside class="sidebar">
       <div class="sidebar__brand">
         <span class="brand__logo">农</span>
@@ -403,7 +662,17 @@ onMounted(fetchSummary)
           <h1>{{ currentSection.title }}</h1>
           <p class="topbar__subtitle">{{ currentSection.subtitle }}</p>
         </div>
-        <button class="refresh-button" type="button" @click="refreshSection">刷新</button>
+        <div class="topbar__actions">
+          <div class="topbar__user">
+            <span class="topbar__avatar">{{ userInitial }}</span>
+            <div class="topbar__meta">
+              <p class="topbar__name">{{ userDisplayName }}</p>
+              <p class="topbar__role">{{ userRoleLabel }}</p>
+            </div>
+          </div>
+          <button class="refresh-button" type="button" @click="refreshSection">刷新</button>
+          <button class="logout-button" type="button" @click="logout()">退出</button>
+        </div>
       </header>
 
       <section class="main-area">
