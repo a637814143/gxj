@@ -22,4 +22,7 @@ public interface UsagePredictionRepository extends JpaRepository<UsagePrediction
 
     @Query("select max(p.predictionDate) from UsagePrediction p")
     LocalDate findLatestPredictionDate();
+
+    @Query("select distinct p.software.id from UsagePrediction p where p.software.id in :softwareIds")
+    List<Long> findSoftwareIdsWithPredictions(List<Long> softwareIds);
 }
