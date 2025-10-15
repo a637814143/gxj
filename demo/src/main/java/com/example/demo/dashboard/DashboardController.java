@@ -16,7 +16,7 @@ public class DashboardController {
     }
 
     @GetMapping("/summary")
-    public DashboardSummaryResponse getSummary() {
+    public DashboardSummaryResponse summary() {
         return dashboardService.getSummary();
     }
 }
