@@ -120,11 +120,9 @@
 
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
-import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
+import apiClient from '../services/http'
 
 const datasets = ref([])
 const datasetLoading = ref(false)
@@ -178,7 +176,7 @@ const formatNumber = value => {
 const fetchDatasets = async () => {
   datasetLoading.value = true
   try {
-    const { data } = await axios.get(`${API_BASE}/api/datasets/files`)
+    const { data } = await apiClient.get('/api/datasets/files')
     datasets.value = data?.data ?? []
   } catch (error) {
     ElMessage.error(error?.response?.data?.message || '加载数据集列表失败')
@@ -190,7 +188,7 @@ const fetchDatasets = async () => {
 const fetchYieldRecords = async () => {
   yieldLoading.value = true
   try {
-    const { data } = await axios.get(`${API_BASE}/api/yields`)
+    const { data } = await apiClient.get('/api/yields')
     yieldRecords.value = Array.isArray(data) ? data : []
   } catch (error) {
     ElMessage.error(error?.response?.data?.message || '加载导入数据失败')
@@ -239,7 +237,7 @@ const submitUpload = async () => {
 
   uploading.value = true
   try {
-    const { data } = await axios.post(`${API_BASE}/api/data-import/upload`, formData, {
+    const { data } = await apiClient.post('/api/data-import/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
     const result = data?.data

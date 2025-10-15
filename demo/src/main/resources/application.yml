@@ -16,6 +16,7 @@ security:
   jwt:
     secret: "cropyield-platform-secret-key-change-me-please"
     expiration: 86400000
+    refresh-expiration: 604800000
 
 forecast:
   engine:
