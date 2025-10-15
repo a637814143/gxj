@@ -4,19 +4,24 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.FilterType;
 import org.springframework.context.annotation.FullyQualifiedAnnotationBeanNameGenerator;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 
 @SpringBootApplication
 @ComponentScan(
         basePackages = {
-        "com.example.demo",
-        "com.gxj.cropyield.common",
-        "com.gxj.cropyield.config",
-        "com.gxj.cropyield.modules.auth",
-        "com.gxj.cropyield.modules.system"
-},
-        nameGenerator = FullyQualifiedAnnotationBeanNameGenerator.class
+                "com.example.demo",
+                "com.gxj.cropyield.common",
+                "com.gxj.cropyield.config",
+                "com.gxj.cropyield.modules.auth",
+                "com.gxj.cropyield.modules.system"
+        },
+        nameGenerator = FullyQualifiedAnnotationBeanNameGenerator.class,
+        excludeFilters = {
+                @ComponentScan.Filter(type = FilterType.REGEX, pattern = "com\\.example\\.demo\\.config\\.SecurityConfig"),
+                @ComponentScan.Filter(type = FilterType.REGEX, pattern = "com\\.gxj\\.cropyield\\.(common|config)\\.SecurityConfig")
+        }
 )
 @EntityScan(basePackages = {
         "com.example.demo",
