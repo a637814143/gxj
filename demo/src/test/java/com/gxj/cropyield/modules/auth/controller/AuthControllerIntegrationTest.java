@@ -19,6 +19,8 @@ import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
@@ -56,6 +58,9 @@ class AuthControllerIntegrationTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @Autowired
+    private PlatformTransactionManager transactionManager;
+
     private final Set<String> createdUsernames = new HashSet<>();
 
     @AfterEach
@@ -69,11 +74,16 @@ class AuthControllerIntegrationTest {
             .collect(Collectors.toList());
         loginLogRepository.deleteAll(loginLogs);
 
-        createdUsernames.stream()
-            .map(userRepository::findByUsername)
-            .filter(Optional::isPresent)
-            .map(Optional::get)
-            .forEach(userRepository::delete);
+        TransactionTemplate template = new TransactionTemplate(transactionManager);
+        template.executeWithoutResult(status -> {
+            createdUsernames.stream()
+                .map(userRepository::findByUsername)
+                .flatMap(Optional::stream)
+                .forEach(user -> {
+                    refreshTokenRepository.deleteByUser(user);
+                    userRepository.delete(user);
+                });
+        });
 
         createdUsernames.clear();
     }

@@ -1,0 +1,19 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: root
+    password: 123456
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+        globally_quoted_identifiers: true
+security:
+  jwt:
+    secret: "cropyield-platform-secret-key-change-me-please"
+    expiration: 86400000
+    refresh-expiration: 604800000
