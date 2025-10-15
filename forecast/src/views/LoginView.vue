@@ -42,6 +42,10 @@
           <el-button type="primary" :loading="loading" @click="handleSubmit" class="login-button">登录</el-button>
         </div>
       </el-form>
+      <div class="switch-auth">
+        还没有账号？
+        <el-link type="primary" @click.prevent="goToRegister">立即注册</el-link>
+      </div>
     </div>
   </div>
 </template>
@@ -98,7 +102,7 @@ const handleSubmit = async () => {
       rememberMe: form.rememberMe
     })
     const redirect = route.query.redirect || '/dashboard'
-    router.replace(redirect)
+    await router.replace(redirect)
   } catch (error) {
     const message = error?.response?.data?.message || error.message || '登录失败，请重试'
     ElMessage.error(message)
@@ -112,6 +116,11 @@ const handleSubmit = async () => {
 onMounted(() => {
   refreshCaptcha()
 })
+
+const goToRegister = () => {
+  const redirect = route.query.redirect
+  router.push({ name: 'register', ...(redirect ? { query: { redirect } } : {}) })
+}
 </script>
 
 <style scoped>
@@ -190,5 +199,15 @@ onMounted(() => {
 
 .login-button {
   min-width: 120px;
+}
+
+.switch-auth {
+  margin-top: 16px;
+  text-align: center;
+  color: #607d8b;
+}
+
+.switch-auth .el-link {
+  margin-left: 4px;
 }
 </style>
