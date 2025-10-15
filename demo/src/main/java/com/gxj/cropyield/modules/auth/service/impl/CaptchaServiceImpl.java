@@ -23,7 +23,6 @@ public class CaptchaServiceImpl implements CaptchaService {
 
     private static final int WIDTH = 120;
     private static final int HEIGHT = 40;
-    private static final int CAPTCHA_LENGTH = 5;
     private static final long EXPIRE_SECONDS = 120;
 
     private final Map<String, CaptchaHolder> captchaStore = new ConcurrentHashMap<>();
@@ -32,10 +31,10 @@ public class CaptchaServiceImpl implements CaptchaService {
     @Override
     public CaptchaResponse createCaptcha() {
         cleanupExpired();
-        String code = generateCode();
+        Captcha captcha = generateCaptcha();
         String id = UUID.randomUUID().toString();
-        captchaStore.put(id, new CaptchaHolder(code, Instant.now().plusSeconds(EXPIRE_SECONDS)));
-        return new CaptchaResponse(id, createImageBase64(code));
+        captchaStore.put(id, new CaptchaHolder(captcha.answer(), Instant.now().plusSeconds(EXPIRE_SECONDS)));
+        return new CaptchaResponse(id, createImageBase64(captcha.expression()));
     }
 
     @Override
@@ -44,7 +43,7 @@ public class CaptchaServiceImpl implements CaptchaService {
             throw new BusinessException(ResultCode.BAD_REQUEST, "验证码不能为空");
         }
         CaptchaHolder holder = captchaStore.remove(captchaId);
-        if (holder == null || holder.expired() || !holder.code().equalsIgnoreCase(captchaCode.trim())) {
+        if (holder == null || holder.expired() || !holder.answer().equals(captchaCode.trim())) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "验证码错误或已过期");
         }
     }
@@ -54,16 +53,51 @@ public class CaptchaServiceImpl implements CaptchaService {
         captchaStore.entrySet().removeIf(entry -> entry.getValue().expiresAt().isBefore(now));
     }
 
-    private String generateCode() {
-        String chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-        StringBuilder builder = new StringBuilder(CAPTCHA_LENGTH);
-        for (int i = 0; i < CAPTCHA_LENGTH; i++) {
-            builder.append(chars.charAt(random.nextInt(chars.length())));
-        }
-        return builder.toString();
+    private Captcha generateCaptcha() {
+        int operation = random.nextInt(4);
+        return switch (operation) {
+            case 0 -> generateAddition();
+            case 1 -> generateSubtraction();
+            case 2 -> generateMultiplication();
+            default -> generateDivision();
+        };
     }
 
-    private String createImageBase64(String code) {
+    private Captcha generateAddition() {
+        int first = random.nextInt(11);
+        int second = random.nextInt(11 - first);
+        int result = first + second;
+        return new Captcha(formatExpression(first, second, "+"), Integer.toString(result));
+    }
+
+    private Captcha generateSubtraction() {
+        int first = random.nextInt(11);
+        int second = random.nextInt(first + 1);
+        int result = first - second;
+        return new Captcha(formatExpression(first, second, "-"), Integer.toString(result));
+    }
+
+    private Captcha generateMultiplication() {
+        int first = random.nextInt(11);
+        int maxSecond = first == 0 ? 10 : 10 / first;
+        int second = random.nextInt(maxSecond + 1);
+        int result = first * second;
+        return new Captcha(formatExpression(first, second, "×"), Integer.toString(result));
+    }
+
+    private Captcha generateDivision() {
+        int divisor = random.nextInt(10) + 1;
+        int maxQuotient = 10 / divisor;
+        int quotient = random.nextInt(maxQuotient + 1);
+        int dividend = divisor * quotient;
+        return new Captcha(formatExpression(dividend, divisor, "÷"), Integer.toString(quotient));
+    }
+
+    private String formatExpression(int first, int second, String operator) {
+        return first + " " + operator + " " + second + " = ?";
+    }
+
+    private String createImageBase64(String expression) {
         BufferedImage image = new BufferedImage(WIDTH, HEIGHT, BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = image.createGraphics();
         g2d.setColor(Color.WHITE);
@@ -80,12 +114,15 @@ public class CaptchaServiceImpl implements CaptchaService {
 
         g2d.setFont(new Font("Arial", Font.BOLD, 28));
         FontMetrics fontMetrics = g2d.getFontMetrics();
-        int x = (WIDTH - fontMetrics.stringWidth(code)) / 2;
+        int x = (WIDTH - fontMetrics.stringWidth(expression)) / 2;
         int y = ((HEIGHT - fontMetrics.getHeight()) / 2) + fontMetrics.getAscent();
 
-        for (int i = 0; i < code.length(); i++) {
+        int offset = 0;
+        for (int i = 0; i < expression.length(); i++) {
             g2d.setColor(randomColor());
-            g2d.drawString(String.valueOf(code.charAt(i)), x + i * (fontMetrics.charWidth(code.charAt(i)) + 2), y);
+            char character = expression.charAt(i);
+            g2d.drawString(String.valueOf(character), x + offset, y);
+            offset += fontMetrics.charWidth(character);
         }
 
         g2d.dispose();
@@ -103,9 +140,12 @@ public class CaptchaServiceImpl implements CaptchaService {
         return new Color(random.nextInt(200), random.nextInt(200), random.nextInt(200));
     }
 
-    private record CaptchaHolder(String code, Instant expiresAt) {
+    private record CaptchaHolder(String answer, Instant expiresAt) {
         private boolean expired() {
             return Instant.now().isAfter(expiresAt);
         }
+    }
+
+    private record Captcha(String expression, String answer) {
     }
 }
