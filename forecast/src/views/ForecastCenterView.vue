@@ -1,10 +1,8 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import BaseChart from '@/components/charts/BaseChart.vue'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
+import apiClient from '../services/http'
 
 const selectors = reactive({
   regionId: null,
@@ -145,7 +143,7 @@ const resetResult = () => {
 const fetchOptions = async (type, url) => {
   loadingOptions[type] = true
   try {
-    const { data } = await axios.get(url)
+    const { data } = await apiClient.get(url)
     optionLists[type] = data?.data ?? []
   } catch (error) {
     ElMessage.error(`加载${type === 'regions' ? '地区' : type === 'crops' ? '作物' : '模型'}列表失败`)
@@ -170,7 +168,7 @@ const runForecast = async () => {
       forecastPeriods: selectors.forecastPeriods,
       frequency: selectors.frequency
     }
-    const { data } = await axios.post(`${API_BASE}/api/forecast/predict`, payload)
+    const { data } = await apiClient.post('/api/forecast/predict', payload)
     const result = data?.data
     historySeries.value = result?.history ?? []
     forecastSeries.value = result?.forecast ?? []
@@ -187,9 +185,9 @@ const runForecast = async () => {
 
 onMounted(async () => {
   await Promise.all([
-    fetchOptions('regions', `${API_BASE}/api/base/regions`),
-    fetchOptions('crops', `${API_BASE}/api/base/crops`),
-    fetchOptions('models', `${API_BASE}/api/forecast/models`)
+    fetchOptions('regions', '/api/base/regions'),
+    fetchOptions('crops', '/api/base/crops'),
+    fetchOptions('models', '/api/forecast/models')
   ])
 })
 
