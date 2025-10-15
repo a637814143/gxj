@@ -11,3 +11,9 @@ logging:
   level:
     root: INFO
     org.hibernate.SQL: DEBUG
+
+forecast:
+  engine:
+    base-url: ""
+    connect-timeout: 2s
+    read-timeout: 8s

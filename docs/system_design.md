@@ -1,0 +1,311 @@
+# 云南主要农作物产量分析与预测系统设计
+
+## 1. 总体架构
+
+```mermaid
+graph TD
+    subgraph Client[前端应用（forecast/Vue3）]
+        UI[数据管理界面]
+        Chart[ECharts 可视化]
+        ForecastView[预测与决策视图]
+    end
+
+    subgraph Gateway[Nginx 反向代理/静态资源服务]
+        SSR[静态资源托管]
+        APIProxy[API 代理]
+    end
+
+    subgraph Backend[后端服务（demo/Spring Boot）]
+        Controller[REST Controller]
+        Service[业务服务层]
+        DataPipeline[数据导入与清洗模块]
+        Analytics[可视化数据接口]
+        Forecast[预测服务编排]
+        Recommendation[收益与推荐模块]
+    end
+
+    subgraph Persistence[数据与模型存储]
+        MySQL[(MySQL 数据库)]
+        ObjectStore[(文件存储/MinIO)]
+        ModelRegistry[模型仓库]
+    end
+
+    subgraph ML[机器学习执行环境]
+        PyService[Python 预测服务（ARIMA/Prophet/LSTM）]
+        Scheduler[任务调度器 (Quartz/Spring Scheduling)]
+    end
+
+    subgraph Infra[基础设施]
+        Auth[统一认证/Token 管理]
+        Monitor[日志&监控 (ELK/Prometheus)]
+    end
+
+    Client -->|HTTPS| Gateway
+    Gateway -->|REST API| Backend
+    Backend -->|JPA/MyBatis| MySQL
+    Backend -->|文件/模型| ObjectStore
+    Backend -->|HTTP/gRPC| PyService
+    Backend --> Scheduler
+    PyService --> ModelRegistry
+    Backend --> Monitor
+    Gateway --> Auth
+    Client --> Auth
+```
+
+> 说明：系统采用前后端分离架构。Spring Boot 后端提供统一 RESTful API，负责数据管理、预测编排与决策支持；Vue3 前端消费 API，展示可视化图表与预测结果。ARIMA/Prophet/LSTM 模型在独立的 Python 服务中训练与推理，Spring Boot 通过异步任务调度与其通信。
+
+## 2. 前后端分离技术方案
+
+### 前端（forecast 包）
+- **框架**：Vue 3 + Vite，采用组合式 API。
+- **状态管理**：Pinia 管理全局状态（用户、当前筛选条件、图表配置等）。
+- **路由**：Vue Router 分离数据管理、可视化、预测分析、决策支持等页面。
+- **UI 组件**：Element Plus/Ant Design Vue 负责表格、表单、对话框等组件。
+- **可视化**：ECharts 封装为自定义组件，支持多维度折线、柱状、热力、地图等图表。
+- **数据交互**：Axios + 拦截器统一处理鉴权 Token、错误提示与加载状态。
+- **国际化**：vue-i18n 预留多语言扩展；默认中文。
+- **构建部署**：Vite 打包，静态资源由 Nginx 托管或由 Spring Boot 静态目录代理；使用 `.env` 区分开发/生产 API 基础路径。
+
+### 后端（demo 包）
+- **框架**：Spring Boot 3.x，分层结构 Controller -> Service -> Repository。
+- **数据访问**：Spring Data JPA 或 MyBatis-Plus；结合 Specification/QueryWrapper 支持动态筛选。
+- **数据导入与清洗**：利用 Apache Commons CSV/POI 解析 Excel/CSV，集成 MapStruct 做 DTO-Entity 转换，Bean Validation 校验。
+- **预测任务编排**：
+  - Spring Scheduler/Quartz 定时触发训练、回测。
+  - 使用 Spring Cloud OpenFeign/RestTemplate 调用 Python 预测服务。
+  - 采用消息队列（如 RabbitMQ）可选提升异步能力。
+- **安全**：Spring Security + JWT，RBAC 控制数据导入/预测操作权限。
+- **文档**：Springdoc OpenAPI 生成 Swagger 接口文档。
+- **监控**：Spring Boot Actuator + Micrometer（Prometheus）。
+
+### Python 预测服务
+- 运行于独立容器或虚拟环境，提供 REST/gRPC 接口。
+- 使用 `pmdarima`、`prophet`、`torch`/`tensorflow` 实现 ARIMA、Prophet、LSTM 模型。
+- 使用 MLflow/自定义模型仓库存储模型版本及评估指标。
+- 返回预测值、置信区间、模型元数据，供后端入库展示。
+
+## 3. 数据库表结构设计
+
+### 3.1 基础维表
+
+| 表名 | 说明 | 关键字段 |
+| --- | --- | --- |
+| `region` | 行政区域信息 | `id`(PK)、`name`、`parent_id`、`level`、`geo_code`、`latitude`、`longitude` |
+| `crop` | 农作物品类 | `id`(PK)、`name`、`category`、`variety`、`growth_cycle`、`unit` |
+| `data_source` | 数据来源记录 | `id`(PK)、`name`、`type`、`description`、`imported_by`、`import_time` |
+
+### 3.2 产量与气象数据
+
+| 表名 | 说明 | 关键字段 |
+| --- | --- | --- |
+| `production_record` | 产量时序数据 | `id`(PK)、`region_id`(FK)、`crop_id`(FK)、`stat_year`、`stat_month`、`area_planted`、`yield`、`unit_price`、`data_source_id`、`is_estimated`、`quality_flag`、`created_at` |
+| `climate_indicator` | 气象因子 | `id`(PK)、`region_id`(FK)、`stat_date`、`avg_temp`、`rainfall`、`sunshine_hours`、`soil_moisture`、`extreme_event`、`data_source_id` |
+| `data_cleaning_log` | 数据清洗日志 | `id`(PK)、`record_type`、`record_id`、`issue_type`、`action_taken`、`processed_by`、`processed_at`、`status` |
+
+### 3.3 预测与评估
+
+| 表名 | 说明 | 关键字段 |
+| --- | --- | --- |
+| `forecast_task` | 预测任务 | `id`(PK)、`task_code`、`crop_id`、`region_id`、`model_type`(ARIMA/Prophet/LSTM)、`horizon`、`status`、`trigger_type`(manual/scheduled)、`scheduled_time`、`created_by`、`created_at` |
+| `forecast_result` | 预测结果 | `id`(PK)、`task_id`(FK)、`forecast_date`、`prediction_start`、`prediction_end`、`predicted_value`、`lower_bound`、`upper_bound`、`confidence`、`model_version`、`generated_at` |
+| `model_metric` | 模型评估指标 | `id`(PK)、`task_id`(FK)、`metric_name`(RMSE/MAPE 等)、`metric_value`、`dataset_type`(train/test/backtest)、`calculated_at` |
+| `recommendation_record` | 决策建议 | `id`(PK)、`task_id`(FK)、`scenario_name`、`expected_revenue`、`cost`、`profit`、`recommendation`、`assumptions`、`created_at` |
+
+### 3.4 用户与审计
+
+| 表名 | 说明 | 关键字段 |
+| --- | --- | --- |
+| `user_account` | 用户账户 | `id`(PK)、`username`、`password`、`display_name`、`role`、`status`、`last_login`、`created_at` |
+| `operation_log` | 操作审计 | `id`(PK)、`user_id`、`module`、`action`、`target_id`、`detail`、`ip_address`、`created_at` |
+
+**索引与约束建议**
+- `production_record` 建立 `(crop_id, region_id, stat_year, stat_month)` 唯一索引，保证单月唯一。
+- `forecast_result` 建立 `(task_id, forecast_date)` 唯一索引，快速定位预测点。
+- 所有外键字段加索引提升联表效率。
+
+## 4. 项目初始化配置与依赖
+
+### 4.1 后端（demo）
+
+**Maven 依赖**
+```xml
+<dependencies>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-data-jpa</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>com.mysql</groupId>
+        <artifactId>mysql-connector-j</artifactId>
+        <scope>runtime</scope>
+    </dependency>
+    <dependency>
+        <groupId>org.projectlombok</groupId>
+        <artifactId>lombok</artifactId>
+        <optional>true</optional>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springdoc</groupId>
+        <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-security</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>io.jsonwebtoken</groupId>
+        <artifactId>jjwt-api</artifactId>
+        <version>0.11.5</version>
+    </dependency>
+    <dependency>
+        <groupId>io.jsonwebtoken</groupId>
+        <artifactId>jjwt-impl</artifactId>
+        <version>0.11.5</version>
+        <scope>runtime</scope>
+    </dependency>
+    <dependency>
+        <groupId>io.jsonwebtoken</groupId>
+        <artifactId>jjwt-jackson</artifactId>
+        <version>0.11.5</version>
+        <scope>runtime</scope>
+    </dependency>
+    <dependency>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-csv</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.apache.poi</groupId>
+        <artifactId>poi-ooxml</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.mapstruct</groupId>
+        <artifactId>mapstruct</artifactId>
+        <version>1.5.5.Final</version>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+</dependencies>
+```
+
+**关键配置**（`application.yml`）
+```yaml
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/yunnan_agri?useSSL=false&serverTimezone=Asia/Shanghai
+    username: agri_user
+    password: strong_password
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+    show-sql: true
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+
+app:
+  security:
+    jwt-secret: ${JWT_SECRET}
+    token-validity: 86400
+  ml-service:
+    base-url: http://ml-service:8000
+    timeout: 30s
+
+logging:
+  level:
+    root: INFO
+    com.example.demo: DEBUG
+```
+
+**初始化脚本**
+- 使用 Flyway/Liquibase 维护数据库结构，初始迁移创建上述表。
+- 在 `data.sql` 预置常用区域、作物数据。
+- 配置 Docker Compose：包含 `springboot-app`、`mysql`、`ml-service`、`nginx`、`minio` 服务。
+
+### 4.2 前端（forecast）
+
+**依赖**
+```bash
+npm install vue@3 vite pinia vue-router axios echarts element-plus @vueuse/core --save
+npm install @types/echarts sass --save-dev
+```
+
+**项目结构建议**
+```
+src/
+  api/           # axios 实例与接口封装
+  stores/        # Pinia store
+  views/         # 页面视图（DataManagement.vue / Visualization.vue / Forecast.vue / Decision.vue）
+  components/    # 图表组件、表单组件
+  router/        # 路由配置
+  assets/        # 全局样式、主题
+  utils/         # 工具方法（格式化、权限指令）
+```
+
+**环境变量示例**
+```
+# .env.development
+VITE_API_BASE_URL=http://localhost:8080/api
+
+# .env.production
+VITE_API_BASE_URL=https://api.example.com/api
+```
+
+**全局样式与布局**
+- 使用 CSS 变量统一颜色、字体。
+- 自定义主题适配云南农业色彩（绿色、金色）。
+- 支持暗黑模式（ECharts、Element Plus 主题联动）。
+
+### 4.3 Python 预测服务
+
+**环境依赖（requirements.txt）**
+```
+fastapi
+uvicorn
+pydantic
+pandas
+numpy
+scikit-learn
+pmdarima
+prophet
+torch
+mlflow
+joblib
+redis
+loguru
+```
+
+**基础结构**
+```
+app/
+  main.py         # FastAPI 入口
+  routers/
+    forecast.py   # 预测接口
+  services/
+    arima_service.py
+    prophet_service.py
+    lstm_service.py
+  models/
+    schemas.py    # 请求/响应模型
+  repository/
+    model_registry.py
+```
+
+## 5. 开发流程建议
+1. 定义统一 API 契约（OpenAPI），前后端依据接口并行开发。
+2. 通过 Docker Compose 启动依赖服务，`npm run dev` 与 `mvn spring-boot:run` 联调。
+3. 引入 CI/CD（GitHub Actions）：自动构建、运行单元测试、前端 Lint、后端测试。
+4. 使用 SonarQube/Checkstyle + ESLint/Prettier 保证代码质量。
+5. 部署时后端、Python 服务容器部署于同一网络；前端静态资源部署 Nginx/CDN。
