@@ -1,6 +1,8 @@
 /demo/target/
 /forecast/node_modules/
 /forecast/dist/
+/demo/uploads/
+/uploads/
 *.log
 *.iml
 .idea/
