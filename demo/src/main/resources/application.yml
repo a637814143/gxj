@@ -12,6 +12,11 @@ logging:
     root: INFO
     org.hibernate.SQL: DEBUG
 
+security:
+  jwt:
+    secret: "cropyield-platform-secret-key-change-me-please"
+    expiration: 86400000
+
 forecast:
   engine:
     base-url: ""

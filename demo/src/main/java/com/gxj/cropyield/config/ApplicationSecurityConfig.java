@@ -1,12 +1,14 @@
 package com.gxj.cropyield.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.gxj.cropyield.common.config.JwtProperties;
 import com.gxj.cropyield.common.response.ApiResponse;
 import com.gxj.cropyield.common.response.ResultCode;
 import com.gxj.cropyield.common.security.CustomUserDetailsService;
 import com.gxj.cropyield.common.security.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.web.cors.CorsConfiguration;
@@ -28,6 +30,7 @@ import java.nio.charset.StandardCharsets;
 
 @Configuration
 @EnableWebSecurity
+@EnableConfigurationProperties(JwtProperties.class)
 public class ApplicationSecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
