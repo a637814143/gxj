@@ -4,6 +4,8 @@ DROP TABLE IF EXISTS sys_user_role;
 DROP TABLE IF EXISTS sys_user;
 DROP TABLE IF EXISTS sys_role;
 DROP TABLE IF EXISTS sys_permission;
+DROP TABLE IF EXISTS forecast_run_series;
+DROP TABLE IF EXISTS forecast_run;
 
 CREATE TABLE sys_permission (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -45,4 +47,36 @@ CREATE TABLE sys_role_permission (
     PRIMARY KEY (role_id, permission_id),
     CONSTRAINT fk_role_perm_role FOREIGN KEY (role_id) REFERENCES sys_role (id) ON DELETE CASCADE,
     CONSTRAINT fk_role_perm_permission FOREIGN KEY (permission_id) REFERENCES sys_permission (id) ON DELETE CASCADE
+);
+
+CREATE TABLE forecast_run (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    model_id BIGINT NOT NULL,
+    crop_id BIGINT NOT NULL,
+    region_id BIGINT NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    forecast_periods INT NOT NULL,
+    history_years INT,
+    frequency VARCHAR(32),
+    external_request_id VARCHAR(64),
+    error_message VARCHAR(512),
+    mae DOUBLE,
+    rmse DOUBLE,
+    mape DOUBLE,
+    r2 DOUBLE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+CREATE TABLE forecast_run_series (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    run_id BIGINT NOT NULL,
+    period VARCHAR(32) NOT NULL,
+    value DOUBLE NOT NULL,
+    lower_bound DOUBLE,
+    upper_bound DOUBLE,
+    historical BIT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_run_series_run FOREIGN KEY (run_id) REFERENCES forecast_run (id) ON DELETE CASCADE
 );
