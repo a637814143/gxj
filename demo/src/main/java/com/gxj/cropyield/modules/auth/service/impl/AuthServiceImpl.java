@@ -29,7 +29,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Collections;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -108,9 +108,12 @@ public class AuthServiceImpl implements AuthService {
         user.setPassword(passwordEncoder.encode(request.password()));
         user.setFullName(request.fullName());
         user.setEmail(request.email());
-        user.setRoles(Collections.singleton(role));
 
-        User saved = userRepository.save(user);
+        var roles = new HashSet<Role>();
+        roles.add(role);
+        user.setRoles(roles);
+
+        User saved = userRepository.saveAndFlush(user);
 
         Authentication authentication = buildAuthentication(saved);
         SecurityContextHolder.getContext().setAuthentication(authentication);
