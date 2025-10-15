@@ -1,0 +1,194 @@
+<template>
+  <div class="login-page">
+    <div class="login-card">
+      <div class="login-header">
+        <h1>农作物产量预测平台</h1>
+        <p>请使用授权账号登录系统</p>
+      </div>
+      <el-form :model="form" class="login-form" @keyup.enter="handleSubmit">
+        <el-form-item>
+          <el-input v-model.trim="form.username" placeholder="用户名" autocomplete="username">
+            <template #prefix>
+              <el-icon><User /></el-icon>
+            </template>
+          </el-input>
+        </el-form-item>
+        <el-form-item>
+          <el-input
+            v-model="form.password"
+            placeholder="密码"
+            type="password"
+            autocomplete="current-password"
+            show-password
+          >
+            <template #prefix>
+              <el-icon><Lock /></el-icon>
+            </template>
+          </el-input>
+        </el-form-item>
+        <el-form-item class="captcha-item">
+          <el-input v-model.trim="form.captchaCode" placeholder="验证码">
+            <template #prefix>
+              <el-icon><Picture /></el-icon>
+            </template>
+          </el-input>
+          <div class="captcha-image" @click="refreshCaptcha" role="button">
+            <img v-if="captchaImage" :src="captchaImage" alt="验证码" />
+            <span v-else>点击刷新</span>
+          </div>
+        </el-form-item>
+        <div class="form-footer">
+          <el-checkbox v-model="form.rememberMe">记住我</el-checkbox>
+          <el-button type="primary" :loading="loading" @click="handleSubmit" class="login-button">登录</el-button>
+        </div>
+      </el-form>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { onMounted, reactive, ref } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { User, Lock, Picture } from '@element-plus/icons-vue'
+import apiClient from '../services/http'
+import { useAuthStore } from '../stores/auth'
+
+const router = useRouter()
+const route = useRoute()
+const authStore = useAuthStore()
+
+const form = reactive({
+  username: '',
+  password: '',
+  captchaCode: '',
+  rememberMe: false
+})
+
+const captchaId = ref('')
+const captchaImage = ref('')
+const loading = ref(false)
+
+const refreshCaptcha = async () => {
+  try {
+    const { data } = await apiClient.get('/api/auth/captcha', { params: { ts: Date.now() } })
+    const payload = data?.data
+    captchaId.value = payload?.captchaId || ''
+    captchaImage.value = payload?.imageBase64 || ''
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.message || '获取验证码失败')
+  }
+}
+
+const handleSubmit = async () => {
+  if (!form.username || !form.password || !form.captchaCode) {
+    ElMessage.warning('请完整填写用户名、密码和验证码')
+    return
+  }
+  if (!captchaId.value) {
+    await refreshCaptcha()
+  }
+  loading.value = true
+  try {
+    await authStore.login({
+      username: form.username,
+      password: form.password,
+      captchaCode: form.captchaCode,
+      captchaId: captchaId.value,
+      rememberMe: form.rememberMe
+    })
+    const redirect = route.query.redirect || '/dashboard'
+    router.replace(redirect)
+  } catch (error) {
+    const message = error?.response?.data?.message || error.message || '登录失败，请重试'
+    ElMessage.error(message)
+    await refreshCaptcha()
+    form.captchaCode = ''
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  refreshCaptcha()
+})
+</script>
+
+<style scoped>
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #0b3d2e 0%, #1e6f5c 100%);
+  padding: 24px;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 420px;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 24px 48px rgba(11, 61, 46, 0.25);
+  padding: 32px;
+}
+
+.login-header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.login-header h1 {
+  margin: 0;
+  font-size: 24px;
+  color: #0b3d2e;
+}
+
+.login-header p {
+  margin: 8px 0 0;
+  color: #607d8b;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.captcha-item {
+  display: flex;
+  gap: 12px;
+}
+
+.captcha-item .el-input {
+  flex: 1;
+}
+
+.captcha-image {
+  width: 140px;
+  height: 44px;
+  border: 1px solid #dcdfe6;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.captcha-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.form-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.login-button {
+  min-width: 120px;
+}
+</style>

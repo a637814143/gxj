@@ -23,6 +23,13 @@
     <el-container>
       <el-header class="header">
         <div class="header-title">{{ currentTitle }}</div>
+        <div class="header-actions">
+          <div class="user-info">
+            <div class="user-name">{{ displayName }}</div>
+            <div class="user-role">{{ displayRoles }}</div>
+          </div>
+          <el-button type="primary" link @click="handleLogout">退出登录</el-button>
+        </div>
       </el-header>
       <el-main class="main">
         <router-view />
@@ -33,9 +40,12 @@
 
 <script setup>
 import { computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import { useAuthStore } from '../stores/auth'
 
 const route = useRoute()
+const router = useRouter()
+const authStore = useAuthStore()
 
 const titles = {
   dashboard: '概览仪表盘',
@@ -47,6 +57,18 @@ const titles = {
 
 const active = computed(() => route.path)
 const currentTitle = computed(() => titles[route.name] || '农作物产量预测平台')
+const displayName = computed(() => authStore.user?.fullName || authStore.user?.username || '未登录')
+const displayRoles = computed(() => {
+  if (!authStore.user?.roles?.length) {
+    return '未分配角色'
+  }
+  return authStore.user.roles.join(' / ')
+})
+
+const handleLogout = () => {
+  authStore.logout()
+  router.push({ name: 'login', query: { redirect: route.fullPath } }).catch(() => {})
+}
 </script>
 
 <style scoped>
@@ -94,6 +116,31 @@ const currentTitle = computed(() => titles[route.name] || '农作物产量预测
 .header-title {
   font-size: 20px;
   font-weight: 500;
+}
+
+.header-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: 12px;
+  color: #90a4ae;
+}
+
+.user-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #263238;
+}
+
+.user-role {
+  color: #607d8b;
 }
 
 .main {
