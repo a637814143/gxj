@@ -1,8 +1,23 @@
 import axios from 'axios'
 import { useAuthStore } from '../stores/auth'
 
+const resolveBaseURL = () => {
+  const configured = import.meta.env.VITE_API_BASE_URL
+  if (typeof configured === 'string' && configured.trim()) {
+    return configured.trim()
+  }
+  if (typeof window !== 'undefined') {
+    const { protocol, hostname } = window.location
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return `${protocol}//${hostname}:8080`
+    }
+    return `${protocol}//${window.location.host}`
+  }
+  return ''
+}
+
 const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080',
+  baseURL: resolveBaseURL(),
   timeout: 15000
 })
 
