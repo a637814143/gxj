@@ -3,14 +3,13 @@ package com.gxj.cropyield.common.security;
 import com.gxj.cropyield.common.config.JwtProperties;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
+import javax.crypto.SecretKey;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
-import java.security.Key;
 import java.util.Date;
 import java.util.stream.Collectors;
 
@@ -36,16 +35,16 @@ public class JwtTokenProvider {
             .claim("roles", authorities)
             .setIssuedAt(now)
             .setExpiration(expiryDate)
-            .signWith(getSigningKey(), SignatureAlgorithm.HS256)
+            .signWith(getSigningKey())
             .compact();
     }
 
     public boolean validateToken(String token) {
         try {
-            Jwts.parserBuilder()
-                .setSigningKey(getSigningKey())
+            Jwts.parser()
+                .verifyWith(getSigningKey())
                 .build()
-                .parseClaimsJws(token);
+                .parseSignedClaims(token);
             return true;
         } catch (Exception ex) {
             return false;
@@ -53,15 +52,15 @@ public class JwtTokenProvider {
     }
 
     public String getUsernameFromToken(String token) {
-        Claims claims = Jwts.parserBuilder()
-            .setSigningKey(getSigningKey())
+        Claims claims = Jwts.parser()
+            .verifyWith(getSigningKey())
             .build()
-            .parseClaimsJws(token)
+            .parseSignedClaims(token)
             .getBody();
         return claims.getSubject();
     }
 
-    private Key getSigningKey() {
+    private SecretKey getSigningKey() {
         return Keys.hmacShaKeyFor(jwtProperties.getSecret().getBytes(StandardCharsets.UTF_8));
     }
 }
