@@ -6,7 +6,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-@RestController
+@RestController("legacyCropController")
 @RequestMapping("/api/crops")
 public class CropController {
 
