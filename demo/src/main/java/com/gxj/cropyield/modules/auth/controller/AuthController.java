@@ -7,6 +7,7 @@ import com.gxj.cropyield.modules.auth.dto.CaptchaResponse;
 import com.gxj.cropyield.modules.auth.dto.LoginRequest;
 import com.gxj.cropyield.modules.auth.dto.LoginResponse;
 import com.gxj.cropyield.modules.auth.dto.RefreshTokenRequest;
+import com.gxj.cropyield.modules.auth.dto.RegisterRequest;
 import com.gxj.cropyield.modules.auth.dto.UserInfo;
 import com.gxj.cropyield.modules.auth.service.AuthService;
 import com.gxj.cropyield.modules.auth.service.CaptchaService;
@@ -37,6 +38,18 @@ public class AuthController {
     @GetMapping("/captcha")
     public ApiResponse<CaptchaResponse> captcha() {
         return ApiResponse.success(captchaService.createCaptcha());
+    }
+
+    @PostMapping("/register")
+    public ApiResponse<LoginResponse> register(@Valid @RequestBody RegisterRequest request, HttpServletRequest httpRequest) {
+        String ipAddress = resolveClientIp(httpRequest);
+        String userAgent = httpRequest.getHeader("User-Agent");
+        try {
+            return ApiResponse.success(authService.register(request, ipAddress, userAgent));
+        } catch (BusinessException ex) {
+            loginLogService.record(request.username(), false, ipAddress, userAgent, ex.getMessage());
+            throw ex;
+        }
     }
 
     @PostMapping("/login")
