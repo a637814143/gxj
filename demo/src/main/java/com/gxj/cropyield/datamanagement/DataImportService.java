@@ -1,12 +1,12 @@
 package com.gxj.cropyield.datamanagement;
 
-import com.gxj.cropyield.crop.Crop;
-import com.gxj.cropyield.crop.CropRepository;
-import com.gxj.cropyield.region.Region;
-import com.gxj.cropyield.region.RegionRepository;
-import com.gxj.cropyield.yielddata.YieldRecord;
-import com.gxj.cropyield.yielddata.YieldRecordRepository;
-import com.gxj.cropyield.yielddata.YieldRecordResponse;
+import com.gxj.cropyield.modules.base.entity.Crop;
+import com.gxj.cropyield.modules.base.entity.Region;
+import com.gxj.cropyield.modules.base.repository.CropRepository;
+import com.gxj.cropyield.modules.base.repository.RegionRepository;
+import com.gxj.cropyield.modules.dataset.entity.YieldRecord;
+import com.gxj.cropyield.modules.dataset.repository.YieldRecordRepository;
+import com.gxj.cropyield.modules.dataset.dto.YieldRecordResponse;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
@@ -28,6 +28,7 @@ import java.io.InputStreamReader;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
+import java.text.Normalizer;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -38,6 +39,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 public class DataImportService {
@@ -104,17 +106,7 @@ public class DataImportService {
 
             YieldRecord entity = yieldRecordRepository
                     .findByCropIdAndRegionIdAndYear(crop.getId(), region.getId(), cleaned.year())
-                    .orElseGet(() -> new YieldRecord(
-                            crop,
-                            region,
-                            cleaned.year(),
-                            cleaned.sownArea(),
-                            cleaned.production(),
-                            cleaned.yieldPerHectare(),
-                            cleaned.averagePrice(),
-                            cleaned.dataSource(),
-                            cleaned.collectedAt()
-                    ));
+                    .orElseGet(YieldRecord::new);
 
             boolean isNew = entity.getId() == null;
             entity.setCrop(crop);
@@ -348,7 +340,12 @@ public class DataImportService {
                     String category = Optional.ofNullable(record.cropCategory()).orElse("未分类");
                     String description = Optional.ofNullable(record.cropDescription()).orElse("由数据导入创建");
                     warnings.add("第" + record.rowNumber() + "行：新增作物“" + record.cropName() + "”已写入基础库");
-                    return cropRepository.save(new Crop(record.cropName(), category, description));
+                    Crop crop = new Crop();
+                    crop.setCode(generateUniqueCropCode(record.cropName()));
+                    crop.setName(record.cropName());
+                    crop.setCategory(category);
+                    crop.setDescription(description);
+                    return cropRepository.save(crop);
                 });
     }
 
@@ -358,8 +355,60 @@ public class DataImportService {
                     String level = Optional.ofNullable(record.regionLevel()).orElse("PREFECTURE");
                     String description = Optional.ofNullable(record.regionDescription()).orElse("由数据导入创建");
                     warnings.add("第" + record.rowNumber() + "行：新增地区“" + record.regionName() + "”已写入基础库");
-                    return regionRepository.save(new Region(record.regionName(), level, record.regionParentName(), description));
+                    Region region = new Region();
+                    region.setCode(generateUniqueRegionCode(record.regionName(), record.regionParentName()));
+                    region.setName(record.regionName());
+                    region.setLevel(level);
+                    region.setParentCode(resolveParentCode(record.regionParentName()));
+                    region.setParentName(record.regionParentName());
+                    region.setDescription(description);
+                    return regionRepository.save(region);
                 });
+    }
+
+    private String resolveParentCode(String parentName) {
+        return Optional.ofNullable(trimToNull(parentName))
+                .flatMap(regionRepository::findByNameIgnoreCase)
+                .map(Region::getCode)
+                .orElse(null);
+    }
+
+    private String generateUniqueCropCode(String name) {
+        String base = slugify(name);
+        String candidate = base;
+        int counter = 1;
+        while (cropRepository.findByCode(candidate).isPresent()) {
+            candidate = base + "_" + counter++;
+        }
+        return candidate;
+    }
+
+    private String generateUniqueRegionCode(String name, String parentName) {
+        String base = slugify(name);
+        String prefix = Optional.ofNullable(resolveParentCode(parentName))
+                .map(code -> code + "-")
+                .orElse("");
+        String candidate = prefix + base;
+        int counter = 1;
+        while (regionRepository.findByCode(candidate).isPresent()) {
+            candidate = prefix + base + "-" + counter++;
+        }
+        return candidate;
+    }
+
+    private String slugify(String value) {
+        String trimmed = Optional.ofNullable(trimToNull(value)).orElse("DATA");
+        String normalized = Normalizer.normalize(trimmed, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "");
+        String alphanumeric = normalized.replaceAll("[^A-Za-z0-9]", "");
+        if (alphanumeric.isEmpty()) {
+            alphanumeric = Integer.toHexString(trimmed.hashCode());
+        }
+        String upper = alphanumeric.toUpperCase(Locale.ROOT);
+        if (upper.isEmpty()) {
+            upper = UUID.randomUUID().toString().replaceAll("-", "").substring(0, 8).toUpperCase(Locale.ROOT);
+        }
+        return upper;
     }
 
     private YieldRecordResponse mapToResponse(YieldRecord record) {

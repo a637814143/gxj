@@ -47,7 +47,12 @@ public class YieldRecordServiceImpl implements YieldRecordService {
         record.setCrop(crop);
         record.setRegion(region);
         record.setYear(request.year());
+        record.setSownArea(request.sownArea());
+        record.setProduction(request.production());
         record.setYieldPerHectare(request.yieldPerHectare());
+        record.setAveragePrice(request.averagePrice());
+        record.setDataSource(request.dataSource());
+        record.setCollectedAt(request.collectedAt());
         return yieldRecordRepository.save(record);
     }
 }

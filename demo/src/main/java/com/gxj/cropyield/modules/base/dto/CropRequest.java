@@ -12,6 +12,9 @@ public record CropRequest(
     @Size(max = 128, message = "名称长度不能超过128位")
     String name,
 
+    @Size(max = 64, message = "分类长度不能超过64位")
+    String category,
+
     @Size(max = 256, message = "描述长度不能超过256位")
     String description
 ) {

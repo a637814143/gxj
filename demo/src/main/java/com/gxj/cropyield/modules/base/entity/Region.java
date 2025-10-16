@@ -15,6 +15,15 @@ public class Region extends BaseEntity {
     @Column(nullable = false, length = 128)
     private String name;
 
+    @Column(nullable = false, length = 32)
+    private String level;
+
+    @Column(name = "parent_code", length = 64)
+    private String parentCode;
+
+    @Column(name = "parent_name", length = 128)
+    private String parentName;
+
     @Column(length = 256)
     private String description;
 
@@ -40,5 +49,29 @@ public class Region extends BaseEntity {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public String getLevel() {
+        return level;
+    }
+
+    public void setLevel(String level) {
+        this.level = level;
+    }
+
+    public String getParentCode() {
+        return parentCode;
+    }
+
+    public void setParentCode(String parentCode) {
+        this.parentCode = parentCode;
+    }
+
+    public String getParentName() {
+        return parentName;
+    }
+
+    public void setParentName(String parentName) {
+        this.parentName = parentName;
     }
 }
