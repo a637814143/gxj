@@ -19,8 +19,8 @@ public class LoginLogServiceImpl implements LoginLogService {
         LoginLog log = new LoginLog();
         log.setUsername(username);
         log.setSuccess(success);
-        log.setIpAddress(ipAddress);
-        log.setUserAgent(userAgent);
+        log.setIpAddress(ipAddress == null || ipAddress.isBlank() ? "UNKNOWN" : ipAddress);
+        log.setUserAgent(userAgent == null || userAgent.isBlank() ? "UNKNOWN" : userAgent);
         log.setMessage(message);
         loginLogRepository.save(log);
     }
