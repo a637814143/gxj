@@ -115,8 +115,13 @@ graph TD
 
 | 表名 | 说明 | 关键字段 |
 | --- | --- | --- |
-| `user_account` | 用户账户 | `id`(PK)、`username`、`password`、`display_name`、`role`、`status`、`last_login`、`created_at` |
-| `operation_log` | 操作审计 | `id`(PK)、`user_id`、`module`、`action`、`target_id`、`detail`、`ip_address`、`created_at` |
+| `sys_user` | 系统用户账户 | `id`(PK)、`username`、`password`、`full_name`、`email`、`status`、`created_at`、`updated_at` |
+| `sys_role` | 角色定义 | `id`(PK)、`code`、`name`、`description`、`created_at`、`updated_at` |
+| `sys_permission` | 权限点定义 | `id`(PK)、`code`、`name`、`description`、`created_at`、`updated_at` |
+| `sys_user_role` | 用户角色关联 | `user_id`(FK)、`role_id`(FK)、`created_at` |
+| `sys_role_permission` | 角色权限关联 | `role_id`(FK)、`permission_id`(FK)、`created_at` |
+| `sys_refresh_token` | 刷新令牌 | `id`(PK)、`token`、`user_id`(FK)、`expires_at`、`created_at`、`updated_at` |
+| `sys_login_log` | 登录日志 | `id`(PK)、`username`、`success`、`ip_address`、`user_agent`、`message`、`created_at`、`updated_at` |
 
 **索引与约束建议**
 - `production_record` 建立 `(crop_id, region_id, stat_year, stat_month)` 唯一索引，保证单月唯一。
