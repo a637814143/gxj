@@ -46,7 +46,7 @@ public class AuthDataInitializer implements ApplicationRunner {
 
         ensureExistingPasswordsEncrypted();
 
-        userRepository.findByUsername(DEFAULT_ADMIN_USERNAME)
+        userRepository.findWithRolesByUsername(DEFAULT_ADMIN_USERNAME)
             .map(user -> refreshAdminAccount(user, adminRole))
             .orElseGet(() -> {
                 User admin = new User();
