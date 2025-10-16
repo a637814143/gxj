@@ -16,7 +16,13 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         )
 )
 @EntityScan(basePackages = "com.gxj.cropyield")
-@EnableJpaRepositories(basePackages = "com.gxj.cropyield")
+@EnableJpaRepositories(
+        basePackages = "com.gxj.cropyield",
+        excludeFilters = @ComponentScan.Filter(
+                type = FilterType.REGEX,
+                pattern = "com\\.gxj\\.cropyield\\.yielddata\\..*"
+        )
+)
 public class CropYieldApplication {
 
     public static void main(String[] args) {
