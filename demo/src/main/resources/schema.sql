@@ -219,6 +219,7 @@ CREATE TABLE sys_login_log (
     user_agent   VARCHAR(256),
     message      VARCHAR(256),
     created_at   TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at   TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     KEY idx_login_username (username),
     KEY idx_login_created (created_at)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '用户登录日志';
