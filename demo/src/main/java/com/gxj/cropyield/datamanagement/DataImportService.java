@@ -6,7 +6,7 @@ import com.gxj.cropyield.modules.base.repository.CropRepository;
 import com.gxj.cropyield.modules.base.repository.RegionRepository;
 import com.gxj.cropyield.modules.dataset.entity.YieldRecord;
 import com.gxj.cropyield.modules.dataset.repository.YieldRecordRepository;
-import com.gxj.cropyield.yielddata.YieldRecordResponse;
+import com.gxj.cropyield.modules.dataset.dto.YieldRecordResponse;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;

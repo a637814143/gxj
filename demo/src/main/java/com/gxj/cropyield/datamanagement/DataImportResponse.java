@@ -1,6 +1,6 @@
 package com.gxj.cropyield.datamanagement;
 
-import com.gxj.cropyield.yielddata.YieldRecordResponse;
+import com.gxj.cropyield.modules.dataset.dto.YieldRecordResponse;
 
 import java.util.List;
 

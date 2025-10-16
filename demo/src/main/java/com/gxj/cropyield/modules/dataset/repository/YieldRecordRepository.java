@@ -11,4 +11,6 @@ public interface YieldRecordRepository extends JpaRepository<YieldRecord, Long> 
     List<YieldRecord> findByRegionIdAndCropIdOrderByYearAsc(Long regionId, Long cropId);
 
     Optional<YieldRecord> findByCropIdAndRegionIdAndYear(Long cropId, Long regionId, Integer year);
+
+    List<YieldRecord> findTop5ByOrderByYearDesc();
 }

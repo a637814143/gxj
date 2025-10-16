@@ -7,7 +7,7 @@ import com.gxj.cropyield.dashboard.dto.RecentYieldRecord;
 import com.gxj.cropyield.dashboard.dto.RegionProductionSummary;
 import com.gxj.cropyield.dashboard.dto.TrendPoint;
 import com.gxj.cropyield.modules.dataset.entity.YieldRecord;
-import com.gxj.cropyield.yielddata.YieldRecordRepository;
+import com.gxj.cropyield.modules.dataset.repository.YieldRecordRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;

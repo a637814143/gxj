@@ -1,4 +1,4 @@
-package com.gxj.cropyield.yielddata;
+package com.gxj.cropyield.modules.dataset.dto;
 
 import java.time.LocalDate;
 
