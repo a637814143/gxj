@@ -12,10 +12,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 @ComponentScan(
         basePackages = {
                 "com.example.demo",
-                "com.gxj.cropyield.common",
-                "com.gxj.cropyield.config",
-                "com.gxj.cropyield.modules.auth",
-                "com.gxj.cropyield.modules.system"
+                "com.gxj.cropyield"
         },
         nameGenerator = FullyQualifiedAnnotationBeanNameGenerator.class,
         excludeFilters = {
@@ -25,13 +22,11 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 )
 @EntityScan(basePackages = {
         "com.example.demo",
-        "com.gxj.cropyield.modules.auth",
-        "com.gxj.cropyield.modules.system"
+        "com.gxj.cropyield"
 })
 @EnableJpaRepositories(basePackages = {
         "com.example.demo",
-        "com.gxj.cropyield.modules.auth",
-        "com.gxj.cropyield.modules.system"
+        "com.gxj.cropyield"
 })
 public class DemoApplication {
 

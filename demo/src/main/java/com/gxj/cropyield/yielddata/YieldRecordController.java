@@ -1,5 +1,6 @@
 package com.gxj.cropyield.yielddata;
 
+import com.gxj.cropyield.modules.dataset.dto.YieldRecordResponse;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -13,7 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.List;
 
-@RestController
+@RestController("yieldDataRecordController")
 @RequestMapping("/api/yields")
 public class YieldRecordController {
 

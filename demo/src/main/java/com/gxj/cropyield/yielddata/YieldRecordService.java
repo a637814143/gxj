@@ -1,6 +1,8 @@
 package com.gxj.cropyield.yielddata;
 
+import com.gxj.cropyield.modules.dataset.dto.YieldRecordResponse;
 import com.gxj.cropyield.modules.dataset.entity.YieldRecord;
+import com.gxj.cropyield.modules.dataset.repository.YieldRecordRepository;
 import com.lowagie.text.Document;
 import com.lowagie.text.DocumentException;
 import com.lowagie.text.Element;
