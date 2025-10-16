@@ -7,4 +7,6 @@ import java.util.Optional;
 
 public interface CropRepository extends JpaRepository<Crop, Long> {
     Optional<Crop> findByCode(String code);
+
+    Optional<Crop> findByNameIgnoreCase(String name);
 }

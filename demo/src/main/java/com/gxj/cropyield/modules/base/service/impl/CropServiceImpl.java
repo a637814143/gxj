@@ -35,6 +35,7 @@ public class CropServiceImpl implements CropService {
         Crop crop = new Crop();
         crop.setCode(request.code());
         crop.setName(request.name());
+        crop.setCategory(request.category());
         crop.setDescription(request.description());
         return cropRepository.save(crop);
     }

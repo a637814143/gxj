@@ -90,37 +90,45 @@ graph TD
 
 | 表名 | 说明 | 关键字段 |
 | --- | --- | --- |
-| `region` | 行政区域信息 | `id`(PK)、`name`、`parent_id`、`level`、`geo_code`、`latitude`、`longitude` |
-| `crop` | 农作物品类 | `id`(PK)、`name`、`category`、`variety`、`growth_cycle`、`unit` |
-| `data_source` | 数据来源记录 | `id`(PK)、`name`、`type`、`description`、`imported_by`、`import_time` |
+| `base_region` | 行政区域基础信息 | `id`(PK)、`code`、`name`、`level`、`parent_code`、`description` |
+| `base_crop` | 农作物基础信息 | `id`(PK)、`code`、`name`、`category`、`description` |
+| `dataset_file` | 数据文件登记 | `id`(PK)、`name`、`type`、`storage_path`、`description` |
 
 ### 3.2 产量与气象数据
 
 | 表名 | 说明 | 关键字段 |
 | --- | --- | --- |
-| `production_record` | 产量时序数据 | `id`(PK)、`region_id`(FK)、`crop_id`(FK)、`stat_year`、`stat_month`、`area_planted`、`yield`、`unit_price`、`data_source_id`、`is_estimated`、`quality_flag`、`created_at` |
-| `climate_indicator` | 气象因子 | `id`(PK)、`region_id`(FK)、`stat_date`、`avg_temp`、`rainfall`、`sunshine_hours`、`soil_moisture`、`extreme_event`、`data_source_id` |
-| `data_cleaning_log` | 数据清洗日志 | `id`(PK)、`record_type`、`record_id`、`issue_type`、`action_taken`、`processed_by`、`processed_at`、`status` |
+| `dataset_yield_record` | 作物年均单产 | `id`(PK)、`crop_id`(FK)、`region_id`(FK)、`year`、`sown_area`、`production`、`yield_per_hectare`、`average_price`、`data_source`、`collected_at` |
+| `dataset_price_record` | 作物价格序列 | `id`(PK)、`crop_id`(FK)、`region_id`(FK)、`record_date`、`price` |
 
 ### 3.3 预测与评估
 
 | 表名 | 说明 | 关键字段 |
 | --- | --- | --- |
-| `forecast_task` | 预测任务 | `id`(PK)、`task_code`、`crop_id`、`region_id`、`model_type`(ARIMA/Prophet/LSTM)、`horizon`、`status`、`trigger_type`(manual/scheduled)、`scheduled_time`、`created_by`、`created_at` |
-| `forecast_result` | 预测结果 | `id`(PK)、`task_id`(FK)、`forecast_date`、`prediction_start`、`prediction_end`、`predicted_value`、`lower_bound`、`upper_bound`、`confidence`、`model_version`、`generated_at` |
-| `model_metric` | 模型评估指标 | `id`(PK)、`task_id`(FK)、`metric_name`(RMSE/MAPE 等)、`metric_value`、`dataset_type`(train/test/backtest)、`calculated_at` |
-| `recommendation_record` | 决策建议 | `id`(PK)、`task_id`(FK)、`scenario_name`、`expected_revenue`、`cost`、`profit`、`recommendation`、`assumptions`、`created_at` |
+| `forecast_model` | 预测模型配置 | `id`(PK)、`name`、`type`、`description` |
+| `forecast_task` | 预测任务 | `id`(PK)、`model_id`(FK)、`crop_id`(FK)、`region_id`(FK)、`status`、`parameters`、`created_at`、`updated_at` |
+| `forecast_run` | 预测执行记录 | `id`(PK)、`model_id`(FK)、`crop_id`(FK)、`region_id`(FK)、`status`、`forecast_periods`、`history_years`、`frequency`、`mae`、`rmse`、`mape`、`r2` |
+| `forecast_run_series` | 预测序列明细 | `id`(PK)、`run_id`(FK)、`period`、`value`、`lower_bound`、`upper_bound`、`historical` |
+| `forecast_result` | 预测结果摘要 | `id`(PK)、`task_id`(FK)、`target_year`、`predicted_yield`、`evaluation` |
+| `report_summary` | 预测报告 | `id`(PK)、`title`、`forecast_result_id`(FK)、`insights` |
 
 ### 3.4 用户与审计
 
 | 表名 | 说明 | 关键字段 |
 | --- | --- | --- |
-| `user_account` | 用户账户 | `id`(PK)、`username`、`password`、`display_name`、`role`、`status`、`last_login`、`created_at` |
-| `operation_log` | 操作审计 | `id`(PK)、`user_id`、`module`、`action`、`target_id`、`detail`、`ip_address`、`created_at` |
+| `sys_user` | 系统用户账户 | `id`(PK)、`username`、`password`、`full_name`、`email`、`created_at`、`updated_at` |
+| `sys_role` | 角色定义 | `id`(PK)、`code`、`name`、`description`、`created_at`、`updated_at` |
+| `sys_permission` | 权限点定义 | `id`(PK)、`code`、`name`、`description`、`created_at`、`updated_at` |
+| `sys_user_role` | 用户角色关联 | `user_id`(FK)、`role_id`(FK)、`created_at` |
+| `sys_role_permission` | 角色权限关联 | `role_id`(FK)、`permission_id`(FK)、`created_at` |
+| `sys_refresh_token` | 刷新令牌 | `id`(PK)、`token`、`user_id`(FK)、`expires_at`、`created_at`、`updated_at` |
+| `sys_login_log` | 登录日志 | `id`(PK)、`username`、`success`、`ip_address`、`user_agent`、`message`、`created_at`、`updated_at` |
+| `sys_log` | 系统操作日志 | `id`(PK)、`username`、`action`、`detail`、`created_at`、`updated_at` |
 
 **索引与约束建议**
-- `production_record` 建立 `(crop_id, region_id, stat_year, stat_month)` 唯一索引，保证单月唯一。
-- `forecast_result` 建立 `(task_id, forecast_date)` 唯一索引，快速定位预测点。
+- `dataset_yield_record` 建立 `(crop_id, region_id, year)` 唯一索引，保证年度单产唯一。
+- `dataset_price_record` 建立 `(crop_id, region_id, record_date)` 唯一索引，快速定位价格时间点。
+- `forecast_result` 建立 `(task_id, target_year)` 唯一索引，便于查询各任务年度预测。
 - 所有外键字段加索引提升联表效率。
 
 ## 4. 项目初始化配置与依赖

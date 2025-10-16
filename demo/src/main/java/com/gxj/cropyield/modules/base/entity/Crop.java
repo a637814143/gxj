@@ -15,6 +15,9 @@ public class Crop extends BaseEntity {
     @Column(nullable = false, length = 128)
     private String name;
 
+    @Column(length = 64)
+    private String category;
+
     @Column(length = 256)
     private String description;
 
@@ -40,5 +43,13 @@ public class Crop extends BaseEntity {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public String getCategory() {
+        return category;
+    }
+
+    public void setCategory(String category) {
+        this.category = category;
     }
 }
