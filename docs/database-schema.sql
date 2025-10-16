@@ -25,16 +25,21 @@ CREATE TABLE base_region (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     code VARCHAR(64) NOT NULL,
     name VARCHAR(128) NOT NULL,
+    level VARCHAR(32) NOT NULL,
+    parent_code VARCHAR(64),
+    parent_name VARCHAR(128),
     description VARCHAR(256),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_base_region_code (code)
+    UNIQUE KEY uq_base_region_code (code),
+    KEY idx_base_region_level (level)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '基础行政区域信息';
 
 CREATE TABLE base_crop (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     code VARCHAR(64) NOT NULL,
     name VARCHAR(128) NOT NULL,
+    category VARCHAR(64),
     description VARCHAR(256),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -57,7 +62,12 @@ CREATE TABLE dataset_yield_record (
     crop_id BIGINT UNSIGNED NOT NULL,
     region_id BIGINT UNSIGNED NOT NULL,
     year INT NOT NULL,
-    yield_per_hectare DOUBLE NOT NULL,
+    sown_area DOUBLE,
+    production DOUBLE,
+    yield_per_hectare DOUBLE,
+    average_price DOUBLE,
+    data_source VARCHAR(256),
+    collected_at DATE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_yield_crop_region_year (crop_id, region_id, year),

@@ -35,6 +35,9 @@ public class RegionServiceImpl implements RegionService {
         Region region = new Region();
         region.setCode(request.code());
         region.setName(request.name());
+        region.setLevel(request.level());
+        region.setParentCode(request.parentCode());
+        region.setParentName(request.parentName());
         region.setDescription(request.description());
         return regionRepository.save(region);
     }

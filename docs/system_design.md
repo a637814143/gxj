@@ -90,15 +90,15 @@ graph TD
 
 | 表名 | 说明 | 关键字段 |
 | --- | --- | --- |
-| `base_region` | 行政区域基础信息 | `id`(PK)、`code`、`name`、`description` |
-| `base_crop` | 农作物基础信息 | `id`(PK)、`code`、`name`、`description` |
+| `base_region` | 行政区域基础信息 | `id`(PK)、`code`、`name`、`level`、`parent_code`、`description` |
+| `base_crop` | 农作物基础信息 | `id`(PK)、`code`、`name`、`category`、`description` |
 | `dataset_file` | 数据文件登记 | `id`(PK)、`name`、`type`、`storage_path`、`description` |
 
 ### 3.2 产量与气象数据
 
 | 表名 | 说明 | 关键字段 |
 | --- | --- | --- |
-| `dataset_yield_record` | 作物年均单产 | `id`(PK)、`crop_id`(FK)、`region_id`(FK)、`year`、`yield_per_hectare` |
+| `dataset_yield_record` | 作物年均单产 | `id`(PK)、`crop_id`(FK)、`region_id`(FK)、`year`、`sown_area`、`production`、`yield_per_hectare`、`average_price`、`data_source`、`collected_at` |
 | `dataset_price_record` | 作物价格序列 | `id`(PK)、`crop_id`(FK)、`region_id`(FK)、`record_date`、`price` |
 
 ### 3.3 预测与评估

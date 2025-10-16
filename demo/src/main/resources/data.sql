@@ -1,20 +1,24 @@
 -- 初始化基础区域信息
-INSERT INTO base_region (id, code, name, description)
+INSERT INTO base_region (id, code, name, level, parent_code, parent_name, description)
 VALUES
-    (1, 'CN-NATION', '全国', '国家级行政区，用于聚合全国范围的数据。'),
-    (2, 'CN-YN', '云南省', '系统默认示例省份，演示区域维度。'),
-    (3, 'CN-YN-KM', '昆明市', '示例地市，演示城市级别的数据。')
+    (1, 'CN-NATION', '全国', 'NATION', NULL, NULL, '国家级行政区，用于聚合全国范围的数据。'),
+    (2, 'CN-YN', '云南省', 'PROVINCE', 'CN-NATION', '全国', '系统默认示例省份，演示区域维度。'),
+    (3, 'CN-YN-KM', '昆明市', 'CITY', 'CN-YN', '云南省', '示例地市，演示城市级别的数据。')
 ON DUPLICATE KEY UPDATE
     name = VALUES(name),
+    level = VALUES(level),
+    parent_code = VALUES(parent_code),
+    parent_name = VALUES(parent_name),
     description = VALUES(description);
 
 -- 初始化基础农作物信息
-INSERT INTO base_crop (id, code, name, description)
+INSERT INTO base_crop (id, code, name, category, description)
 VALUES
-    (1, 'WHEAT', '小麦', '冬小麦是预测模型的主要示例作物。'),
-    (2, 'CORN', '玉米', '夏玉米用于演示多作物对比场景。')
+    (1, 'WHEAT', '小麦', '粮食作物', '冬小麦是预测模型的主要示例作物。'),
+    (2, 'CORN', '玉米', '粮食作物', '夏玉米用于演示多作物对比场景。')
 ON DUPLICATE KEY UPDATE
     name = VALUES(name),
+    category = VALUES(category),
     description = VALUES(description);
 
 -- 初始化示例数据文件登记
@@ -29,15 +33,20 @@ ON DUPLICATE KEY UPDATE
     description = VALUES(description);
 
 -- 初始化作物年均单产示例数据
-INSERT INTO dataset_yield_record (id, crop_id, region_id, year, yield_per_hectare)
+INSERT INTO dataset_yield_record (id, crop_id, region_id, year, sown_area, production, yield_per_hectare, average_price, data_source, collected_at)
 VALUES
-    (1, 1, 2, 2021, 5.6),
-    (2, 1, 2, 2022, 5.8),
-    (3, 1, 2, 2023, 6.0),
-    (4, 2, 2, 2023, 8.4),
-    (5, 1, 3, 2023, 6.3)
+    (1, 1, 2, 2021, 356.2, 198.4, 5.6, 2.35, '云南省农业农村厅年报', '2021-12-31'),
+    (2, 1, 2, 2022, 360.5, 209.0, 5.8, 2.38, '云南省农业农村厅年报', '2022-12-31'),
+    (3, 1, 2, 2023, 365.0, 219.0, 6.0, 2.42, '云南省农业农村厅年报', '2023-12-31'),
+    (4, 2, 2, 2023, 420.8, 353.5, 8.4, 2.15, '云南省农业农村厅年报', '2023-12-31'),
+    (5, 1, 3, 2023, 52.4, 33.0, 6.3, 2.45, '昆明市统计局', '2023-12-31')
 ON DUPLICATE KEY UPDATE
-    yield_per_hectare = VALUES(yield_per_hectare);
+    sown_area = VALUES(sown_area),
+    production = VALUES(production),
+    yield_per_hectare = VALUES(yield_per_hectare),
+    average_price = VALUES(average_price),
+    data_source = VALUES(data_source),
+    collected_at = VALUES(collected_at);
 
 -- 初始化作物价格示例数据
 INSERT INTO dataset_price_record (id, crop_id, region_id, record_date, price)

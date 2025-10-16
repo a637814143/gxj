@@ -25,8 +25,23 @@ public class YieldRecord extends BaseEntity {
     @Column(nullable = false)
     private Integer year;
 
-    @Column(nullable = false)
+    @Column(name = "sown_area")
+    private Double sownArea;
+
+    @Column
+    private Double production;
+
+    @Column(name = "yield_per_hectare")
     private Double yieldPerHectare;
+
+    @Column(name = "average_price")
+    private Double averagePrice;
+
+    @Column(name = "data_source", length = 256)
+    private String dataSource;
+
+    @Column(name = "collected_at")
+    private java.time.LocalDate collectedAt;
 
     public Crop getCrop() {
         return crop;
@@ -58,5 +73,45 @@ public class YieldRecord extends BaseEntity {
 
     public void setYieldPerHectare(Double yieldPerHectare) {
         this.yieldPerHectare = yieldPerHectare;
+    }
+
+    public Double getSownArea() {
+        return sownArea;
+    }
+
+    public void setSownArea(Double sownArea) {
+        this.sownArea = sownArea;
+    }
+
+    public Double getProduction() {
+        return production;
+    }
+
+    public void setProduction(Double production) {
+        this.production = production;
+    }
+
+    public Double getAveragePrice() {
+        return averagePrice;
+    }
+
+    public void setAveragePrice(Double averagePrice) {
+        this.averagePrice = averagePrice;
+    }
+
+    public String getDataSource() {
+        return dataSource;
+    }
+
+    public void setDataSource(String dataSource) {
+        this.dataSource = dataSource;
+    }
+
+    public java.time.LocalDate getCollectedAt() {
+        return collectedAt;
+    }
+
+    public void setCollectedAt(java.time.LocalDate collectedAt) {
+        this.collectedAt = collectedAt;
     }
 }
