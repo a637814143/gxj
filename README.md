@@ -19,7 +19,11 @@ cd demo
 mvn spring-boot:run
 ```
 
-项目默认使用内存 H2 数据库，并开放 `http://localhost:8080` 的基础 REST 接口。
+后端默认使用 MySQL 数据库。请先在本地创建与 `application.yml` 中一致的连接信息，并执行 `docs/database-schema.sql` 里的建表脚本完成初始化。脚本基于 InnoDB 引擎，已经为主外键、唯一约束和常用索引做好配置，可直接在 Navicat 的查询窗口运行。
+
+若需调整数据库连接信息，只需修改 `demo/src/main/resources/application.yml` 中的数据源配置字段（`url`、`username`、`password` 等）。
+
+执行完脚本后，即可在 Navicat 中浏览农作物、区域、产量、气象、预测等业务表，并让 Spring Boot 与该 MySQL 实例联动。
 
 ### 前端
 
