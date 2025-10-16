@@ -1,8 +1,22 @@
 spring:
   application:
     name: crop-yield-platform
-  profiles:
-    active: h2
+  datasource:
+    url: jdbc:mysql://localhost:3306/database-schema?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    database-platform: org.hibernate.dialect.MySQLDialect
+    hibernate:
+      ddl-auto: none
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
 
 server:
   port: 8080
