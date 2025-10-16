@@ -7,24 +7,29 @@ import com.gxj.cropyield.common.security.JwtTokenProvider;
 import com.gxj.cropyield.modules.auth.dto.AuthTokens;
 import com.gxj.cropyield.modules.auth.dto.LoginRequest;
 import com.gxj.cropyield.modules.auth.dto.LoginResponse;
+import com.gxj.cropyield.modules.auth.dto.RegisterRequest;
 import com.gxj.cropyield.modules.auth.dto.UserInfo;
 import com.gxj.cropyield.modules.auth.entity.RefreshToken;
 import com.gxj.cropyield.modules.auth.entity.Role;
 import com.gxj.cropyield.modules.auth.entity.User;
+import com.gxj.cropyield.modules.auth.repository.RoleRepository;
 import com.gxj.cropyield.modules.auth.repository.UserRepository;
 import com.gxj.cropyield.modules.auth.service.AuthService;
 import com.gxj.cropyield.modules.auth.service.CaptchaService;
 import com.gxj.cropyield.modules.auth.service.LoginLogService;
 import com.gxj.cropyield.modules.auth.service.RefreshTokenService;
+import com.gxj.cropyield.modules.auth.constant.SystemRole;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -32,27 +37,33 @@ import java.util.stream.Collectors;
 public class AuthServiceImpl implements AuthService {
 
     private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtProperties jwtProperties;
     private final CaptchaService captchaService;
     private final RefreshTokenService refreshTokenService;
     private final LoginLogService loginLogService;
+    private final PasswordEncoder passwordEncoder;
 
     public AuthServiceImpl(UserRepository userRepository,
+                           RoleRepository roleRepository,
                            AuthenticationManager authenticationManager,
                            JwtTokenProvider jwtTokenProvider,
                            JwtProperties jwtProperties,
                            CaptchaService captchaService,
                            RefreshTokenService refreshTokenService,
-                           LoginLogService loginLogService) {
+                           LoginLogService loginLogService,
+                           PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
+        this.roleRepository = roleRepository;
         this.authenticationManager = authenticationManager;
         this.jwtTokenProvider = jwtTokenProvider;
         this.jwtProperties = jwtProperties;
         this.captchaService = captchaService;
         this.refreshTokenService = refreshTokenService;
         this.loginLogService = loginLogService;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @Override
@@ -79,6 +90,39 @@ public class AuthServiceImpl implements AuthService {
         UserInfo userInfo = buildUserInfo(user);
 
         loginLogService.record(user.getUsername(), true, ipAddress, userAgent, "登录成功");
+        return new LoginResponse(tokens, userInfo);
+    }
+
+    @Override
+    @Transactional
+    public LoginResponse register(RegisterRequest request, String ipAddress, String userAgent) {
+        userRepository.findByUsername(request.username())
+            .ifPresent(user -> {
+                throw new BusinessException(ResultCode.BAD_REQUEST, "用户名已存在");
+            });
+
+        Role role = resolveRole(request.roleCode());
+
+        User user = new User();
+        user.setUsername(request.username());
+        user.setPassword(passwordEncoder.encode(request.password()));
+        user.setFullName(request.fullName());
+        user.setEmail(request.email());
+
+        var roles = new HashSet<Role>();
+        roles.add(role);
+        user.setRoles(roles);
+
+        User saved = userRepository.saveAndFlush(user);
+
+        Authentication authentication = buildAuthentication(saved);
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+
+        RefreshToken refreshToken = refreshTokenService.create(saved);
+        AuthTokens tokens = buildTokens(authentication, refreshToken.getToken());
+        UserInfo userInfo = buildUserInfo(saved);
+
+        loginLogService.record(saved.getUsername(), true, ipAddress, userAgent, "注册成功");
         return new LoginResponse(tokens, userInfo);
     }
 
@@ -140,5 +184,14 @@ public class AuthServiceImpl implements AuthService {
             .map(code -> new SimpleGrantedAuthority("ROLE_" + code))
             .collect(Collectors.toSet());
         return new UsernamePasswordAuthenticationToken(user.getUsername(), null, authorities);
+    }
+
+    private Role resolveRole(String roleCode) {
+        String normalizedRoleCode = roleCode == null ? null : roleCode.trim();
+        String effectiveRoleCode = (normalizedRoleCode == null || normalizedRoleCode.isEmpty())
+            ? SystemRole.FARMER.getCode()
+            : normalizedRoleCode;
+        return roleRepository.findByCode(effectiveRoleCode)
+            .orElseThrow(() -> new BusinessException(ResultCode.BAD_REQUEST, "角色不存在"));
     }
 }

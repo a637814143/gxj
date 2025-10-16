@@ -10,6 +10,12 @@ const routes = [
     meta: { public: true }
   },
   {
+    path: '/register',
+    name: 'register',
+    component: () => import('../views/RegisterView.vue'),
+    meta: { public: true }
+  },
+  {
     path: '/',
     component: DefaultLayout,
     meta: { requiresAuth: true },
@@ -73,7 +79,7 @@ router.beforeEach(async (to, from, next) => {
   }
 
   if (to.meta.public) {
-    if (to.name === 'login' && authStore.isAuthenticated) {
+    if ((to.name === 'login' || to.name === 'register') && authStore.isAuthenticated) {
       return next({ path: to.query.redirect || '/dashboard' })
     }
     return next()
