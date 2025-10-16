@@ -19,18 +19,11 @@ cd demo
 mvn spring-boot:run
 ```
 
-默认的 Spring Boot 配置仍兼容内存 H2 数据库，若需要在 Navicat 中使用 MySQL，请先在本地创建数据库并执行 `docs/database-schema.sql` 中的建表脚本。脚本基于 InnoDB 引擎，已经为主外键、唯一约束和常用索引做好配置，可直接在 Navicat 的查询窗口运行。
+后端默认使用 MySQL 数据库。请先在本地创建与 `application.yml` 中一致的连接信息，并执行 `docs/database-schema.sql` 里的建表脚本完成初始化。脚本基于 InnoDB 引擎，已经为主外键、唯一约束和常用索引做好配置，可直接在 Navicat 的查询窗口运行。
 
-示例连接配置：
+若需调整数据库连接信息，只需修改 `demo/src/main/resources/application.yml` 中的数据源配置字段（`url`、`username`、`password` 等）。
 
-```properties
-spring.datasource.url=jdbc:mysql://localhost:3306/yunnan_agri?useSSL=false&serverTimezone=Asia/Shanghai
-spring.datasource.username=your_user
-spring.datasource.password=your_password
-spring.jpa.hibernate.ddl-auto=none
-```
-
-执行完脚本后，即可在 Navicat 中浏览农作物、区域、产量、气象、预测等业务表，并将 Spring Boot 数据源指向该 MySQL 实例。
+执行完脚本后，即可在 Navicat 中浏览农作物、区域、产量、气象、预测等业务表，并让 Spring Boot 与该 MySQL 实例联动。
 
 ### 前端
 
