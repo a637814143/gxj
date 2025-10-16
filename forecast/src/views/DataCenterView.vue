@@ -21,7 +21,10 @@
           <div class="side-items">
             <div v-for="item in quickOverview" :key="item.label" class="side-item">
               <div class="side-item-label">{{ item.label }}</div>
-              <div class="side-item-value">{{ item.value }}</div>
+              <div class="side-item-content">
+                <div class="side-item-value">{{ item.value }}</div>
+                <div v-if="item.sub" class="side-item-sub">{{ item.sub }}</div>
+              </div>
               <div class="side-item-trend" :class="{ up: item.trend > 0, down: item.trend < 0 }">
                 {{ formatTrend(item.trend) }}
               </div>
@@ -70,6 +73,57 @@
         <div class="table-tip">共 {{ datasets.length }} 个数据集，建议定期核验文件完整性</div>
         <el-button type="primary" link @click="openUpload">立即导入</el-button>
       </div>
+    </el-card>
+
+    <el-card v-if="lastImportStats" class="data-card" shadow="hover">
+      <template #header>
+        <div class="card-header">
+          <div>
+            <div class="card-title">最新导入预览</div>
+            <div class="card-subtitle">
+              展示已清洗入库的前 {{ importPreview.length || 0 }} 条记录，并提供自动校验摘要
+            </div>
+          </div>
+        </div>
+      </template>
+      <div class="import-summary">
+        <div v-for="item in importSummaryBadges" :key="item.label" class="summary-item">
+          <div class="summary-label">{{ item.label }}</div>
+          <div class="summary-value">{{ item.value }}</div>
+        </div>
+      </div>
+      <el-table
+        v-if="importPreview.length"
+        :data="importPreview"
+        :header-cell-style="tableHeaderStyle"
+        empty-text="本次导入暂无可预览记录"
+      >
+        <el-table-column prop="year" label="年份" width="90" />
+        <el-table-column prop="regionName" label="地区" min-width="160" />
+        <el-table-column prop="cropName" label="作物" min-width="140" />
+        <el-table-column prop="production" label="总产量 (吨)" width="150">
+          <template #default="{ row }">
+            {{ formatNumber(row.production) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="yieldPerHectare" label="单产 (吨/公顷)" width="170">
+          <template #default="{ row }">
+            {{ formatNumber(row.yieldPerHectare) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="averagePrice" label="平均价格 (元/公斤)" width="190">
+          <template #default="{ row }">
+            {{ formatNumber(row.averagePrice) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="collectedAt" label="采集日期" width="180">
+          <template #default="{ row }">
+            {{ formatDate(row.collectedAt) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="dataSource" label="数据来源" min-width="180" show-overflow-tooltip />
+      </el-table>
+      <div v-else class="import-preview-empty">本次导入数据已完成清洗并入库，未发现可展示的预览记录。</div>
     </el-card>
 
     <el-card class="data-card" shadow="hover">
@@ -178,6 +232,8 @@ const datasetLoading = ref(false)
 const yieldRecords = ref([])
 const yieldLoading = ref(false)
 const importWarnings = ref([])
+const importPreview = ref([])
+const lastImportStats = ref(null)
 
 const datasetTypeMap = {
   YIELD: '产量',
@@ -276,23 +332,43 @@ const highlightStats = computed(() => {
   ]
 })
 
-const quickOverview = computed(() => [
-  {
-    label: '待处理预警',
-    value: `${importWarnings.value.length} 项`,
-    trend: importWarnings.value.length > 0 ? 1 : 0
-  },
-  {
-    label: '今日上传',
-    value: uploadFileList.value.length ? `${uploadFileList.value.length} 份` : '0 份',
-    trend: uploadFileList.value.length ? 1 : 0
-  },
-  {
-    label: '自动校验',
-    value: '启用',
-    trend: 0
+const quickOverview = computed(() => {
+  const stats = lastImportStats.value
+  const inserted = stats?.inserted ?? 0
+  const updated = stats?.updated ?? 0
+  const processed = inserted + updated
+  return [
+    {
+      label: '待处理预警',
+      value: `${importWarnings.value.length} 项`,
+      trend: importWarnings.value.length > 0 ? 1 : 0
+    },
+    {
+      label: '今日上传',
+      value: uploadFileList.value.length ? `${uploadFileList.value.length} 份` : '0 份',
+      trend: uploadFileList.value.length ? 1 : 0
+    },
+    {
+      label: '本次入库',
+      value: processed ? `${processed} 条` : '0 条',
+      trend: processed ? 1 : 0,
+      sub: processed ? `新增 ${inserted} · 更新 ${updated}` : '待导入数据'
+    }
+  ]
+})
+
+const importSummaryBadges = computed(() => {
+  if (!lastImportStats.value) {
+    return []
   }
-])
+  const { total = 0, inserted = 0, updated = 0, skipped = 0 } = lastImportStats.value
+  return [
+    { label: '识别总行数', value: `${total} 行` },
+    { label: '新增入库', value: `${inserted} 条` },
+    { label: '更新覆盖', value: `${updated} 条` },
+    { label: '自动跳过', value: `${skipped} 条` }
+  ]
+})
 
 const reminders = [
   '建议每周核对一次数据来源与口径',
@@ -369,6 +445,13 @@ const submitUpload = async () => {
     })
     const result = data?.data
     importWarnings.value = result?.warnings ?? []
+    lastImportStats.value = {
+      total: Number(result?.totalRows ?? 0),
+      inserted: Number(result?.insertedRows ?? 0),
+      updated: Number(result?.updatedRows ?? 0),
+      skipped: Number(result?.skippedRows ?? 0)
+    }
+    importPreview.value = Array.isArray(result?.preview) ? result.preview : []
     ElMessage.success(`导入完成，新增 ${result?.insertedRows ?? 0} 条，更新 ${result?.updatedRows ?? 0} 条`)
     uploadDialogVisible.value = false
     await Promise.all([fetchDatasets(), fetchYieldRecords()])
@@ -534,9 +617,10 @@ onMounted(async () => {
 }
 
 .side-item {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
+  gap: 12px;
   padding: 12px 16px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.16);
@@ -548,9 +632,21 @@ onMounted(async () => {
   color: rgba(255, 255, 255, 0.85);
 }
 
+.side-item-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+
 .side-item-value {
   font-size: 18px;
   font-weight: 700;
+}
+
+.side-item-sub {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.78);
 }
 
 .side-item-trend {
@@ -640,6 +736,41 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.import-summary {
+  margin-bottom: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.summary-item {
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(34, 98, 255, 0.08);
+  border: 1px solid rgba(34, 98, 255, 0.12);
+}
+
+.summary-label {
+  font-size: 12px;
+  color: #4b5d82;
+  margin-bottom: 6px;
+}
+
+.summary-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1841a1;
+}
+
+.import-preview-empty {
+  padding: 20px;
+  border-radius: 14px;
+  background: rgba(245, 247, 252, 0.9);
+  color: #5a6c8f;
+  text-align: center;
+  font-size: 13px;
 }
 
 .warnings {
