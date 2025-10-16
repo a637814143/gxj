@@ -1,58 +1,107 @@
 <template>
-  <div class="page">
-    <el-card>
+  <div class="data-center-page">
+    <section class="hero-card">
+      <div class="hero-copy">
+        <div class="hero-badge">云惠农作业智能分析系统</div>
+        <h1 class="hero-title">数据资产与导入中心</h1>
+        <p class="hero-desc">
+          集中管理各类基础与业务数据资产，实时掌握数据导入进度与质量预警，保障模型训练与分析任务稳定运行。
+        </p>
+        <div class="hero-stats">
+          <div v-for="item in highlightStats" :key="item.label" class="hero-stat">
+            <div class="hero-stat-label">{{ item.label }}</div>
+            <div class="hero-stat-value">{{ item.value }}</div>
+            <div class="hero-stat-sub">{{ item.sub }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="hero-side">
+        <div class="side-card">
+          <div class="side-card-title">导入协同面板</div>
+          <div class="side-items">
+            <div v-for="item in quickOverview" :key="item.label" class="side-item">
+              <div class="side-item-label">{{ item.label }}</div>
+              <div class="side-item-value">{{ item.value }}</div>
+              <div class="side-item-trend" :class="{ up: item.trend > 0, down: item.trend < 0 }">
+                {{ formatTrend(item.trend) }}
+              </div>
+            </div>
+          </div>
+          <div class="side-divider" />
+          <div class="side-footer">
+            <div class="side-footer-title">操作建议</div>
+            <ul>
+              <li v-for="notice in reminders" :key="notice">{{ notice }}</li>
+            </ul>
+          </div>
+        </div>
+        <div class="hero-decor" />
+      </div>
+    </section>
+
+    <el-card class="data-card" shadow="hover">
       <template #header>
         <div class="card-header">
-          <span>数据集管理</span>
+          <div>
+            <div class="card-title">数据集管理</div>
+            <div class="card-subtitle">查看已导入的 Excel 数据文件并维护基础信息</div>
+          </div>
           <div class="card-actions">
-            <el-button type="primary" @click="openUpload">上传数据</el-button>
             <el-button @click="fetchDatasets" :loading="datasetLoading">刷新</el-button>
+            <el-button type="primary" @click="openUpload">上传数据</el-button>
           </div>
         </div>
       </template>
-      <el-table :data="datasets" v-loading="datasetLoading" empty-text="暂无导入记录">
-        <el-table-column prop="name" label="数据集名称" min-width="200" />
-        <el-table-column label="类型" width="120">
+      <el-table :data="datasets" v-loading="datasetLoading" empty-text="暂无导入记录" :header-cell-style="tableHeaderStyle">
+        <el-table-column prop="name" label="数据集名称" min-width="220" />
+        <el-table-column label="类型" width="130">
           <template #default="{ row }">
             {{ datasetTypeMap[row.type] ?? row.type ?? '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="更新时间" width="180">
+        <el-table-column label="更新时间" width="200">
           <template #default="{ row }">
             {{ formatDate(row.updatedAt) }}
           </template>
         </el-table-column>
         <el-table-column prop="description" label="描述" min-width="240" show-overflow-tooltip />
       </el-table>
+      <div class="table-footer">
+        <div class="table-tip">共 {{ datasets.length }} 个数据集，建议定期核验文件完整性</div>
+        <el-button type="primary" link @click="openUpload">立即导入</el-button>
+      </div>
     </el-card>
 
-    <el-card>
+    <el-card class="data-card" shadow="hover">
       <template #header>
         <div class="card-header">
-          <span>导入数据记录</span>
+          <div>
+            <div class="card-title">导入任务记录</div>
+            <div class="card-subtitle">追踪历史导入批次、覆盖地区与产量指标</div>
+          </div>
           <el-button @click="fetchYieldRecords" :loading="yieldLoading">刷新</el-button>
         </div>
       </template>
-      <el-table :data="yieldRecords" v-loading="yieldLoading" empty-text="暂未导入数据">
+      <el-table :data="yieldRecords" v-loading="yieldLoading" empty-text="暂未导入数据" :header-cell-style="tableHeaderStyle">
         <el-table-column prop="year" label="年份" width="90" />
-        <el-table-column prop="regionName" label="地区" min-width="140" />
+        <el-table-column prop="regionName" label="地区" min-width="160" />
         <el-table-column prop="cropName" label="作物" min-width="140" />
-        <el-table-column prop="production" label="总产量 (吨)" width="140">
+        <el-table-column prop="production" label="总产量 (吨)" width="150">
           <template #default="{ row }">
             {{ formatNumber(row.production) }}
           </template>
         </el-table-column>
-        <el-table-column prop="yieldPerHectare" label="单产 (吨/公顷)" width="160">
+        <el-table-column prop="yieldPerHectare" label="单产 (吨/公顷)" width="170">
           <template #default="{ row }">
             {{ formatNumber(row.yieldPerHectare) }}
           </template>
         </el-table-column>
-        <el-table-column prop="averagePrice" label="平均价格 (元/公斤)" width="180">
+        <el-table-column prop="averagePrice" label="平均价格 (元/公斤)" width="190">
           <template #default="{ row }">
             {{ formatNumber(row.averagePrice) }}
           </template>
         </el-table-column>
-        <el-table-column prop="dataSource" label="数据来源" min-width="160" show-overflow-tooltip />
+        <el-table-column prop="dataSource" label="数据来源" min-width="180" show-overflow-tooltip />
       </el-table>
       <div v-if="importWarnings.length" class="warnings">
         <el-alert
@@ -119,7 +168,7 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import apiClient from '../services/http'
@@ -153,7 +202,20 @@ const uploadForm = reactive({
   description: ''
 })
 
-const formatDate = value => {
+const tableHeaderStyle = () => ({
+  background: '#f4f7fb',
+  color: '#3c4b66',
+  fontWeight: 600,
+  fontSize: '13px'
+})
+
+function formatTrend(value) {
+  if (value > 0) return `较昨日 +${value}`
+  if (value < 0) return `较昨日 ${value}`
+  return '较昨日 持平'
+}
+
+function formatDate(value) {
   if (!value) return '-'
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) {
@@ -162,7 +224,7 @@ const formatDate = value => {
   return date.toLocaleString('zh-CN', { hour12: false })
 }
 
-const formatNumber = value => {
+function formatNumber(value) {
   if (value === null || value === undefined) {
     return '-'
   }
@@ -172,6 +234,71 @@ const formatNumber = value => {
   }
   return number.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 }
+
+const highlightStats = computed(() => {
+  const total = datasets.value.length
+  const typeCount = total
+    ? new Set(datasets.value.map(item => datasetTypeMap[item.type] ?? item.type ?? '其他')).size
+    : 0
+  const latest = datasets.value
+    .slice()
+    .sort((a, b) => new Date(b?.updatedAt ?? 0).getTime() - new Date(a?.updatedAt ?? 0).getTime())[0]
+
+  const toRecordTime = record => {
+    const raw = record?.updatedAt ?? (record?.year ? `${record.year}` : null)
+    if (!raw) return 0
+    const parsed = new Date(raw)
+    return Number.isNaN(parsed.getTime()) ? Number(record?.year ?? 0) : parsed.getTime()
+  }
+
+  const recentImport = yieldRecords.value
+    .slice()
+    .sort((a, b) => toRecordTime(b) - toRecordTime(a))[0]
+
+  return [
+    {
+      label: '已导入数据集',
+      value: `${total} 个`,
+      sub: typeCount ? `覆盖 ${typeCount} 类业务主题` : '等待导入基础数据'
+    },
+    {
+      label: '最近更新',
+      value: latest ? formatDate(latest.updatedAt) : '暂无记录',
+      sub: latest ? `文件：${latest.name}` : '点击右侧按钮上传'
+    },
+    {
+      label: '历史导入批次',
+      value: `${yieldRecords.value.length} 次`,
+      sub: recentImport
+        ? `最新批次：${recentImport.year ?? '未知'} · ${recentImport.regionName ?? '-'}`
+        : '尚未同步导入记录'
+    }
+  ]
+})
+
+const quickOverview = computed(() => [
+  {
+    label: '待处理预警',
+    value: `${importWarnings.value.length} 项`,
+    trend: importWarnings.value.length > 0 ? 1 : 0
+  },
+  {
+    label: '今日上传',
+    value: uploadFileList.value.length ? `${uploadFileList.value.length} 份` : '0 份',
+    trend: uploadFileList.value.length ? 1 : 0
+  },
+  {
+    label: '自动校验',
+    value: '启用',
+    trend: 0
+  }
+])
+
+const reminders = [
+  '建议每周核对一次数据来源与口径',
+  '导入前请确保文件格式符合模板要求',
+  '完成导入后及时通知模型团队更新训练集'
+]
 
 const fetchDatasets = async () => {
   datasetLoading.value = true
@@ -242,7 +369,7 @@ const submitUpload = async () => {
     })
     const result = data?.data
     importWarnings.value = result?.warnings ?? []
-    ElMessage.success(`导入完成，新增 ${result?.insertedRows ?? 0} 条，更新 ${result?.updatedRows ?? 0} 条`) 
+    ElMessage.success(`导入完成，新增 ${result?.insertedRows ?? 0} 条，更新 ${result?.updatedRows ?? 0} 条`)
     uploadDialogVisible.value = false
     await Promise.all([fetchDatasets(), fetchYieldRecords()])
   } catch (error) {
@@ -271,21 +398,254 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.page {
+.data-center-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding-bottom: 32px;
+}
+
+.hero-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 32px;
+  padding: 32px;
+  border-radius: 24px;
+  background: linear-gradient(120deg, #e8f1ff 0%, #f4f8ff 35%, #ffffff 100%);
+  box-shadow: 0 28px 60px rgba(51, 112, 255, 0.15);
+  overflow: hidden;
+}
+
+.hero-card::before {
+  content: '';
+  position: absolute;
+  top: -160px;
+  right: -160px;
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle at center, rgba(60, 132, 255, 0.35), transparent 65%);
+  transform: rotate(12deg);
+}
+
+.hero-copy {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 16px;
+  font-size: 13px;
+  border-radius: 999px;
+  color: #2262ff;
+  background: rgba(34, 98, 255, 0.12);
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+.hero-title {
+  margin: 0;
+  font-size: 28px;
+  color: #0d1b3d;
+  font-weight: 700;
+}
+
+.hero-desc {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.8;
+  color: #455471;
+}
+
+.hero-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 16px;
+}
+
+.hero-stat {
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: inset 0 0 0 1px rgba(34, 98, 255, 0.08);
+  backdrop-filter: blur(4px);
+}
+
+.hero-stat-label {
+  font-size: 12px;
+  color: #5c6d8d;
+  margin-bottom: 8px;
+}
+
+.hero-stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #163b8c;
+  margin-bottom: 6px;
+}
+
+.hero-stat-sub {
+  font-size: 12px;
+  color: #6e7fa1;
+}
+
+.hero-side {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 24px;
+}
+
+.side-card {
+  border-radius: 20px;
+  padding: 24px;
+  background: linear-gradient(160deg, rgba(34, 98, 255, 0.92) 0%, rgba(100, 149, 255, 0.8) 65%, rgba(255, 255, 255, 0.95) 100%);
+  color: #fff;
+  box-shadow: 0 20px 45px rgba(32, 84, 204, 0.25);
+  overflow: hidden;
+  position: relative;
+}
+
+.side-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 65%);
+  pointer-events: none;
+}
+
+.side-card-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 20px;
+}
+
+.side-items {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
+.side-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(2px);
+}
+
+.side-item-label {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.side-item-value {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.side-item-trend {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.side-item-trend.up {
+  color: #91ffba;
+}
+
+.side-item-trend.down {
+  color: #ffd48a;
+}
+
+.side-divider {
+  height: 1px;
+  margin: 24px 0;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.side-footer-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.side-footer ul {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+}
+
+.hero-decor {
+  height: 140px;
+  border-radius: 22px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.8), rgba(214, 228, 255, 0.6));
+  box-shadow: inset 0 0 0 1px rgba(34, 98, 255, 0.1);
+}
+
+.data-card {
+  border-radius: 20px;
+  overflow: hidden;
+}
+
 .card-header {
   display: flex;
-  align-items: center;
   justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.card-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a2a4a;
+}
+
+.card-subtitle {
+  font-size: 13px;
+  color: #6c7d9c;
+  margin-top: 4px;
 }
 
 .card-actions {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 12px;
+}
+
+.table-footer {
+  margin-top: 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: #5f6f8c;
+  font-size: 12px;
+}
+
+.table-tip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.warnings {
+  margin-top: 16px;
+  display: grid;
+  gap: 12px;
 }
 
 .upload-form {
@@ -302,9 +662,29 @@ onMounted(async () => {
   margin-bottom: 8px;
 }
 
-.warnings {
-  margin-top: 16px;
-  display: grid;
-  gap: 8px;
+@media (max-width: 992px) {
+  .hero-card {
+    padding: 24px;
+  }
+
+  .card-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .card-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 768px) {
+  .hero-stats {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  }
+
+  .card-actions {
+    justify-content: flex-start;
+  }
 }
 </style>
