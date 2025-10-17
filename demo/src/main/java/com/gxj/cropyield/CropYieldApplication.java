@@ -11,7 +11,9 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 public class CropYieldApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(CropYieldApplication.class, args);
+        SpringApplication application = new SpringApplication(CropYieldApplication.class);
+        application.setAdditionalProfiles("cropyield");
+        application.run(args);
     }
 
 }
