@@ -565,11 +565,14 @@ public class DataImportService {
                      .build()
                      .parse(reader)) {
             List<String> headers = parser.getHeaderNames();
-            HeaderMapping mapping = buildHeaderMapping(headers);
+            List<String> sanitizedHeaders = headers.stream()
+                    .map(this::sanitizeHeader)
+                    .toList();
+            HeaderMapping mapping = buildHeaderMapping(sanitizedHeaders);
             List<ParsedRecord> records = new ArrayList<>();
             for (CSVRecord csvRecord : parser) {
                 Map<String, String> valueMap = new HashMap<>();
-                for (int index = 0; index < headers.size(); index++) {
+                for (int index = 0; index < sanitizedHeaders.size(); index++) {
                     ColumnMatch match = mapping.matches().get(index);
                     if (match == null) {
                         continue;
@@ -974,7 +977,8 @@ public class DataImportService {
         if (value == null) {
             return null;
         }
-        String trimmed = value.trim();
+        String cleaned = value.replace("\uFEFF", "");
+        String trimmed = cleaned.trim();
         return trimmed.isEmpty() ? null : trimmed;
     }
 
@@ -1039,6 +1043,14 @@ public class DataImportService {
         return Normalizer.normalize(input, Normalizer.Form.NFKC)
                 .replaceAll("[\\s\\p{Punct}]", "")
                 .toLowerCase(Locale.ROOT);
+    }
+
+    private String sanitizeHeader(String header) {
+        if (header == null) {
+            return null;
+        }
+        String cleaned = header.replace("\uFEFF", "");
+        return cleaned.trim();
     }
 
     private static Map<String, List<String>> createHeaderSynonyms() {
