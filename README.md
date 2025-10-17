@@ -19,16 +19,9 @@ cd demo
 mvn spring-boot:run
 ```
 
-上述命令会启动主站点 `CropYieldApplication`，默认监听 `http://localhost:8080`。
+上述命令会启动平台后端入口 `CropYieldApplication`，默认监听 `http://localhost:8080`。
 
-如需同时演示 Demo 模块，可另外启动 `DemoApplication`，它会自动启用 `demo` 配置文件并监听 `http://localhost:8081`：
-
-```bash
-cd demo
-mvn spring-boot:run -Dspring-boot.run.main-class=com.gxj.demo.DemoApplication
-```
-
-两个应用都会复用 `demo/src/main/resources/application.yml` 中的 MySQL 数据源配置，请确保数据库已准备就绪。
+应用会读取 `demo/src/main/resources/application.yml` 中的 MySQL 数据源配置，请确保数据库已准备就绪。
 
 ### 前端
 
