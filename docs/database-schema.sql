@@ -89,7 +89,7 @@ CREATE TABLE data_import_job (
 CREATE TABLE data_import_job_error (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     job_id BIGINT UNSIGNED NOT NULL,
-    row_number INT,
+    line_number INT,
     error_code VARCHAR(64),
     message VARCHAR(512),
     raw_value VARCHAR(512),

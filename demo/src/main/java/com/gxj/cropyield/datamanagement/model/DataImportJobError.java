@@ -16,7 +16,7 @@ public class DataImportJobError extends BaseEntity {
     @JoinColumn(name = "job_id", nullable = false)
     private DataImportJob job;
 
-    @Column(name = "row_number")
+    @Column(name = "line_number")
     private Integer rowNumber;
 
     @Column(name = "error_code", length = 64)

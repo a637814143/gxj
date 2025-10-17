@@ -1,5 +1,6 @@
 package com.example.demo;
 
+import com.gxj.cropyield.CropYieldApplication;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
@@ -17,7 +18,8 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         nameGenerator = FullyQualifiedAnnotationBeanNameGenerator.class,
         excludeFilters = {
                 @ComponentScan.Filter(type = FilterType.REGEX, pattern = "com\\.example\\.demo\\.config\\.SecurityConfig"),
-                @ComponentScan.Filter(type = FilterType.REGEX, pattern = "com\\.gxj\\.cropyield\\.(common|config)\\.SecurityConfig")
+                @ComponentScan.Filter(type = FilterType.REGEX, pattern = "com\\.gxj\\.cropyield\\.(common|config)\\.SecurityConfig"),
+                @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = CropYieldApplication.class)
         }
 )
 @EntityScan(basePackages = {

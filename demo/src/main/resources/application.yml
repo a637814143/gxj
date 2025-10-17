@@ -1,6 +1,8 @@
 spring:
   application:
     name: crop-yield-platform
+  main:
+    allow-bean-definition-overriding: true
   datasource:
     url: jdbc:mysql://localhost:3306/database-schema?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8
     username: root
