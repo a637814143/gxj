@@ -14,11 +14,15 @@ import com.gxj.cropyield.modules.forecast.engine.ForecastEngineClient;
 import com.gxj.cropyield.modules.forecast.engine.ForecastEngineRequest;
 import com.gxj.cropyield.modules.forecast.engine.ForecastEngineResponse;
 import com.gxj.cropyield.modules.forecast.entity.ForecastModel;
+import com.gxj.cropyield.modules.forecast.entity.ForecastResult;
 import com.gxj.cropyield.modules.forecast.entity.ForecastRun;
 import com.gxj.cropyield.modules.forecast.entity.ForecastRunSeries;
+import com.gxj.cropyield.modules.forecast.entity.ForecastTask;
 import com.gxj.cropyield.modules.forecast.repository.ForecastModelRepository;
+import com.gxj.cropyield.modules.forecast.repository.ForecastResultRepository;
 import com.gxj.cropyield.modules.forecast.repository.ForecastRunRepository;
 import com.gxj.cropyield.modules.forecast.repository.ForecastRunSeriesRepository;
+import com.gxj.cropyield.modules.forecast.repository.ForecastTaskRepository;
 import com.gxj.cropyield.modules.forecast.service.ForecastExecutionService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,7 +31,10 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.StringJoiner;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -39,6 +46,8 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
     private final YieldRecordRepository yieldRecordRepository;
     private final ForecastRunRepository forecastRunRepository;
     private final ForecastRunSeriesRepository forecastRunSeriesRepository;
+    private final ForecastTaskRepository forecastTaskRepository;
+    private final ForecastResultRepository forecastResultRepository;
     private final ForecastEngineClient forecastEngineClient;
 
     public ForecastExecutionServiceImpl(RegionRepository regionRepository,
@@ -47,6 +56,8 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
                                         YieldRecordRepository yieldRecordRepository,
                                         ForecastRunRepository forecastRunRepository,
                                         ForecastRunSeriesRepository forecastRunSeriesRepository,
+                                        ForecastTaskRepository forecastTaskRepository,
+                                        ForecastResultRepository forecastResultRepository,
                                         ForecastEngineClient forecastEngineClient) {
         this.regionRepository = regionRepository;
         this.cropRepository = cropRepository;
@@ -54,6 +65,8 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         this.yieldRecordRepository = yieldRecordRepository;
         this.forecastRunRepository = forecastRunRepository;
         this.forecastRunSeriesRepository = forecastRunSeriesRepository;
+        this.forecastTaskRepository = forecastTaskRepository;
+        this.forecastResultRepository = forecastResultRepository;
         this.forecastEngineClient = forecastEngineClient;
     }
 
@@ -74,6 +87,22 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         }
 
         int historyLimit = request.historyYears() != null ? request.historyYears() : Math.min(historyRecords.size(), 10);
+        int forecastPeriods = request.forecastPeriods() != null ? request.forecastPeriods() : 3;
+        String frequency = request.frequency() != null ? request.frequency() : "YEARLY";
+
+        ForecastTask task = forecastTaskRepository
+            .findByModelIdAndCropIdAndRegionId(model.getId(), crop.getId(), region.getId())
+            .orElseGet(() -> {
+                ForecastTask created = new ForecastTask();
+                created.setModel(model);
+                created.setCrop(crop);
+                created.setRegion(region);
+                return forecastTaskRepository.save(created);
+            });
+        task.setStatus(ForecastTask.TaskStatus.RUNNING);
+        task.setParameters(buildParametersSummary(historyLimit, forecastPeriods, frequency));
+        forecastTaskRepository.save(task);
+
         List<YieldRecord> limitedHistory = historyRecords.stream()
             .sorted(Comparator.comparingInt(YieldRecord::getYear))
             .skip(Math.max(historyRecords.size() - historyLimit, 0))
@@ -83,13 +112,13 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         run.setRegion(region);
         run.setCrop(crop);
         run.setModel(model);
-        run.setForecastPeriods(request.forecastPeriods() != null ? request.forecastPeriods() : 3);
+        run.setForecastPeriods(forecastPeriods);
         run.setHistoryYears(historyLimit);
-        run.setFrequency(request.frequency() != null ? request.frequency() : "YEARLY");
+        run.setFrequency(frequency);
         run.setStatus(ForecastRun.RunStatus.RUNNING);
         forecastRunRepository.save(run);
 
-        ForecastEngineResponse response = invokeEngine(limitedHistory, run);
+        ForecastEngineResponse response = invokeEngine(limitedHistory, run, task);
 
         run.setStatus(ForecastRun.RunStatus.SUCCESS);
         run.setExternalRequestId(response.requestId());
@@ -100,6 +129,11 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
             run.setR2(response.metrics().r2());
         }
         forecastRunRepository.save(run);
+
+        task.setStatus(ForecastTask.TaskStatus.SUCCESS);
+        forecastTaskRepository.save(task);
+
+        upsertForecastResults(task, response, run);
 
         List<ForecastRunSeries> series = new ArrayList<>();
         for (YieldRecord record : limitedHistory) {
@@ -162,7 +196,8 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
     }
 
     private ForecastEngineResponse invokeEngine(List<YieldRecord> history,
-                                                ForecastRun run) {
+                                                ForecastRun run,
+                                                ForecastTask task) {
         Map<String, Object> parameters = new HashMap<>();
         parameters.put("historyYears", run.getHistoryYears());
         parameters.put("frequency", run.getFrequency());
@@ -184,7 +219,94 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
             run.setStatus(ForecastRun.RunStatus.FAILED);
             run.setErrorMessage(ex.getMessage());
             forecastRunRepository.save(run);
+            task.setStatus(ForecastTask.TaskStatus.FAILED);
+            forecastTaskRepository.save(task);
             throw new BusinessException(ResultCode.SERVER_ERROR, "预测引擎调用失败: " + ex.getMessage());
         }
+    }
+
+    private String buildParametersSummary(int historyYears, int forecastPeriods, String frequency) {
+        StringJoiner joiner = new StringJoiner(";");
+        joiner.add("historyYears=" + historyYears);
+        joiner.add("forecastPeriods=" + forecastPeriods);
+        joiner.add("frequency=" + frequency);
+        return joiner.toString();
+    }
+
+    private void upsertForecastResults(ForecastTask task,
+                                       ForecastEngineResponse response,
+                                       ForecastRun run) {
+        if (response.forecast() == null || response.forecast().isEmpty()) {
+            return;
+        }
+
+        Map<Integer, ForecastResult> existing = forecastResultRepository.findByTaskId(task.getId()).stream()
+            .collect(Collectors.toMap(ForecastResult::getTargetYear, Function.identity()));
+
+        List<ForecastResult> toSave = new ArrayList<>();
+        for (ForecastEngineResponse.ForecastPoint point : response.forecast()) {
+            Integer targetYear = parseTargetYear(point.period());
+            if (targetYear == null) {
+                continue;
+            }
+            ForecastResult result = existing.get(targetYear);
+            if (result == null) {
+                result = new ForecastResult();
+                result.setTask(task);
+                result.setTargetYear(targetYear);
+            }
+            result.setPredictedYield(point.value());
+            result.setEvaluation(buildEvaluationSummary(point, run));
+            toSave.add(result);
+        }
+
+        if (!toSave.isEmpty()) {
+            forecastResultRepository.saveAll(toSave);
+        }
+    }
+
+    private Integer parseTargetYear(String period) {
+        if (period == null) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(period);
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private String buildEvaluationSummary(ForecastEngineResponse.ForecastPoint point, ForecastRun run) {
+        StringJoiner joiner = new StringJoiner("；");
+        joiner.add(String.format(Locale.CHINA, "预测值 %.2f 吨", point.value()));
+        if (point.lowerBound() != null && point.upperBound() != null) {
+            joiner.add(String.format(Locale.CHINA, "区间 %.2f ~ %.2f 吨", point.lowerBound(), point.upperBound()));
+        }
+
+        String metrics = buildMetricsSummary(run);
+        if (!metrics.isEmpty()) {
+            joiner.add(metrics);
+        }
+        return joiner.toString();
+    }
+
+    private String buildMetricsSummary(ForecastRun run) {
+        List<String> metrics = new ArrayList<>();
+        if (run.getMae() != null) {
+            metrics.add(String.format(Locale.CHINA, "MAE %.2f", run.getMae()));
+        }
+        if (run.getRmse() != null) {
+            metrics.add(String.format(Locale.CHINA, "RMSE %.2f", run.getRmse()));
+        }
+        if (run.getMape() != null) {
+            metrics.add(String.format(Locale.CHINA, "MAPE %.2f%%", run.getMape()));
+        }
+        if (run.getR2() != null) {
+            metrics.add(String.format(Locale.CHINA, "R² %.2f", run.getR2()));
+        }
+        if (metrics.isEmpty()) {
+            return "";
+        }
+        return "评估指标 " + String.join("，", metrics);
     }
 }

@@ -1,6 +1,6 @@
 <template>
   <div class="dashboard-page">
-    <section class="hero-card">
+    <section class="hero-card" v-loading="summaryLoading">
       <div class="hero-copy">
         <div class="hero-badge">云惠农作业智能分析系统</div>
         <h1 class="hero-title">数据管理中心驾驶舱</h1>
@@ -21,9 +21,12 @@
           <div class="side-items">
             <div v-for="item in quickOverview" :key="item.label" class="side-item">
               <div class="side-item-label">{{ item.label }}</div>
-              <div class="side-item-value">{{ item.value }}</div>
+              <div class="side-item-content">
+                <div class="side-item-value">{{ item.value }}</div>
+                <div v-if="item.sub" class="side-item-sub">{{ item.sub }}</div>
+              </div>
               <div class="side-item-trend" :class="{ up: item.trend > 0, down: item.trend < 0 }">
-                {{ formatTrend(item.trend) }}
+                {{ item.trend === null ? '—' : formatTrend(item.trend, item.trendDigits, item.trendLabel) }}
               </div>
             </div>
           </div>
@@ -71,14 +74,14 @@
           <el-col :xs="24" :sm="12" :md="6">
             <el-form-item label="年度批次">
               <el-select v-model="filterForm.year" placeholder="请选择">
-                <el-option v-for="item in yearOptions" :key="item" :label="item" :value="item" />
+                <el-option v-for="item in yearOptions" :key="item.value" :label="item.label" :value="item.value" />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :xs="24" :sm="12" :md="6">
-            <el-form-item label="生产周期">
-              <el-select v-model="filterForm.cycle" placeholder="请选择">
-                <el-option v-for="item in cycleOptions" :key="item.value" :label="item.label" :value="item.value" />
+            <el-form-item label="数据来源">
+              <el-select v-model="filterForm.source" placeholder="请选择">
+                <el-option v-for="item in sourceOptions" :key="item.value" :label="item.label" :value="item.value" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -90,8 +93,8 @@
       <template #header>
         <div class="card-header">
           <div>
-            <div class="card-title">历史预测数据</div>
-            <div class="card-subtitle">结合最新导入的基础数据与模型输出，追踪各地区预测表现</div>
+            <div class="card-title">历史产量记录</div>
+            <div class="card-subtitle">展示已导入的年度作物产量数据，实时同步数据库最新内容</div>
           </div>
           <div class="card-actions">
             <el-button>导出 Excel</el-button>
@@ -99,186 +102,358 @@
           </div>
         </div>
       </template>
-      <el-table :data="tableData" :border="false" :stripe="true" :header-cell-style="tableHeaderStyle" :cell-style="tableCellStyle">
-        <el-table-column prop="batch" label="批次" width="110" />
-        <el-table-column prop="date" label="日期" width="140" />
-        <el-table-column prop="region" label="地区" min-width="160" />
-        <el-table-column prop="crop" label="作物" min-width="140" />
-        <el-table-column prop="acreage" label="种植面积 (公顷)" min-width="160">
-          <template #default="{ row }">{{ formatNumber(row.acreage) }}</template>
+      <el-table
+        :data="tableData"
+        :border="false"
+        :stripe="true"
+        :header-cell-style="tableHeaderStyle"
+        :cell-style="tableCellStyle"
+        v-loading="recordsLoading"
+        empty-text="暂无导入的数据记录"
+        row-key="id"
+      >
+        <el-table-column prop="year" label="年份" width="90" />
+        <el-table-column prop="regionName" label="地区" min-width="180" />
+        <el-table-column prop="cropName" label="作物" min-width="140" />
+        <el-table-column prop="sownArea" label="播种面积 (公顷)" min-width="160">
+          <template #default="{ row }">{{ formatNumber(row.sownArea, 1) }}</template>
         </el-table-column>
-        <el-table-column prop="yield" label="预测产量 (吨)" min-width="150">
-          <template #default="{ row }">{{ formatNumber(row.yield) }}</template>
+        <el-table-column prop="production" label="总产量 (吨)" min-width="160">
+          <template #default="{ row }">{{ formatNumber(row.production, 1) }}</template>
         </el-table-column>
-        <el-table-column prop="accuracy" label="模型准确率" width="140">
-          <template #default="{ row }">{{ row.accuracy }}%</template>
+        <el-table-column prop="yieldPerHectare" label="单产 (吨/公顷)" min-width="170">
+          <template #default="{ row }">{{ formatNumber(row.yieldPerHectare, 2) }}</template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" width="140">
-          <template #default="{ row }">
-            <el-tag :type="statusTypeMap[row.status]">{{ statusLabelMap[row.status] }}</el-tag>
-          </template>
+        <el-table-column prop="averagePrice" label="平均价格 (元/公斤)" min-width="200">
+          <template #default="{ row }">{{ formatNumber(row.averagePrice, 2) }}</template>
         </el-table-column>
-        <el-table-column prop="operator" label="负责人" width="120" />
+        <el-table-column prop="dataSource" label="数据来源" min-width="220" show-overflow-tooltip />
+        <el-table-column prop="collectedAt" label="采集日期" width="140">
+          <template #default="{ row }">{{ formatDate(row.collectedAt) }}</template>
+        </el-table-column>
       </el-table>
       <div class="table-footer">
-        <div class="table-tip">共 {{ tableData.length }} 条记录，更多数据请使用筛选条件查询</div>
-        <el-pagination layout="prev, pager, next" :total="120" :page-size="10" small background />
+        <div class="table-tip">
+          共 {{ filteredStats.count }} 条记录，合计产量 {{ formatNumber(filteredStats.totalProduction, 1) }} 吨，播种面积
+          {{ formatNumber(filteredStats.totalSownArea, 1) }} 公顷
+        </div>
+        <el-pagination layout="prev, pager, next" :total="filteredStats.count" :page-size="10" small background />
       </div>
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { computed, reactive } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import apiClient from '../services/http'
 
-const highlightStats = [
-  { label: '接入地区', value: '48 个地市', sub: '本月新增 4 个重点区域' },
-  { label: '监测作物', value: '26 种', sub: '覆盖粮食、经济与特色作物' },
-  { label: '数据文件', value: '312 份', sub: '含历史与实时监测数据' },
-  { label: '模型任务', value: '18 次', sub: '近 30 天内完成的预测任务' }
-]
-
-const quickOverview = [
-  { label: '今日导入数据', value: '12 份', trend: 3 },
-  { label: '模型运行', value: '5 次', trend: 1 },
-  { label: '预警提示', value: '1 项', trend: -1 }
-]
-
-const reminders = [
-  '西南片区玉米产量预测需人工复核',
-  '请关注华北冬小麦数据采集进度',
-  '新模型版本验证通过，可安排上线'
-]
-
-const currentYear = new Date().getFullYear()
-const yearOptions = computed(() => {
-  return Array.from({ length: 6 }, (_, index) => currentYear - index)
-})
-
-const cropOptions = [
-  { label: '全部作物', value: 'ALL' },
-  { label: '水稻', value: 'RICE' },
-  { label: '小麦', value: 'WHEAT' },
-  { label: '玉米', value: 'CORN' },
-  { label: '大豆', value: 'SOYBEAN' }
-]
-
-const regionOptions = [
-  { label: '全部区域', value: 'ALL' },
-  { label: '东北产粮区', value: 'NE' },
-  { label: '华北平原', value: 'HB' },
-  { label: '长江中下游', value: 'YRD' },
-  { label: '西南丘陵区', value: 'SW' }
-]
-
-const cycleOptions = [
-  { label: '全年', value: 'ALL' },
-  { label: '春季', value: 'SPRING' },
-  { label: '夏季', value: 'SUMMER' },
-  { label: '秋季', value: 'AUTUMN' },
-  { label: '冬季', value: 'WINTER' }
-]
+const summary = ref(null)
+const summaryLoading = ref(false)
+const yieldRecords = ref([])
+const recordsLoading = ref(false)
+const searching = ref(false)
 
 const filterForm = reactive({
-  crop: cropOptions[0].value,
-  region: regionOptions[0].value,
-  year: yearOptions.value[0],
-  cycle: cycleOptions[0].value
+  crop: 'ALL',
+  region: 'ALL',
+  year: 'ALL',
+  source: 'ALL'
 })
 
-const tableData = [
-  {
-    batch: '2024-Q1-01',
-    date: '2024-03-28',
-    region: '东北产粮区 / 黑龙江',
-    crop: '玉米',
-    acreage: 12840,
-    yield: 74200,
-    accuracy: 92.4,
-    status: 'FINISHED',
-    operator: '王志强'
-  },
-  {
-    batch: '2024-Q1-02',
-    date: '2024-03-25',
-    region: '华北平原 / 河北',
-    crop: '冬小麦',
-    acreage: 10320,
-    yield: 56120,
-    accuracy: 90.1,
-    status: 'FINISHED',
-    operator: '李晓梅'
-  },
-  {
-    batch: '2024-Q1-03',
-    date: '2024-03-22',
-    region: '长江中下游 / 湖南',
-    crop: '早稻',
-    acreage: 8720,
-    yield: 43860,
-    accuracy: 88.6,
-    status: 'RUNNING',
-    operator: '陈建军'
-  },
-  {
-    batch: '2024-Q1-04',
-    date: '2024-03-18',
-    region: '西南丘陵区 / 四川',
-    crop: '油菜',
-    acreage: 6920,
-    yield: 25840,
-    accuracy: 84.3,
-    status: 'WARNING',
-    operator: '杨慧敏'
-  },
-  {
-    batch: '2024-Q1-05',
-    date: '2024-03-14',
-    region: '东北产粮区 / 吉林',
-    crop: '大豆',
-    acreage: 7860,
-    yield: 31670,
-    accuracy: 89.7,
-    status: 'FINISHED',
-    operator: '赵立新'
+const cropOptions = computed(() => {
+  const crops = new Map()
+  yieldRecords.value.forEach(record => {
+    if (record?.crop?.code) {
+      crops.set(record.crop.code, record.crop.name)
+    }
+  })
+  const entries = Array.from(crops.entries()).sort((a, b) => a[1].localeCompare(b[1], 'zh-CN'))
+  return [
+    { label: '全部作物', value: 'ALL' },
+    ...entries.map(([value, label]) => ({ label, value }))
+  ]
+})
+
+const regionOptions = computed(() => {
+  const regions = new Map()
+  yieldRecords.value.forEach(record => {
+    if (record?.region?.code) {
+      regions.set(record.region.code, formatRegionName(record.region))
+    }
+  })
+  const entries = Array.from(regions.entries()).sort((a, b) => a[1].localeCompare(b[1], 'zh-CN'))
+  return [
+    { label: '全部区域', value: 'ALL' },
+    ...entries.map(([value, label]) => ({ label, value }))
+  ]
+})
+
+const yearOptions = computed(() => {
+  const years = new Set()
+  yieldRecords.value.forEach(record => {
+    if (typeof record?.year === 'number') {
+      years.add(record.year)
+    }
+  })
+  const sortedYears = Array.from(years).sort((a, b) => b - a)
+  return [
+    { label: '全部年份', value: 'ALL' },
+    ...sortedYears.map(year => ({ label: `${year} 年`, value: year }))
+  ]
+})
+
+const sourceOptions = computed(() => {
+  const sources = new Set()
+  yieldRecords.value.forEach(record => {
+    if (record?.dataSource) {
+      sources.add(record.dataSource)
+    }
+  })
+  const sortedSources = Array.from(sources).sort((a, b) => a.localeCompare(b, 'zh-CN'))
+  return [
+    { label: '全部来源', value: 'ALL' },
+    ...sortedSources.map(source => ({ label: source, value: source }))
+  ]
+})
+
+const ensureFilterValidity = () => {
+  if (!cropOptions.value.some(option => option.value === filterForm.crop)) {
+    filterForm.crop = 'ALL'
   }
-]
-
-const statusLabelMap = {
-  FINISHED: '已完成',
-  RUNNING: '运行中',
-  WARNING: '需关注'
+  if (!regionOptions.value.some(option => option.value === filterForm.region)) {
+    filterForm.region = 'ALL'
+  }
+  if (!yearOptions.value.some(option => option.value === filterForm.year)) {
+    filterForm.year = 'ALL'
+  }
+  if (!sourceOptions.value.some(option => option.value === filterForm.source)) {
+    filterForm.source = 'ALL'
+  }
 }
 
-const statusTypeMap = {
-  FINISHED: 'success',
-  RUNNING: 'info',
-  WARNING: 'warning'
+const fetchSummary = async () => {
+  summaryLoading.value = true
+  try {
+    const { data } = await apiClient.get('/api/dashboard/summary')
+    summary.value = data
+  } catch (error) {
+    summary.value = null
+    ElMessage.error(error?.response?.data?.message || '加载概览数据失败')
+  } finally {
+    summaryLoading.value = false
+  }
 }
 
-const searching = computed(() => false)
+const fetchYieldRecords = async () => {
+  recordsLoading.value = true
+  try {
+    const { data } = await apiClient.get('/api/datasets/yield-records')
+    const records = Array.isArray(data?.data) ? data.data : []
+    yieldRecords.value = records
+    ensureFilterValidity()
+  } catch (error) {
+    yieldRecords.value = []
+    ElMessage.error(error?.response?.data?.message || '加载产量记录失败')
+  } finally {
+    recordsLoading.value = false
+  }
+}
 
-const handleSearch = () => {
-  // 预留查询逻辑
+const handleSearch = async () => {
+  searching.value = true
+  try {
+    await Promise.all([fetchSummary(), fetchYieldRecords()])
+  } finally {
+    searching.value = false
+  }
 }
 
 const handleReset = () => {
-  filterForm.crop = cropOptions[0].value
-  filterForm.region = regionOptions[0].value
-  filterForm.year = yearOptions.value[0]
-  filterForm.cycle = cycleOptions[0].value
+  filterForm.crop = 'ALL'
+  filterForm.region = 'ALL'
+  filterForm.year = 'ALL'
+  filterForm.source = 'ALL'
+  handleSearch()
 }
 
-const formatNumber = value => {
-  if (value === null || value === undefined) return '-'
-  return Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 0 })
-}
+onMounted(() => {
+  handleSearch()
+})
 
-const formatTrend = value => {
-  if (value > 0) return `较昨日 +${value}`
-  if (value < 0) return `较昨日 ${value}`
-  return '较昨日 持平'
-}
+const filteredRawRecords = computed(() => {
+  const records = [...yieldRecords.value].sort((a, b) => {
+    const yearDiff = (b?.year ?? 0) - (a?.year ?? 0)
+    if (yearDiff !== 0) return yearDiff
+    const regionNameA = formatRegionName(a?.region)
+    const regionNameB = formatRegionName(b?.region)
+    return regionNameA.localeCompare(regionNameB, 'zh-CN')
+  })
+  return records.filter(record => {
+    const matchesCrop = filterForm.crop === 'ALL' || record?.crop?.code === filterForm.crop
+    const matchesRegion = filterForm.region === 'ALL' || record?.region?.code === filterForm.region
+    const matchesYear = filterForm.year === 'ALL' || record?.year === filterForm.year
+    const matchesSource = filterForm.source === 'ALL' || record?.dataSource === filterForm.source
+    return matchesCrop && matchesRegion && matchesYear && matchesSource
+  })
+})
+
+const tableData = computed(() =>
+  filteredRawRecords.value.map(record => ({
+    id: record.id,
+    year: record.year,
+    regionName: formatRegionName(record.region),
+    cropName: record?.crop?.name ?? '-',
+    sownArea: record?.sownArea,
+    production: record?.production,
+    yieldPerHectare: record?.yieldPerHectare,
+    averagePrice: record?.averagePrice,
+    dataSource: record?.dataSource ?? '-',
+    collectedAt: record?.collectedAt ?? record?.updatedAt
+  }))
+)
+
+const filteredStats = computed(() => {
+  const records = filteredRawRecords.value
+  const totalProduction = records.reduce((sum, record) => sum + (Number(record?.production) || 0), 0)
+  const totalSownArea = records.reduce((sum, record) => sum + (Number(record?.sownArea) || 0), 0)
+  return {
+    count: records.length,
+    totalProduction,
+    totalSownArea
+  }
+})
+
+const yearsCovered = computed(() => {
+  const years = new Set()
+  yieldRecords.value.forEach(record => {
+    if (typeof record?.year === 'number') {
+      years.add(record.year)
+    }
+  })
+  return years.size
+})
+
+const latestYear = computed(() => {
+  const years = Array.from(
+    new Set(yieldRecords.value.map(record => record?.year).filter(year => typeof year === 'number'))
+  )
+  if (!years.length) {
+    return null
+  }
+  return Math.max(...years)
+})
+
+const highlightStats = computed(() => {
+  if (!summary.value) {
+    return [
+      { label: '累计总产量', value: '—', sub: '等待导入数据' },
+      { label: '播种面积', value: '—', sub: '等待导入数据' },
+      { label: '平均单产', value: '—', sub: '等待导入数据' },
+      { label: '入库记录', value: '—', sub: '等待导入数据' }
+    ]
+  }
+
+  const averageArea = yearsCovered.value ? summary.value.totalSownArea / yearsCovered.value : 0
+
+  return [
+    {
+      label: '累计总产量',
+      value: `${formatNumber(summary.value.totalProduction, 1)} 吨`,
+      sub: `覆盖 ${yearsCovered.value} 个年份`
+    },
+    {
+      label: '播种面积',
+      value: `${formatNumber(summary.value.totalSownArea, 1)} 公顷`,
+      sub: `年均 ${formatNumber(averageArea, 1)} 公顷`
+    },
+    {
+      label: '平均单产',
+      value: `${formatNumber(summary.value.averageYield, 2)} 吨/公顷`,
+      sub: '基于全部历史记录计算'
+    },
+    {
+      label: '入库记录',
+      value: `${formatNumber(summary.value.recordCount, 0)} 条`,
+      sub: latestYear.value ? `最近年份：${latestYear.value} 年` : '等待导入数据'
+    }
+  ]
+})
+
+const quickOverview = computed(() => {
+  const items = []
+  const trend = summary.value?.productionTrend ?? []
+  const lastPoint = trend.length ? trend[trend.length - 1] : null
+  const prevPoint = trend.length > 1 ? trend[trend.length - 2] : null
+  const forecast = summary.value?.forecastOutlook?.[0]
+  const crop = summary.value?.cropStructure?.[0]
+
+  items.push({
+    label: '最新年度总产量',
+    value: lastPoint ? `${formatNumber(lastPoint.value, 1)} 吨` : '—',
+    trend: lastPoint && prevPoint ? lastPoint.value - prevPoint.value : null,
+    trendDigits: 1,
+    trendLabel: '较上一年'
+  })
+
+  items.push({
+    label: '主力作物占比',
+    value: crop ? `${crop.cropName} ${formatNumber(crop.share * 100, 1)}%` : '—',
+    sub: crop ? `播种面积 ${formatNumber(crop.sownArea, 1)} 公顷` : undefined,
+    trend: crop ? 0 : null,
+    trendDigits: 1,
+    trendLabel: '结构'
+  })
+
+  items.push({
+    label: '次年预测产量',
+    value: forecast ? `${formatNumber(forecast.value, 1)} 吨` : '—',
+    sub: forecast
+      ? `区间 ${formatNumber(forecast.lowerBound, 1)} ~ ${formatNumber(forecast.upperBound, 1)} 吨`
+      : undefined,
+    trend: forecast && lastPoint ? forecast.value - lastPoint.value : null,
+    trendDigits: 1,
+    trendLabel: '较当前'
+  })
+
+  return items
+})
+
+const reminders = computed(() => {
+  const items = []
+  const region = summary.value?.regionComparisons?.[0]
+  const forecast = summary.value?.forecastOutlook?.[0]
+  const productionTrend = summary.value?.productionTrend ?? []
+  const lastPoint = productionTrend.length ? productionTrend[productionTrend.length - 1] : null
+
+  if (region) {
+    items.push(
+      `${region.regionName} 当前总产 ${formatNumber(region.production, 1)} 吨，单产 ${formatNumber(
+        region.yieldPerHectare,
+        2
+      )} 吨/公顷。`
+    )
+  }
+
+  if (forecast && lastPoint) {
+    items.push(
+      `${forecast.label} 预测约 ${formatNumber(forecast.value, 1)} 吨，相比当前 ${formatNumber(
+        lastPoint.value,
+        1
+      )} 吨${forecast.value >= lastPoint.value ? '有增长' : '略有回落'}。`
+    )
+  }
+
+  if (!yieldRecords.value.length) {
+    items.push('尚未检测到入库数据，请先通过“数据中心”导入数据文件。')
+  }
+
+  if (!items.length) {
+    items.push('数据加载中，请稍候。')
+  }
+
+  return items.slice(0, 3)
+})
 
 const tableHeaderStyle = () => ({
   background: '#f4f7fb',
@@ -291,6 +466,49 @@ const tableCellStyle = () => ({
   color: '#1f2d3d',
   fontSize: '13px'
 })
+
+function formatNumber(value, digits = 0) {
+  if (value === null || value === undefined || value === '') return '-'
+  const number = Number(value)
+  if (Number.isNaN(number)) return '-'
+  return number.toLocaleString('zh-CN', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits
+  })
+}
+
+function formatTrend(value, digits = 0, label = '较上期') {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return `${label} 持平`
+  }
+  if (Number(value) === 0) {
+    return `${label} 持平`
+  }
+  const absolute = Math.abs(Number(value))
+  const formatted = formatNumber(absolute, digits)
+  return Number(value) > 0 ? `${label} +${formatted}` : `${label} -${formatted}`
+}
+
+function formatDate(value) {
+  if (!value) return '-'
+  if (typeof value === 'string') {
+    return value.split('T')[0]
+  }
+  if (value instanceof Date) {
+    return value.toISOString().split('T')[0]
+  }
+  return String(value)
+}
+
+function formatRegionName(region) {
+  if (!region) return '-'
+  const name = region?.name ?? '-'
+  const parentName = region?.parentName
+  if (parentName) {
+    return `${parentName} / ${name}`
+  }
+  return name
+}
 </script>
 
 <style scoped>
@@ -430,9 +648,10 @@ const tableCellStyle = () => ({
 }
 
 .side-item {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
+  gap: 12px;
   padding: 12px 16px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.16);
@@ -444,9 +663,21 @@ const tableCellStyle = () => ({
   color: rgba(255, 255, 255, 0.85);
 }
 
+.side-item-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+
 .side-item-value {
   font-size: 18px;
   font-weight: 700;
+}
+
+.side-item-sub {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.78);
 }
 
 .side-item-trend {
