@@ -19,6 +19,13 @@ public interface YieldRecordRepository extends JpaRepository<YieldRecord, Long> 
     List<YieldRecord> findTop5ByOrderByYearDesc();
 
     @Query("""
+            SELECT DISTINCT record FROM YieldRecord record
+            LEFT JOIN FETCH record.crop
+            LEFT JOIN FETCH record.region
+            """)
+    List<YieldRecord> findAllWithRelations();
+
+    @Query("""
             SELECT record FROM YieldRecord record
             WHERE (:cropId IS NULL OR record.crop.id = :cropId)
               AND (:regionId IS NULL OR record.region.id = :regionId)

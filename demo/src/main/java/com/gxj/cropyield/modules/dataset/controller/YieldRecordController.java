@@ -1,8 +1,8 @@
 package com.gxj.cropyield.modules.dataset.controller;
 
 import com.gxj.cropyield.common.response.ApiResponse;
+import com.gxj.cropyield.modules.dataset.dto.YieldRecordDetailView;
 import com.gxj.cropyield.modules.dataset.dto.YieldRecordRequest;
-import com.gxj.cropyield.modules.dataset.entity.YieldRecord;
 import com.gxj.cropyield.modules.dataset.service.YieldRecordService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,12 +24,12 @@ public class YieldRecordController {
     }
 
     @GetMapping
-    public ApiResponse<List<YieldRecord>> listRecords() {
+    public ApiResponse<List<YieldRecordDetailView>> listRecords() {
         return ApiResponse.success(yieldRecordService.listAll());
     }
 
     @PostMapping
-    public ApiResponse<YieldRecord> createRecord(@Valid @RequestBody YieldRecordRequest request) {
+    public ApiResponse<YieldRecordDetailView> createRecord(@Valid @RequestBody YieldRecordRequest request) {
         return ApiResponse.success(yieldRecordService.create(request));
     }
 }
