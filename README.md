@@ -19,7 +19,9 @@ cd demo
 mvn spring-boot:run
 ```
 
-项目默认使用内存 H2 数据库，并开放 `http://localhost:8080` 的基础 REST 接口。
+上述命令会启动平台后端入口 `CropYieldApplication`，默认监听 `http://localhost:8080`。
+
+应用会读取 `demo/src/main/resources/application.yml` 中的 MySQL 数据源配置，请确保数据库已准备就绪。
 
 ### 前端
 
