@@ -234,7 +234,7 @@ app:
 logging:
   level:
     root: INFO
-    com.example.demo: DEBUG
+    com.gxj.demo: DEBUG
 ```
 
 **初始化脚本**
