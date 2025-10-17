@@ -557,13 +557,9 @@ public class DataImportService {
     }
 
     private List<ParsedRecord> parseCsv(Path path) throws IOException {
+        CSVFormat format = buildCsvFormat(path);
         try (Reader reader = createUtf8Reader(path);
-             CSVParser parser = CSVFormat.DEFAULT
-                     .builder()
-                     .setSkipHeaderRecord(false)
-                     .setHeader()
-                     .build()
-                     .parse(reader)) {
+             CSVParser parser = format.parse(reader)) {
             List<String> headers = parser.getHeaderNames();
             List<String> sanitizedHeaders = headers.stream()
                     .map(this::sanitizeHeader)
@@ -588,6 +584,52 @@ public class DataImportService {
         } catch (MalformedInputException exception) {
             throw new IllegalArgumentException("CSV 文件不是 UTF-8 编码", exception);
         }
+    }
+
+    private CSVFormat buildCsvFormat(Path path) throws IOException {
+        char delimiter = detectDelimiter(path);
+        return CSVFormat.DEFAULT
+                .builder()
+                .setSkipHeaderRecord(false)
+                .setHeader()
+                .setDelimiter(delimiter)
+                .build();
+    }
+
+    private char detectDelimiter(Path path) throws IOException {
+        List<Character> candidates = List.of(',', '\t', ';', '|');
+        Map<Character, Integer> counts = new HashMap<>();
+        for (Character candidate : candidates) {
+            counts.put(candidate, 0);
+        }
+        try (BufferedReader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.isBlank()) {
+                    continue;
+                }
+                String cleaned = line.replace("\uFEFF", "");
+                for (Character candidate : candidates) {
+                    counts.computeIfPresent(candidate, (key, value) -> value + countOccurrences(cleaned, candidate));
+                }
+                break;
+            }
+        }
+        return counts.entrySet().stream()
+                .max(Comparator.comparingInt(Map.Entry::getValue))
+                .filter(entry -> entry.getValue() > 0)
+                .map(Map.Entry::getKey)
+                .orElse(',');
+    }
+
+    private int countOccurrences(String line, char delimiter) {
+        int count = 0;
+        for (int i = 0; i < line.length(); i++) {
+            if (line.charAt(i) == delimiter) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private List<ParsedRecord> parseExcel(Path path) throws IOException {
