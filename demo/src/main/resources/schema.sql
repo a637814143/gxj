@@ -1,27 +1,8 @@
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
-DROP TABLE IF EXISTS report_summary;
-DROP TABLE IF EXISTS forecast_run_series;
-DROP TABLE IF EXISTS forecast_result;
-DROP TABLE IF EXISTS forecast_run;
-DROP TABLE IF EXISTS forecast_task;
-DROP TABLE IF EXISTS forecast_model;
-DROP TABLE IF EXISTS dataset_price_record;
-DROP TABLE IF EXISTS dataset_yield_record;
-DROP TABLE IF EXISTS dataset_file;
-DROP TABLE IF EXISTS base_crop;
-DROP TABLE IF EXISTS base_region;
-DROP TABLE IF EXISTS sys_log;
-DROP TABLE IF EXISTS sys_role_permission;
-DROP TABLE IF EXISTS sys_user_role;
-DROP TABLE IF EXISTS sys_refresh_token;
-DROP TABLE IF EXISTS sys_login_log;
-DROP TABLE IF EXISTS sys_user;
-DROP TABLE IF EXISTS sys_role;
-DROP TABLE IF EXISTS sys_permission;
 
-CREATE TABLE base_region (
+CREATE TABLE IF NOT EXISTS base_region (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     code VARCHAR(64) NOT NULL,
     name VARCHAR(128) NOT NULL,
@@ -35,7 +16,7 @@ CREATE TABLE base_region (
     KEY idx_base_region_level (level)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '基础行政区域信息';
 
-CREATE TABLE base_crop (
+CREATE TABLE IF NOT EXISTS base_crop (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     code VARCHAR(64) NOT NULL,
     name VARCHAR(128) NOT NULL,
@@ -46,7 +27,7 @@ CREATE TABLE base_crop (
     UNIQUE KEY uq_base_crop_code (code)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '基础作物信息';
 
-CREATE TABLE dataset_file (
+CREATE TABLE IF NOT EXISTS dataset_file (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(128) NOT NULL,
     type VARCHAR(32) NOT NULL,
@@ -57,7 +38,7 @@ CREATE TABLE dataset_file (
     UNIQUE KEY uq_dataset_file_name (name)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '原始数据文件登记';
 
-CREATE TABLE dataset_yield_record (
+CREATE TABLE IF NOT EXISTS dataset_yield_record (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     crop_id BIGINT UNSIGNED NOT NULL,
     region_id BIGINT UNSIGNED NOT NULL,
@@ -77,7 +58,7 @@ CREATE TABLE dataset_yield_record (
     CONSTRAINT fk_yield_region FOREIGN KEY (region_id) REFERENCES base_region (id) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '作物年均单产记录';
 
-CREATE TABLE dataset_price_record (
+CREATE TABLE IF NOT EXISTS dataset_price_record (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     crop_id BIGINT UNSIGNED NOT NULL,
     region_id BIGINT UNSIGNED NOT NULL,
@@ -92,7 +73,7 @@ CREATE TABLE dataset_price_record (
     CONSTRAINT fk_price_region FOREIGN KEY (region_id) REFERENCES base_region (id) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '作物价格时间序列';
 
-CREATE TABLE forecast_model (
+CREATE TABLE IF NOT EXISTS forecast_model (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(128) NOT NULL,
     type VARCHAR(32) NOT NULL,
@@ -102,7 +83,7 @@ CREATE TABLE forecast_model (
     UNIQUE KEY uq_forecast_model_name (name)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '预测模型定义';
 
-CREATE TABLE forecast_task (
+CREATE TABLE IF NOT EXISTS forecast_task (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     model_id BIGINT UNSIGNED NOT NULL,
     crop_id BIGINT UNSIGNED NOT NULL,
@@ -120,7 +101,7 @@ CREATE TABLE forecast_task (
     CONSTRAINT fk_task_region FOREIGN KEY (region_id) REFERENCES base_region (id) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '预测任务配置';
 
-CREATE TABLE forecast_run (
+CREATE TABLE IF NOT EXISTS forecast_run (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     model_id BIGINT UNSIGNED NOT NULL,
     crop_id BIGINT UNSIGNED NOT NULL,
@@ -146,7 +127,7 @@ CREATE TABLE forecast_run (
     CONSTRAINT fk_run_region FOREIGN KEY (region_id) REFERENCES base_region (id) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '预测执行记录';
 
-CREATE TABLE forecast_run_series (
+CREATE TABLE IF NOT EXISTS forecast_run_series (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     run_id BIGINT UNSIGNED NOT NULL,
     period VARCHAR(32) NOT NULL,
@@ -160,7 +141,7 @@ CREATE TABLE forecast_run_series (
     CONSTRAINT fk_run_series_run FOREIGN KEY (run_id) REFERENCES forecast_run (id) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '预测结果时间序列';
 
-CREATE TABLE forecast_result (
+CREATE TABLE IF NOT EXISTS forecast_result (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     task_id BIGINT UNSIGNED NOT NULL,
     target_year INT NOT NULL,
@@ -173,7 +154,7 @@ CREATE TABLE forecast_result (
     CONSTRAINT fk_result_task FOREIGN KEY (task_id) REFERENCES forecast_task (id) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '预测结果摘要';
 
-CREATE TABLE report_summary (
+CREATE TABLE IF NOT EXISTS report_summary (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     title VARCHAR(128) NOT NULL,
     description VARCHAR(512),
@@ -185,7 +166,7 @@ CREATE TABLE report_summary (
     CONSTRAINT fk_report_result FOREIGN KEY (forecast_result_id) REFERENCES forecast_result (id) ON DELETE SET NULL
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '预测报告摘要';
 
-CREATE TABLE sys_permission (
+CREATE TABLE IF NOT EXISTS sys_permission (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     code VARCHAR(64) NOT NULL,
     name VARCHAR(128) NOT NULL,
@@ -195,7 +176,7 @@ CREATE TABLE sys_permission (
     UNIQUE KEY uq_permission_code (code)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '系统权限定义';
 
-CREATE TABLE sys_role (
+CREATE TABLE IF NOT EXISTS sys_role (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     code VARCHAR(64) NOT NULL,
     name VARCHAR(128) NOT NULL,
@@ -205,7 +186,7 @@ CREATE TABLE sys_role (
     UNIQUE KEY uq_role_code (code)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '系统角色定义';
 
-CREATE TABLE sys_user (
+CREATE TABLE IF NOT EXISTS sys_user (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(64) NOT NULL,
     password VARCHAR(128) NOT NULL,
@@ -217,7 +198,7 @@ CREATE TABLE sys_user (
     UNIQUE KEY uq_user_email (email)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '系统用户';
 
-CREATE TABLE sys_login_log (
+CREATE TABLE IF NOT EXISTS sys_login_log (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(64) NOT NULL,
     success TINYINT(1) NOT NULL,
@@ -230,7 +211,7 @@ CREATE TABLE sys_login_log (
     KEY idx_login_created (created_at)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '用户登录日志';
 
-CREATE TABLE sys_refresh_token (
+CREATE TABLE IF NOT EXISTS sys_refresh_token (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     token VARCHAR(128) NOT NULL,
     expires_at DATETIME NOT NULL,
@@ -242,7 +223,7 @@ CREATE TABLE sys_refresh_token (
     CONSTRAINT fk_refresh_user FOREIGN KEY (user_id) REFERENCES sys_user (id) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '刷新令牌';
 
-CREATE TABLE sys_user_role (
+CREATE TABLE IF NOT EXISTS sys_user_role (
     user_id BIGINT UNSIGNED NOT NULL,
     role_id BIGINT UNSIGNED NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -251,7 +232,7 @@ CREATE TABLE sys_user_role (
     CONSTRAINT fk_user_role_role FOREIGN KEY (role_id) REFERENCES sys_role (id) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '用户与角色关联';
 
-CREATE TABLE sys_role_permission (
+CREATE TABLE IF NOT EXISTS sys_role_permission (
     role_id BIGINT UNSIGNED NOT NULL,
     permission_id BIGINT UNSIGNED NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -260,7 +241,7 @@ CREATE TABLE sys_role_permission (
     CONSTRAINT fk_role_permission_permission FOREIGN KEY (permission_id) REFERENCES sys_permission (id) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '角色与权限关联';
 
-CREATE TABLE sys_log (
+CREATE TABLE IF NOT EXISTS sys_log (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(64) NOT NULL,
     action VARCHAR(128) NOT NULL,
