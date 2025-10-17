@@ -18,6 +18,8 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         nameGenerator = FullyQualifiedAnnotationBeanNameGenerator.class,
         excludeFilters = {
                 @ComponentScan.Filter(type = FilterType.REGEX, pattern = "com\\.example\\.demo\\.config\\.SecurityConfig"),
+                @ComponentScan.Filter(type = FilterType.REGEX, pattern = "com\\.example\\.demo\\.dashboard\\..*"),
+                @ComponentScan.Filter(type = FilterType.REGEX, pattern = "com\\.example\\.demo\\.datamanagement\\..*"),
                 @ComponentScan.Filter(type = FilterType.REGEX, pattern = "com\\.gxj\\.cropyield\\.(common|config)\\.SecurityConfig"),
                 @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = CropYieldApplication.class)
         }
