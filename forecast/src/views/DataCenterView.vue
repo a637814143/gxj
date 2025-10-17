@@ -273,7 +273,7 @@
             drag
             :auto-upload="false"
             :file-list="uploadFileList"
-            accept=".xls,.xlsx,.csv"
+            accept=".xls,.xlsx,.csv,text/csv"
             :limit="1"
             :on-change="handleFileChange"
             :on-remove="handleFileRemove"
@@ -284,7 +284,13 @@
               将文件拖到此处，或<em>点击上传</em>
             </div>
             <template #tip>
-              <div class="el-upload__tip">仅支持 Excel 文件（.xls/.xlsx）</div>
+              <div class="el-upload__tip">
+                支持 Excel（.xls/.xlsx）和 UTF-8 编码的 CSV（.csv）文件，系统会自动识别常见的分隔符。
+              </div>
+              <ul class="upload-tip-list">
+                <li>CSV 将自动检测逗号、制表符、分号或竖线分隔。</li>
+                <li>请保留模板中的字段名称（如“作物”“地区”“年份”等），便于系统匹配。</li>
+              </ul>
             </template>
           </el-upload>
         </el-form-item>
@@ -645,11 +651,13 @@ const handleTaskRowClick = async row => {
 
 const beforeUpload = file => {
   const lowerName = file.name?.toLowerCase?.() ?? ''
-  const isExcel = lowerName.endsWith('.xls') || lowerName.endsWith('.xlsx') || (file.type ?? '').includes('sheet')
-  if (!isExcel) {
-    ElMessage.error('仅支持 Excel 文件（.xls/.xlsx）')
+  const mimeType = file.type ?? ''
+  const isExcel = lowerName.endsWith('.xls') || lowerName.endsWith('.xlsx') || mimeType.includes('sheet')
+  const isCsv = lowerName.endsWith('.csv') || mimeType.includes('csv')
+  if (!(isExcel || isCsv)) {
+    ElMessage.error('仅支持 Excel（.xls/.xlsx）或 UTF-8 编码的 CSV（.csv）文件')
   }
-  return isExcel
+  return isExcel || isCsv
 }
 
 const handleFileChange = (file, fileList) => {
@@ -1083,6 +1091,18 @@ onBeforeUnmount(() => {
   font-size: 32px;
   color: var(--el-color-primary);
   margin-bottom: 8px;
+}
+
+.upload-tip-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: #5a6c8f;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.upload-tip-list li + li {
+  margin-top: 4px;
 }
 
 @media (max-width: 992px) {
