@@ -78,6 +78,14 @@ graph TD
 - **文档**：Springdoc OpenAPI 生成 Swagger 接口文档。
 - **监控**：Spring Boot Actuator + Micrometer（Prometheus）。
 
+### 数据导入示例
+
+仓库提供了一个可直接导入的示例文件 [`docs/import-sample.csv`](./import-sample.csv)。
+
+- 覆盖系统当前内置的“云南省”“昆明市”“小麦”“玉米”等基础数据，也包含一个新的“楚雄州”和“马铃薯”记录，便于验证自动建档逻辑。
+- 表头已经按照 `DataImportService` 的同义词映射准备，包含作物、地区、年份、播种面积、产量、单产、平均价格、数据来源、采集日期等字段，且单位设置可触发自动换算（如“千公顷”“万吨”“元/吨”）。
+- 导入后应能看到任务进度正常推进，并在进度详情页预览到 4 条数据，其中新增作物和地区会在基础库中自动创建。
+
 ### Python 预测服务
 - 运行于独立容器或虚拟环境，提供 REST/gRPC 接口。
 - 使用 `pmdarima`、`prophet`、`torch`/`tensorflow` 实现 ARIMA、Prophet、LSTM 模型。
