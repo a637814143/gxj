@@ -100,6 +100,8 @@ graph TD
 | --- | --- | --- |
 | `dataset_yield_record` | 作物年均单产 | `id`(PK)、`crop_id`(FK)、`region_id`(FK)、`year`、`sown_area`、`production`、`yield_per_hectare`、`average_price`、`data_source`、`collected_at` |
 | `dataset_price_record` | 作物价格序列 | `id`(PK)、`crop_id`(FK)、`region_id`(FK)、`record_date`、`price` |
+| `data_import_job` | 数据导入任务队列 | `id`(PK)、`task_id`、`dataset_name`、`dataset_type`、`total_rows`、`processed_rows`、`inserted_rows`、`updated_rows`、`skipped_rows`、`failed_rows`、`status`、`message`、`created_at`、`updated_at` |
+| `data_import_job_error` | 导入错误摘要 | `id`(PK)、`job_id`(FK)、`line_number`、`error_code`、`message`、`raw_value`、`created_at`、`updated_at` |
 
 ### 3.3 预测与评估
 

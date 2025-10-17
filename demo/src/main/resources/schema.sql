@@ -38,6 +38,46 @@ CREATE TABLE IF NOT EXISTS dataset_file (
     UNIQUE KEY uq_dataset_file_name (name)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '原始数据文件登记';
 
+CREATE TABLE IF NOT EXISTS data_import_job (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    task_id VARCHAR(64) NOT NULL,
+    dataset_name VARCHAR(128),
+    dataset_description VARCHAR(256),
+    dataset_type VARCHAR(32) NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    original_filename VARCHAR(256),
+    storage_path VARCHAR(512),
+    total_rows INT,
+    processed_rows INT,
+    inserted_rows INT,
+    updated_rows INT,
+    skipped_rows INT,
+    failed_rows INT,
+    warning_count INT,
+    message VARCHAR(512),
+    started_at DATETIME,
+    finished_at DATETIME,
+    warnings_payload TEXT,
+    preview_payload TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_import_task (task_id),
+    KEY idx_import_status (status)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '数据导入任务记录';
+
+CREATE TABLE IF NOT EXISTS data_import_job_error (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    job_id BIGINT UNSIGNED NOT NULL,
+    line_number INT,
+    error_code VARCHAR(64),
+    message VARCHAR(512),
+    raw_value VARCHAR(512),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_error_job (job_id),
+    CONSTRAINT fk_error_job FOREIGN KEY (job_id) REFERENCES data_import_job (id) ON DELETE CASCADE
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '数据导入错误摘要';
+
 CREATE TABLE IF NOT EXISTS dataset_yield_record (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     crop_id BIGINT UNSIGNED NOT NULL,
