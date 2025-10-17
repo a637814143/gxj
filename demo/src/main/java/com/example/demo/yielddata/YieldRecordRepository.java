@@ -10,7 +10,7 @@ import java.util.Optional;
 public interface YieldRecordRepository extends JpaRepository<YieldRecord, Long> {
 
     @Query("""
-            SELECT record FROM YieldRecord record
+            SELECT record FROM LegacyYieldRecord record
             WHERE (:cropId IS NULL OR record.crop.id = :cropId)
               AND (:regionId IS NULL OR record.region.id = :regionId)
               AND (:startYear IS NULL OR record.year >= :startYear)

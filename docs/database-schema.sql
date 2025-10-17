@@ -311,4 +311,24 @@ CREATE TABLE sys_log (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '系统操作日志';
 
+-- 初始化默认角色与管理员账户，支持重复执行
+INSERT INTO sys_role (code, name, description) VALUES
+    ('ADMIN', '系统管理员', '默认管理员角色'),
+    ('AGRICULTURE_DEPT', '农业部门用户', '农业主管部门默认角色'),
+    ('FARMER', '企业/农户用户', '企业/农户默认角色')
+ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description);
+
+INSERT INTO sys_user (username, password, full_name, email) VALUES
+    ('admin', '$2b$10$8MWkbhb1FAusZAaOMcBj1u1sxMlX5bdDLhmw98ouzYRR33givkqYa', '系统管理员', NULL)
+ON DUPLICATE KEY UPDATE password = VALUES(password), full_name = VALUES(full_name), email = VALUES(email);
+
+INSERT INTO sys_user_role (user_id, role_id)
+SELECT u.id, r.id
+FROM sys_user u
+JOIN sys_role r ON r.code = 'ADMIN'
+WHERE u.username = 'admin'
+  AND NOT EXISTS (
+    SELECT 1 FROM sys_user_role ur WHERE ur.user_id = u.id AND ur.role_id = r.id
+);
+
 SET FOREIGN_KEY_CHECKS = 1;

@@ -14,7 +14,7 @@ import jakarta.persistence.Table;
 
 import java.time.LocalDate;
 
-@Entity
+@Entity(name = "LegacyYieldRecord")
 @Table(name = "yield_records")
 public class YieldRecord {
 
