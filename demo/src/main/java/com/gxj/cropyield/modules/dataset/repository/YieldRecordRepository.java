@@ -4,10 +4,12 @@ import com.gxj.cropyield.modules.dataset.entity.YieldRecord;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
 
+@Repository("cropyieldYieldRecordRepository")
 public interface YieldRecordRepository extends JpaRepository<YieldRecord, Long> {
 
     List<YieldRecord> findByRegionIdAndCropIdOrderByYearAsc(Long regionId, Long cropId);

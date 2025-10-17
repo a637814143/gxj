@@ -8,11 +8,11 @@
         <version>3.5.6</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
-    <groupId>com.example</groupId>
-    <artifactId>demo</artifactId>
+    <groupId>com.gxj</groupId>
+    <artifactId>crop-yield-platform</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>demo</name>
-    <description>demo</description>
+    <name>crop-yield-platform</name>
+    <description>Crop yield data integration and analytics platform</description>
     <url/>
     <licenses>
         <license/>
@@ -64,6 +64,11 @@
             <groupId>org.apache.poi</groupId>
             <artifactId>poi-ooxml</artifactId>
             <version>5.2.5</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-text</artifactId>
+            <version>1.12.0</version>
         </dependency>
         <dependency>
             <groupId>com.github.librepdf</groupId>

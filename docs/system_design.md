@@ -234,7 +234,7 @@ app:
 logging:
   level:
     root: INFO
-    com.example.demo: DEBUG
+    com.gxj.cropyield: DEBUG
 ```
 
 **初始化脚本**

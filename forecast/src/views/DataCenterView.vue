@@ -131,32 +131,94 @@
         <div class="card-header">
           <div>
             <div class="card-title">导入任务记录</div>
-            <div class="card-subtitle">追踪历史导入批次、覆盖地区与产量指标</div>
+            <div class="card-subtitle">追踪历史导入批次与入库结果</div>
           </div>
-          <el-button @click="fetchYieldRecords" :loading="yieldLoading">刷新</el-button>
+          <div class="card-actions task-filter-bar">
+            <el-select v-model="taskFilter.status" size="small" class="task-filter-select" @change="applyTaskFilter">
+              <el-option label="全部状态" value="ALL" />
+              <el-option label="排队中" value="QUEUED" />
+              <el-option label="执行中" value="RUNNING" />
+              <el-option label="已完成" value="SUCCEEDED" />
+              <el-option label="失败" value="FAILED" />
+            </el-select>
+            <el-input
+              v-model="taskFilter.keyword"
+              size="small"
+              placeholder="按名称/文件搜索"
+              clearable
+              class="task-filter-input"
+              @clear="applyTaskFilter"
+              @keyup.enter.native="applyTaskFilter"
+            >
+              <template #append>
+                <el-button size="small" @click="applyTaskFilter">搜索</el-button>
+              </template>
+            </el-input>
+            <el-button size="small" @click="resetTaskFilter">重置</el-button>
+            <el-button size="small" @click="fetchImportTasks" :loading="taskLoading">刷新</el-button>
+          </div>
         </div>
       </template>
-      <el-table :data="yieldRecords" v-loading="yieldLoading" empty-text="暂未导入数据" :header-cell-style="tableHeaderStyle">
-        <el-table-column prop="year" label="年份" width="90" />
-        <el-table-column prop="regionName" label="地区" min-width="160" />
-        <el-table-column prop="cropName" label="作物" min-width="140" />
-        <el-table-column prop="production" label="总产量 (吨)" width="150">
+      <el-table
+        :data="importTasks"
+        v-loading="taskLoading"
+        empty-text="暂无导入任务"
+        :header-cell-style="tableHeaderStyle"
+        highlight-current-row
+        :current-row-key="selectedTaskId"
+        row-key="taskId"
+        @row-click="handleTaskRowClick"
+      >
+        <el-table-column prop="datasetName" label="任务/数据集" min-width="220">
           <template #default="{ row }">
-            {{ formatNumber(row.production) }}
+            <div class="task-name">{{ row.datasetName ?? '-' }}</div>
+            <div class="task-filename">{{ row.originalFilename ?? '-' }}</div>
           </template>
         </el-table-column>
-        <el-table-column prop="yieldPerHectare" label="单产 (吨/公顷)" width="170">
+        <el-table-column label="状态" width="120">
           <template #default="{ row }">
-            {{ formatNumber(row.yieldPerHectare) }}
+            <el-tag :type="statusTagType(row.status)" effect="light">{{ formatStatus(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="averagePrice" label="平均价格 (元/公斤)" width="190">
+        <el-table-column label="进度" width="120">
           <template #default="{ row }">
-            {{ formatNumber(row.averagePrice) }}
+            {{ formatProgress(row.progress) }}
           </template>
         </el-table-column>
-        <el-table-column prop="dataSource" label="数据来源" min-width="180" show-overflow-tooltip />
+        <el-table-column label="处理情况" min-width="180">
+          <template #default="{ row }">
+            新增 {{ row.insertedRows ?? 0 }} · 更新 {{ row.updatedRows ?? 0 }}
+          </template>
+        </el-table-column>
+        <el-table-column label="失败/跳过" width="140">
+          <template #default="{ row }">
+            {{ row.failedRows ?? 0 }} / {{ row.skippedRows ?? 0 }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="warningCount" label="预警" width="90" />
+        <el-table-column label="创建时间" width="180">
+          <template #default="{ row }">
+            {{ formatDate(row.createdAt) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="完成时间" width="180">
+          <template #default="{ row }">
+            {{ formatDate(row.finishedAt) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="message" label="任务摘要" min-width="240" show-overflow-tooltip />
       </el-table>
+      <el-pagination
+        v-if="taskPagination.total > taskPagination.size"
+        class="task-pagination"
+        layout="total, sizes, prev, pager, next, jumper"
+        :total="taskPagination.total"
+        :current-page="taskPagination.page"
+        :page-size="taskPagination.size"
+        :page-sizes="[10, 20, 50]"
+        @current-change="handleTaskPageChange"
+        @size-change="handleTaskSizeChange"
+      />
       <div v-if="importWarnings.length" class="warnings">
         <el-alert
           v-for="(warning, index) in importWarnings"
@@ -166,6 +228,22 @@
           show-icon
           :closable="false"
         />
+      </div>
+      <div v-if="selectedTaskDetail?.errors?.length" class="error-summary">
+        <el-alert
+          v-for="error in selectedTaskDetail.errors"
+          :key="`${error.rowNumber}-${error.message}`"
+          type="error"
+          show-icon
+          :closable="false"
+        >
+          <template #title>
+            第 {{ error.rowNumber > 0 ? error.rowNumber : '-' }} 行：{{ error.message }}
+          </template>
+          <template v-if="error.rawValue" #description>
+            原始值：{{ error.rawValue }}
+          </template>
+        </el-alert>
       </div>
     </el-card>
 
@@ -195,7 +273,7 @@
             drag
             :auto-upload="false"
             :file-list="uploadFileList"
-            accept=".xls,.xlsx"
+            accept=".xls,.xlsx,.csv"
             :limit="1"
             :on-change="handleFileChange"
             :on-remove="handleFileRemove"
@@ -222,15 +300,22 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import apiClient from '../services/http'
 
 const datasets = ref([])
 const datasetLoading = ref(false)
-const yieldRecords = ref([])
-const yieldLoading = ref(false)
+
+const importTasks = ref([])
+const taskLoading = ref(false)
+const taskFilter = reactive({ status: 'ALL', keyword: '' })
+const taskPagination = reactive({ page: 1, size: 10, total: 0 })
+
+const selectedTaskId = ref('')
+const selectedTaskDetail = ref(null)
+
 const importWarnings = ref([])
 const importPreview = ref([])
 const lastImportStats = ref(null)
@@ -249,6 +334,13 @@ const datasetTypeOptions = [
   { value: 'SOIL', label: '土壤' }
 ]
 
+const statusDisplayMap = {
+  QUEUED: '排队中',
+  RUNNING: '执行中',
+  SUCCEEDED: '已完成',
+  FAILED: '失败'
+}
+
 const uploadDialogVisible = ref(false)
 const uploadFileList = ref([])
 const uploading = ref(false)
@@ -258,18 +350,14 @@ const uploadForm = reactive({
   description: ''
 })
 
+let taskPollTimer = null
+
 const tableHeaderStyle = () => ({
   background: '#f4f7fb',
   color: '#3c4b66',
   fontWeight: 600,
   fontSize: '13px'
 })
-
-function formatTrend(value) {
-  if (value > 0) return `较昨日 +${value}`
-  if (value < 0) return `较昨日 ${value}`
-  return '较昨日 持平'
-}
 
 function formatDate(value) {
   if (!value) return '-'
@@ -291,68 +379,87 @@ function formatNumber(value) {
   return number.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 }
 
+function formatStatus(status) {
+  return statusDisplayMap[status] ?? status ?? '-'
+}
+
+function statusTagType(status) {
+  switch (status) {
+    case 'SUCCEEDED':
+      return 'success'
+    case 'FAILED':
+      return 'danger'
+    case 'RUNNING':
+      return 'warning'
+    default:
+      return 'info'
+  }
+}
+
+function formatProgress(progress) {
+  const value = Number(progress ?? 0)
+  return `${Math.round(value * 100)}%`
+}
+
+function formatTrend(value) {
+  if (value > 0) return '状态提升'
+  if (value < 0) return '请关注'
+  return '正常'
+}
+
 const highlightStats = computed(() => {
-  const total = datasets.value.length
-  const typeCount = total
+  const totalDatasets = datasets.value.length
+  const typeCount = totalDatasets
     ? new Set(datasets.value.map(item => datasetTypeMap[item.type] ?? item.type ?? '其他')).size
     : 0
-  const latest = datasets.value
+  const latestDataset = datasets.value
     .slice()
     .sort((a, b) => new Date(b?.updatedAt ?? 0).getTime() - new Date(a?.updatedAt ?? 0).getTime())[0]
-
-  const toRecordTime = record => {
-    const raw = record?.updatedAt ?? (record?.year ? `${record.year}` : null)
-    if (!raw) return 0
-    const parsed = new Date(raw)
-    return Number.isNaN(parsed.getTime()) ? Number(record?.year ?? 0) : parsed.getTime()
-  }
-
-  const recentImport = yieldRecords.value
-    .slice()
-    .sort((a, b) => toRecordTime(b) - toRecordTime(a))[0]
-
+  const summary = selectedTaskDetail.value?.summary
+  const totalTasks = taskPagination.total
+  const latestTask = importTasks.value[0]
   return [
     {
       label: '已导入数据集',
-      value: `${total} 个`,
+      value: `${totalDatasets} 个`,
       sub: typeCount ? `覆盖 ${typeCount} 类业务主题` : '等待导入基础数据'
     },
     {
-      label: '最近更新',
-      value: latest ? formatDate(latest.updatedAt) : '暂无记录',
-      sub: latest ? `文件：${latest.name}` : '点击右侧按钮上传'
+      label: '当前任务状态',
+      value: summary ? formatStatus(summary.status) : '暂无任务',
+      sub: summary
+        ? `进度 ${formatProgress(summary.progress ?? 0)}`
+        : '点击右侧按钮上传'
     },
     {
       label: '历史导入批次',
-      value: `${yieldRecords.value.length} 次`,
-      sub: recentImport
-        ? `最新批次：${recentImport.year ?? '未知'} · ${recentImport.regionName ?? '-'}`
-        : '尚未同步导入记录'
+      value: `${totalTasks} 次`,
+      sub: latestTask ? `最新任务：${formatDate(latestTask.createdAt)}` : '尚未同步导入记录'
     }
   ]
 })
 
 const quickOverview = computed(() => {
   const stats = lastImportStats.value
-  const inserted = stats?.inserted ?? 0
-  const updated = stats?.updated ?? 0
-  const processed = inserted + updated
+  const inserted = stats?.insertedRows ?? 0
+  const updated = stats?.updatedRows ?? 0
+  const processed = stats?.processedRows ?? 0
   return [
     {
-      label: '待处理预警',
-      value: `${importWarnings.value.length} 项`,
-      trend: importWarnings.value.length > 0 ? 1 : 0
+      label: '任务状态',
+      value: formatStatus(stats?.status),
+      trend: stats?.status === 'FAILED' ? -1 : stats?.status === 'SUCCEEDED' ? 1 : 0
     },
     {
-      label: '今日上传',
-      value: uploadFileList.value.length ? `${uploadFileList.value.length} 份` : '0 份',
-      trend: uploadFileList.value.length ? 1 : 0
+      label: '当前进度',
+      value: formatProgress(stats?.progress ?? 0),
+      trend: (stats?.progress ?? 0) > 0 ? 1 : 0
     },
     {
-      label: '本次入库',
+      label: '本批数据',
       value: processed ? `${processed} 条` : '0 条',
-      trend: processed ? 1 : 0,
-      sub: processed ? `新增 ${inserted} · 更新 ${updated}` : '待导入数据'
+      sub: `新增 ${inserted} · 更新 ${updated}`,
+      trend: processed ? 1 : 0
     }
   ]
 })
@@ -361,12 +468,14 @@ const importSummaryBadges = computed(() => {
   if (!lastImportStats.value) {
     return []
   }
-  const { total = 0, inserted = 0, updated = 0, skipped = 0 } = lastImportStats.value
+  const summary = lastImportStats.value
   return [
-    { label: '识别总行数', value: `${total} 行` },
-    { label: '新增入库', value: `${inserted} 条` },
-    { label: '更新覆盖', value: `${updated} 条` },
-    { label: '自动跳过', value: `${skipped} 条` }
+    { label: '识别总行数', value: `${summary.totalRows ?? 0} 行` },
+    { label: '已处理', value: `${summary.processedRows ?? 0} 条` },
+    { label: '新增入库', value: `${summary.insertedRows ?? 0} 条` },
+    { label: '更新覆盖', value: `${summary.updatedRows ?? 0} 条` },
+    { label: '跳过记录', value: `${summary.skippedRows ?? 0} 条` },
+    { label: '失败记录', value: `${summary.failedRows ?? 0} 条` }
   ]
 })
 
@@ -388,16 +497,150 @@ const fetchDatasets = async () => {
   }
 }
 
-const fetchYieldRecords = async () => {
-  yieldLoading.value = true
+const fetchImportTasks = async (silent = false) => {
+  taskLoading.value = true
   try {
-    const { data } = await apiClient.get('/api/yields')
-    yieldRecords.value = Array.isArray(data) ? data : []
+    const params = {
+      page: taskPagination.page - 1,
+      size: taskPagination.size
+    }
+    if (taskFilter.status && taskFilter.status !== 'ALL') {
+      params.status = taskFilter.status
+    }
+    if (taskFilter.keyword.trim()) {
+      params.keyword = taskFilter.keyword.trim()
+    }
+    const { data } = await apiClient.get('/api/data-import/tasks', { params })
+    const payload = data?.data ?? {}
+    importTasks.value = Array.isArray(payload.content) ? payload.content : []
+    taskPagination.total = Number(payload.totalElements ?? 0)
+    taskPagination.size = Number(payload.size ?? taskPagination.size)
+    const currentExists = importTasks.value.some(item => item.taskId === selectedTaskId.value)
+    if (!importTasks.value.length) {
+      selectedTaskId.value = ''
+      await fetchTaskDetail('', true)
+    } else if (!currentExists) {
+      selectedTaskId.value = importTasks.value[0].taskId
+      await fetchTaskDetail(selectedTaskId.value, true)
+    }
   } catch (error) {
-    ElMessage.error(error?.response?.data?.message || '加载导入数据失败')
+    if (!silent) {
+      ElMessage.error(error?.response?.data?.message || '加载导入任务失败')
+    }
   } finally {
-    yieldLoading.value = false
+    taskLoading.value = false
   }
+}
+
+const fetchTaskDetail = async (taskId, silent = false) => {
+  if (!taskId) {
+    selectedTaskDetail.value = null
+    lastImportStats.value = null
+    importWarnings.value = []
+    importPreview.value = []
+    return
+  }
+  try {
+    const { data } = await apiClient.get(`/api/data-import/tasks/${taskId}`)
+    const detail = data?.data
+    selectedTaskDetail.value = detail
+    const summary = detail?.summary
+    if (summary) {
+      lastImportStats.value = {
+        status: summary.status,
+        progress: summary.progress,
+        totalRows: Number(summary.totalRows ?? 0),
+        processedRows: Number(summary.processedRows ?? 0),
+        insertedRows: Number(summary.insertedRows ?? 0),
+        updatedRows: Number(summary.updatedRows ?? 0),
+        skippedRows: Number(summary.skippedRows ?? 0),
+        failedRows: Number(summary.failedRows ?? 0),
+        warningCount: Number(summary.warningCount ?? 0)
+      }
+    } else {
+      lastImportStats.value = null
+    }
+    importWarnings.value = Array.isArray(detail?.warnings) ? detail.warnings : []
+    importPreview.value = Array.isArray(detail?.preview) ? detail.preview : []
+  } catch (error) {
+    if (!silent) {
+      ElMessage.error(error?.response?.data?.message || '获取任务详情失败')
+    }
+  }
+}
+
+const startTaskPolling = () => {
+  stopTaskPolling()
+  taskPollTimer = window.setInterval(() => {
+    if (selectedTaskId.value) {
+      fetchTaskDetail(selectedTaskId.value, true)
+    }
+  }, 5000)
+}
+
+const stopTaskPolling = () => {
+  if (taskPollTimer) {
+    clearInterval(taskPollTimer)
+    taskPollTimer = null
+  }
+}
+
+watch(
+  () => selectedTaskDetail.value?.summary?.status,
+  (status, prevStatus) => {
+    if (status === 'RUNNING' || status === 'QUEUED') {
+      startTaskPolling()
+    } else {
+      stopTaskPolling()
+      if (status && status !== prevStatus && (status === 'SUCCEEDED' || status === 'FAILED')) {
+        fetchImportTasks(true)
+        if (status === 'SUCCEEDED') {
+          fetchDatasets()
+        }
+      }
+    }
+  }
+)
+
+const applyTaskFilter = async () => {
+  taskPagination.page = 1
+  await fetchImportTasks()
+  if (selectedTaskId.value) {
+    await fetchTaskDetail(selectedTaskId.value, true)
+  }
+}
+
+const resetTaskFilter = async () => {
+  taskFilter.status = 'ALL'
+  taskFilter.keyword = ''
+  taskPagination.page = 1
+  await fetchImportTasks()
+  if (selectedTaskId.value) {
+    await fetchTaskDetail(selectedTaskId.value, true)
+  }
+}
+
+const handleTaskPageChange = async page => {
+  taskPagination.page = page
+  await fetchImportTasks(true)
+  if (selectedTaskId.value) {
+    await fetchTaskDetail(selectedTaskId.value, true)
+  }
+}
+
+const handleTaskSizeChange = async size => {
+  taskPagination.size = size
+  taskPagination.page = 1
+  await fetchImportTasks(true)
+  if (selectedTaskId.value) {
+    await fetchTaskDetail(selectedTaskId.value, true)
+  }
+}
+
+const handleTaskRowClick = async row => {
+  if (!row?.taskId) return
+  selectedTaskId.value = row.taskId
+  await fetchTaskDetail(row.taskId)
 }
 
 const beforeUpload = file => {
@@ -444,17 +687,19 @@ const submitUpload = async () => {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
     const result = data?.data
-    importWarnings.value = result?.warnings ?? []
-    lastImportStats.value = {
-      total: Number(result?.totalRows ?? 0),
-      inserted: Number(result?.insertedRows ?? 0),
-      updated: Number(result?.updatedRows ?? 0),
-      skipped: Number(result?.skippedRows ?? 0)
+    if (result?.taskId) {
+      selectedTaskId.value = result.taskId
+      ElMessage.success('导入任务已提交，系统正在后台处理')
+    } else {
+      ElMessage.success('导入任务已提交')
     }
-    importPreview.value = Array.isArray(result?.preview) ? result.preview : []
-    ElMessage.success(`导入完成，新增 ${result?.insertedRows ?? 0} 条，更新 ${result?.updatedRows ?? 0} 条`)
     uploadDialogVisible.value = false
-    await Promise.all([fetchDatasets(), fetchYieldRecords()])
+    importWarnings.value = []
+    importPreview.value = []
+    await fetchImportTasks(true)
+    if (result?.taskId) {
+      await fetchTaskDetail(result.taskId)
+    }
   } catch (error) {
     const message = error?.response?.data?.message || error.message || '导入失败'
     ElMessage.error(message)
@@ -476,7 +721,14 @@ const resetUploadForm = () => {
 }
 
 onMounted(async () => {
-  await Promise.all([fetchDatasets(), fetchYieldRecords()])
+  await Promise.all([fetchDatasets(), fetchImportTasks(true)])
+  if (selectedTaskId.value) {
+    await fetchTaskDetail(selectedTaskId.value, true)
+  }
+})
+
+onBeforeUnmount(() => {
+  stopTaskPolling()
 })
 </script>
 
@@ -682,6 +934,46 @@ onMounted(async () => {
   gap: 6px;
   color: rgba(255, 255, 255, 0.85);
   font-size: 13px;
+}
+
+.task-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.task-filter-select {
+  width: 120px;
+}
+
+.task-filter-input {
+  width: 240px;
+}
+
+.task-name {
+  font-weight: 600;
+  color: #3c4b66;
+}
+
+.task-filename {
+  font-size: 12px;
+  color: #8a94ad;
+  margin-top: 2px;
+}
+
+.task-pagination {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.error-summary {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .hero-decor {
