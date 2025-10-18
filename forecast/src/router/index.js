@@ -40,7 +40,7 @@ const routes = [
         path: 'visualization',
         name: 'visualization',
         component: () => import('../views/VisualizationCenterView.vue'),
-        meta: { requiresAuth: true, roles: ['ADMIN', 'AGRICULTURE_DEPT'] }
+        meta: { requiresAuth: true, roles: ['ADMIN', 'AGRICULTURE_DEPT', 'FARMER'] }
       },
       {
         path: 'forecast',
