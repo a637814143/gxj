@@ -8,7 +8,7 @@ public record UserResponse(
     String username,
     String fullName,
     String email,
-    Set<String> roles,
+    Set<RoleSummary> roles,
     LocalDateTime createdAt
 ) {
 }

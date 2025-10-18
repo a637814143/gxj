@@ -55,6 +55,12 @@ const routes = [
         meta: { requiresAuth: true, roles: ['ADMIN', 'AGRICULTURE_DEPT', 'FARMER'] }
       },
       {
+        path: 'users',
+        name: 'users',
+        component: () => import('../views/UserManagementView.vue'),
+        meta: { requiresAuth: true, roles: ['ADMIN'] }
+      },
+      {
         path: 'settings',
         name: 'settings',
         component: () => import('../views/SystemSettingView.vue'),

@@ -18,6 +18,9 @@
         <el-menu-item index="/report" :route="{ name: 'report' }">
           <span>报告中心</span>
         </el-menu-item>
+        <el-menu-item index="/users" :route="{ name: 'users' }">
+          <span>用户管理</span>
+        </el-menu-item>
         <el-menu-item index="/settings" :route="{ name: 'settings' }">
           <span>系统设置</span>
         </el-menu-item>
@@ -56,6 +59,7 @@ const titles = {
   visualization: '数据可视化洞察',
   forecast: '预测建模与任务',
   report: '报告输出与分享',
+  users: '用户与部门管理',
   settings: '系统设置'
 }
 
