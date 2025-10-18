@@ -46,7 +46,7 @@
             <div class="card-title">分析报告列表</div>
             <div class="card-subtitle">追踪各业务主题的报告生成时间与核心摘要</div>
           </div>
-          <el-button type="primary" @click="createReport">生成报告</el-button>
+          <el-button v-if="canGenerateReport" type="primary" @click="createReport">生成报告</el-button>
         </div>
       </template>
       <el-empty v-if="!reports.length" description="暂未生成报告" />
@@ -75,6 +75,7 @@
 <script setup>
 import { computed } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useAuthorization } from '../composables/useAuthorization'
 
 const reports = [
   {
@@ -87,6 +88,9 @@ const reports = [
     coverage: '2023 Q4 - 2024 Q1'
   }
 ]
+
+const { hasRole } = useAuthorization()
+const canGenerateReport = computed(() => hasRole(['ADMIN', 'AGRICULTURE_DEPT']))
 
 const highlightStats = computed(() => {
   const total = reports.length
@@ -129,6 +133,10 @@ function formatTrend(value) {
 }
 
 const createReport = () => {
+  if (!canGenerateReport.value) {
+    ElMessage.warning('当前账号没有生成报告的权限')
+    return
+  }
   ElMessage.info('后续将接入报告生成流程')
 }
 </script>
