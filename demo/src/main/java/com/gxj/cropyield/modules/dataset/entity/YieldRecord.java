@@ -3,6 +3,7 @@ package com.gxj.cropyield.modules.dataset.entity;
 import com.gxj.cropyield.common.model.BaseEntity;
 import com.gxj.cropyield.modules.base.entity.Crop;
 import com.gxj.cropyield.modules.base.entity.Region;
+import com.gxj.cropyield.modules.dataset.entity.DatasetFile;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -21,6 +22,10 @@ public class YieldRecord extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "region_id", nullable = false)
     private Region region;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "dataset_file_id")
+    private DatasetFile datasetFile;
 
     @Column(nullable = false)
     private Integer year;
@@ -57,6 +62,14 @@ public class YieldRecord extends BaseEntity {
 
     public void setRegion(Region region) {
         this.region = region;
+    }
+
+    public DatasetFile getDatasetFile() {
+        return datasetFile;
+    }
+
+    public void setDatasetFile(DatasetFile datasetFile) {
+        this.datasetFile = datasetFile;
     }
 
     public Integer getYear() {

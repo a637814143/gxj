@@ -33,13 +33,13 @@ ON DUPLICATE KEY UPDATE
     description = VALUES(description);
 
 -- 初始化作物年均单产示例数据
-INSERT INTO dataset_yield_record (id, crop_id, region_id, year, sown_area, production, yield_per_hectare, average_price, data_source, collected_at)
+INSERT INTO dataset_yield_record (id, dataset_file_id, crop_id, region_id, year, sown_area, production, yield_per_hectare, average_price, data_source, collected_at)
 VALUES
-    (1, 1, 2, 2021, 356.2, 198.4, 5.6, 2.35, '云南省农业农村厅年报', '2021-12-31'),
-    (2, 1, 2, 2022, 360.5, 209.0, 5.8, 2.38, '云南省农业农村厅年报', '2022-12-31'),
-    (3, 1, 2, 2023, 365.0, 219.0, 6.0, 2.42, '云南省农业农村厅年报', '2023-12-31'),
-    (4, 2, 2, 2023, 420.8, 353.5, 8.4, 2.15, '云南省农业农村厅年报', '2023-12-31'),
-    (5, 1, 3, 2023, 52.4, 33.0, 6.3, 2.45, '昆明市统计局', '2023-12-31')
+    (1, 1, 1, 2, 2021, 356.2, 198.4, 5.6, 2.35, '云南省农业农村厅年报', '2021-12-31'),
+    (2, 1, 1, 2, 2022, 360.5, 209.0, 5.8, 2.38, '云南省农业农村厅年报', '2022-12-31'),
+    (3, 1, 1, 2, 2023, 365.0, 219.0, 6.0, 2.42, '云南省农业农村厅年报', '2023-12-31'),
+    (4, 1, 2, 2, 2023, 420.8, 353.5, 8.4, 2.15, '云南省农业农村厅年报', '2023-12-31'),
+    (5, 1, 1, 3, 2023, 52.4, 33.0, 6.3, 2.45, '昆明市统计局', '2023-12-31')
 ON DUPLICATE KEY UPDATE
     sown_area = VALUES(sown_area),
     production = VALUES(production),
@@ -49,13 +49,13 @@ ON DUPLICATE KEY UPDATE
     collected_at = VALUES(collected_at);
 
 -- 初始化作物价格示例数据
-INSERT INTO dataset_price_record (id, crop_id, region_id, record_date, price)
+INSERT INTO dataset_price_record (id, dataset_file_id, crop_id, region_id, record_date, price)
 VALUES
-    (1, 1, 2, '2023-05-01', 2360.00),
-    (2, 1, 2, '2023-06-01', 2385.00),
-    (3, 1, 2, '2023-07-01', 2402.00),
-    (4, 2, 2, '2023-07-01', 2150.00),
-    (5, 1, 3, '2023-07-01', 2450.00)
+    (1, 2, 1, 2, '2023-05-01', 2360.00),
+    (2, 2, 1, 2, '2023-06-01', 2385.00),
+    (3, 2, 1, 2, '2023-07-01', 2402.00),
+    (4, 2, 2, 2, '2023-07-01', 2150.00),
+    (5, 2, 1, 3, '2023-07-01', 2450.00)
 ON DUPLICATE KEY UPDATE
     price = VALUES(price);
 

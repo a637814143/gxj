@@ -367,7 +367,7 @@ const deleteSelectedDatasets = async () => {
     await apiClient.delete('/api/datasets/files', { data: ids })
     ElMessage.success('已删除选中的数据集')
     clearDatasetSelection()
-    await fetchDatasets()
+    await Promise.all([fetchDatasets(), fetchImportTasks(true)])
   } catch (error) {
     ElMessage.error(error?.response?.data?.message || '删除数据集失败')
   } finally {
@@ -380,7 +380,7 @@ const confirmDeleteDatasets = () => {
     return
   }
   ElMessageBox.confirm(
-    '删除后数据将无法恢复，且不会影响历史导入任务记录。是否继续？',
+    '删除后将同步清理对应的入库数据，并在导入任务记录中保留删除日志。是否继续？',
     '删除数据集',
     {
       confirmButtonText: '删除',

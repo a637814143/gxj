@@ -18,6 +18,8 @@ public interface YieldRecordRepository extends JpaRepository<YieldRecord, Long> 
 
     List<YieldRecord> findTop5ByOrderByYearDesc();
 
+    long deleteByDatasetFileId(Long datasetFileId);
+
     @Query("""
             SELECT record FROM YieldRecord record
             WHERE (:cropId IS NULL OR record.crop.id = :cropId)
