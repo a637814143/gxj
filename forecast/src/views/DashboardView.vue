@@ -71,7 +71,8 @@
           <el-col :xs="24" :sm="12" :md="6">
             <el-form-item label="年度批次">
               <el-select v-model="filterForm.year" placeholder="请选择">
-                <el-option v-for="item in yearOptions" :key="item" :label="item" :value="item" />
+            <el-option label="全部年份" :value="null" />
+            <el-option v-for="item in yearOptions" :key="item" :label="item" :value="item" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -99,78 +100,57 @@
           </div>
         </div>
       </template>
-      <el-table :data="tableData" :border="false" :stripe="true" :header-cell-style="tableHeaderStyle" :cell-style="tableCellStyle">
-        <el-table-column prop="batch" label="批次" width="110" />
-        <el-table-column prop="date" label="日期" width="140" />
-        <el-table-column prop="region" label="地区" min-width="160" />
-        <el-table-column prop="crop" label="作物" min-width="140" />
-        <el-table-column prop="acreage" label="种植面积 (公顷)" min-width="160">
-          <template #default="{ row }">{{ formatNumber(row.acreage) }}</template>
+      <el-table
+        :data="filteredTableData"
+        :border="false"
+        :stripe="true"
+        :header-cell-style="tableHeaderStyle"
+        :cell-style="tableCellStyle"
+        v-loading="summaryLoading"
+        empty-text="暂无可用数据"
+      >
+        <el-table-column prop="year" label="年份" width="110" />
+        <el-table-column prop="regionName" label="地区" min-width="180" />
+        <el-table-column prop="cropName" label="作物" min-width="140" />
+        <el-table-column label="播种面积 (公顷)" min-width="160">
+          <template #default="{ row }">{{ formatNumber(row.sownArea) }}</template>
         </el-table-column>
-        <el-table-column prop="yield" label="预测产量 (吨)" min-width="150">
-          <template #default="{ row }">{{ formatNumber(row.yield) }}</template>
+        <el-table-column label="总产量 (吨)" min-width="150">
+          <template #default="{ row }">{{ formatNumber(row.production) }}</template>
         </el-table-column>
-        <el-table-column prop="accuracy" label="模型准确率" width="140">
-          <template #default="{ row }">{{ row.accuracy }}%</template>
+        <el-table-column label="单产 (吨/公顷)" min-width="150">
+          <template #default="{ row }">{{ formatNumber(row.yieldPerHectare) }}</template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" width="140">
-          <template #default="{ row }">
-            <el-tag :type="statusTypeMap[row.status]">{{ statusLabelMap[row.status] }}</el-tag>
-          </template>
+        <el-table-column label="平均价格 (元/公斤)" min-width="180">
+          <template #default="{ row }">{{ formatNumber(row.averagePrice) }}</template>
         </el-table-column>
-        <el-table-column prop="operator" label="负责人" width="120" />
+        <el-table-column label="预计收益 (万元)" min-width="160">
+          <template #default="{ row }">{{ formatNumber(row.estimatedRevenue) }}</template>
+        </el-table-column>
+        <el-table-column label="数据日期" width="160">
+          <template #default="{ row }">{{ formatDate(row.collectedAt) }}</template>
+        </el-table-column>
       </el-table>
       <div class="table-footer">
-        <div class="table-tip">共 {{ tableData.length }} 条记录，更多数据请使用筛选条件查询</div>
-        <el-pagination layout="prev, pager, next" :total="120" :page-size="10" small background />
+        <div class="table-tip">共 {{ filteredTableData.length }} 条记录，可通过筛选条件查看特定地区或作物</div>
       </div>
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { computed, reactive } from 'vue'
+import { computed, reactive, ref, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
+import apiClient from '../services/http'
 
-const highlightStats = [
-  { label: '接入地区', value: '48 个地市', sub: '本月新增 4 个重点区域' },
-  { label: '监测作物', value: '26 种', sub: '覆盖粮食、经济与特色作物' },
-  { label: '数据文件', value: '312 份', sub: '含历史与实时监测数据' },
-  { label: '模型任务', value: '18 次', sub: '近 30 天内完成的预测任务' }
-]
-
-const quickOverview = [
-  { label: '今日导入数据', value: '12 份', trend: 3 },
-  { label: '模型运行', value: '5 次', trend: 1 },
-  { label: '预警提示', value: '1 项', trend: -1 }
-]
-
-const reminders = [
-  '西南片区玉米产量预测需人工复核',
-  '请关注华北冬小麦数据采集进度',
-  '新模型版本验证通过，可安排上线'
-]
+const summary = ref(null)
+const summaryLoading = ref(false)
 
 const currentYear = new Date().getFullYear()
-const yearOptions = computed(() => {
-  return Array.from({ length: 6 }, (_, index) => currentYear - index)
-})
+const yearOptions = computed(() => Array.from({ length: 6 }, (_, index) => currentYear - index))
 
-const cropOptions = [
-  { label: '全部作物', value: 'ALL' },
-  { label: '水稻', value: 'RICE' },
-  { label: '小麦', value: 'WHEAT' },
-  { label: '玉米', value: 'CORN' },
-  { label: '大豆', value: 'SOYBEAN' }
-]
-
-const regionOptions = [
-  { label: '全部区域', value: 'ALL' },
-  { label: '东北产粮区', value: 'NE' },
-  { label: '华北平原', value: 'HB' },
-  { label: '长江中下游', value: 'YRD' },
-  { label: '西南丘陵区', value: 'SW' }
-]
-
+const cropOptions = ref([{ label: '全部作物', value: 'ALL' }])
+const regionOptions = ref([{ label: '全部区域', value: 'ALL' }])
 const cycleOptions = [
   { label: '全年', value: 'ALL' },
   { label: '春季', value: 'SPRING' },
@@ -180,104 +160,190 @@ const cycleOptions = [
 ]
 
 const filterForm = reactive({
-  crop: cropOptions[0].value,
-  region: regionOptions[0].value,
-  year: yearOptions.value[0],
-  cycle: cycleOptions[0].value
+  crop: 'ALL',
+  region: 'ALL',
+  year: null,
+  cycle: 'ALL'
 })
 
-const tableData = [
-  {
-    batch: '2024-Q1-01',
-    date: '2024-03-28',
-    region: '东北产粮区 / 黑龙江',
-    crop: '玉米',
-    acreage: 12840,
-    yield: 74200,
-    accuracy: 92.4,
-    status: 'FINISHED',
-    operator: '王志强'
-  },
-  {
-    batch: '2024-Q1-02',
-    date: '2024-03-25',
-    region: '华北平原 / 河北',
-    crop: '冬小麦',
-    acreage: 10320,
-    yield: 56120,
-    accuracy: 90.1,
-    status: 'FINISHED',
-    operator: '李晓梅'
-  },
-  {
-    batch: '2024-Q1-03',
-    date: '2024-03-22',
-    region: '长江中下游 / 湖南',
-    crop: '早稻',
-    acreage: 8720,
-    yield: 43860,
-    accuracy: 88.6,
-    status: 'RUNNING',
-    operator: '陈建军'
-  },
-  {
-    batch: '2024-Q1-04',
-    date: '2024-03-18',
-    region: '西南丘陵区 / 四川',
-    crop: '油菜',
-    acreage: 6920,
-    yield: 25840,
-    accuracy: 84.3,
-    status: 'WARNING',
-    operator: '杨慧敏'
-  },
-  {
-    batch: '2024-Q1-05',
-    date: '2024-03-14',
-    region: '东北产粮区 / 吉林',
-    crop: '大豆',
-    acreage: 7860,
-    yield: 31670,
-    accuracy: 89.7,
-    status: 'FINISHED',
-    operator: '赵立新'
+const highlightStats = computed(() => {
+  const data = summary.value
+  if (!data) {
+    return [
+      { label: '总产量', value: '加载中…', sub: '正在请求数据库数据' },
+      { label: '播种面积', value: '加载中…', sub: '请稍候' },
+      { label: '平均单产', value: '加载中…', sub: '请稍候' },
+      { label: '入库记录', value: '加载中…', sub: '等待导入数据' }
+    ]
   }
-]
+  return [
+    {
+      label: '总产量',
+      value: `${formatNumber(data.totalProduction)} 吨`,
+      sub: `覆盖 ${formatInteger(data.recordCount)} 条记录`
+    },
+    {
+      label: '播种面积',
+      value: `${formatNumber(data.totalSownArea)} 公顷`,
+      sub: '包含所有地区累计数据'
+    },
+    {
+      label: '平均单产',
+      value: `${formatNumber(data.averageYield)} 吨/公顷`,
+      sub: '基于最新导入数据计算'
+    },
+    {
+      label: '入库记录',
+      value: `${formatInteger(data.recordCount)} 条`,
+      sub: '导入任务实时汇总'
+    }
+  ]
+})
 
-const statusLabelMap = {
-  FINISHED: '已完成',
-  RUNNING: '运行中',
-  WARNING: '需关注'
+const quickOverview = computed(() => {
+  const data = summary.value
+  const cropCount = data?.cropStructure?.length ?? 0
+  const regionCount = data?.regionComparisons?.length ?? 0
+  const forecastCount = data?.forecastOutlook?.length ?? 0
+  return [
+    { label: '监测作物', value: `${cropCount} 种`, trend: cropCount ? 1 : 0 },
+    { label: '覆盖地区', value: `${regionCount} 个`, trend: regionCount ? 1 : 0 },
+    { label: '预测展望', value: `${forecastCount} 期`, trend: forecastCount ? 1 : 0 }
+  ]
+})
+
+const reminders = computed(() => {
+  const data = summary.value
+  if (!data) {
+    return ['正在加载最新的产量与价格统计…', '请稍候']
+  }
+  const list = []
+  const topCrop = data.cropStructure?.[0]
+  if (topCrop) {
+    list.push(`产量最高的作物：${topCrop.cropName}，占比 ${formatPercent(topCrop.share)}`)
+  }
+  const topRegion = data.regionComparisons?.[0]
+  if (topRegion) {
+    list.push(`${topRegion.regionName} ${formatNumber(topRegion.production)} 吨，平均单产 ${formatNumber(topRegion.yieldPerHectare)} 吨/公顷`)
+  }
+  const latestRecord = data.recentRecords?.[0]
+  if (latestRecord) {
+    list.push(`最新入库：${latestRecord.year} 年 ${latestRecord.regionName} ${latestRecord.cropName} 数据`)
+  }
+  if (!list.length) {
+    list.push('暂无需要关注的提醒，欢迎导入最新的作物数据。')
+  }
+  return list
+})
+
+const tableData = computed(() => summary.value?.recentRecords ?? [])
+
+const filteredTableData = computed(() => {
+  let records = tableData.value
+  if (filterForm.crop && filterForm.crop !== 'ALL') {
+    records = records.filter(record => record.cropName === filterForm.crop)
+  }
+  if (filterForm.region && filterForm.region !== 'ALL') {
+    records = records.filter(record => record.regionName === filterForm.region)
+  }
+  if (filterForm.year !== null) {
+    records = records.filter(record => record.year === Number(filterForm.year))
+  }
+  return records
+})
+
+const searching = computed(() => summaryLoading.value)
+
+const updateFilterOptions = () => {
+  const data = summary.value
+  if (!data) {
+    cropOptions.value = [{ label: '全部作物', value: 'ALL' }]
+    regionOptions.value = [{ label: '全部区域', value: 'ALL' }]
+    return
+  }
+  const crops = Array.from(new Set((data.cropStructure ?? []).map(item => item.cropName).filter(Boolean)))
+  cropOptions.value = [{ label: '全部作物', value: 'ALL' }, ...crops.map(name => ({ label: name, value: name }))]
+  if (!cropOptions.value.some(option => option.value === filterForm.crop)) {
+    filterForm.crop = 'ALL'
+  }
+
+  const regions = Array.from(new Set((data.regionComparisons ?? []).map(item => item.regionName).filter(Boolean)))
+  regionOptions.value = [{ label: '全部区域', value: 'ALL' }, ...regions.map(name => ({ label: name, value: name }))]
+  if (!regionOptions.value.some(option => option.value === filterForm.region)) {
+    filterForm.region = 'ALL'
+  }
+
+  if (filterForm.year !== null && !yearOptions.value.includes(filterForm.year)) {
+    filterForm.year = null
+  }
 }
 
-const statusTypeMap = {
-  FINISHED: 'success',
-  RUNNING: 'info',
-  WARNING: 'warning'
+const fetchDashboardSummary = async () => {
+  summaryLoading.value = true
+  try {
+    const { data } = await apiClient.get('/api/dashboard/summary')
+    summary.value = data ?? null
+    updateFilterOptions()
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.message || '加载仪表盘数据失败')
+  } finally {
+    summaryLoading.value = false
+  }
 }
-
-const searching = computed(() => false)
 
 const handleSearch = () => {
-  // 预留查询逻辑
+  fetchDashboardSummary()
 }
 
 const handleReset = () => {
-  filterForm.crop = cropOptions[0].value
-  filterForm.region = regionOptions[0].value
-  filterForm.year = yearOptions.value[0]
-  filterForm.cycle = cycleOptions[0].value
+  filterForm.crop = 'ALL'
+  filterForm.region = 'ALL'
+  filterForm.year = null
+  filterForm.cycle = 'ALL'
+  fetchDashboardSummary()
 }
 
-const formatNumber = value => {
-  if (value === null || value === undefined) return '-'
-  return Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 0 })
+onMounted(() => {
+  fetchDashboardSummary()
+})
+
+function formatNumber(value, fractionDigits = 2) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return '-'
+  }
+  return Number(value).toLocaleString('zh-CN', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: fractionDigits
+  })
 }
 
-const formatTrend = value => {
+function formatInteger(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return '0'
+  }
+  return Number(value).toLocaleString('zh-CN', { maximumFractionDigits: 0 })
+}
+
+function formatPercent(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return '-'
+  }
+  return `${(Number(value) * 100).toFixed(1)}%`
+}
+
+function formatTrend(value) {
   if (value > 0) return `较昨日 +${value}`
   if (value < 0) return `较昨日 ${value}`
   return '较昨日 持平'
+}
+
+function formatDate(value) {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+  return date.toLocaleDateString('zh-CN')
 }
 
 const tableHeaderStyle = () => ({

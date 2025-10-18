@@ -37,6 +37,9 @@ public class DataImportJob extends BaseEntity {
     @Column(name = "dataset_type", nullable = false, length = 32)
     private DatasetType datasetType;
 
+    @Column(name = "dataset_file_id")
+    private Long datasetFileId;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
     private DataImportJobStatus status = DataImportJobStatus.QUEUED;
@@ -118,6 +121,14 @@ public class DataImportJob extends BaseEntity {
 
     public void setDatasetType(DatasetType datasetType) {
         this.datasetType = datasetType;
+    }
+
+    public Long getDatasetFileId() {
+        return datasetFileId;
+    }
+
+    public void setDatasetFileId(Long datasetFileId) {
+        this.datasetFileId = datasetFileId;
     }
 
     public DataImportJobStatus getStatus() {

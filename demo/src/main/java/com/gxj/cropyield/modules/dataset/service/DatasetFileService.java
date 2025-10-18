@@ -10,4 +10,6 @@ public interface DatasetFileService {
     List<DatasetFile> listAll();
 
     DatasetFile create(DatasetFileRequest request);
+
+    void deleteByIds(List<Long> ids);
 }

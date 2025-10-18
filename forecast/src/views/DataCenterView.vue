@@ -50,12 +50,30 @@
             <div class="card-subtitle">查看已导入的 Excel 数据文件并维护基础信息</div>
           </div>
           <div class="card-actions">
+            <el-button
+              type="danger"
+              plain
+              :disabled="!datasetSelection.length || datasetDeleting"
+              :loading="datasetDeleting"
+              @click="confirmDeleteDatasets"
+            >
+              删除数据集
+            </el-button>
             <el-button @click="fetchDatasets" :loading="datasetLoading">刷新</el-button>
             <el-button type="primary" @click="openUpload">上传数据</el-button>
           </div>
         </div>
       </template>
-      <el-table :data="datasets" v-loading="datasetLoading" empty-text="暂无导入记录" :header-cell-style="tableHeaderStyle">
+      <el-table
+        ref="datasetTableRef"
+        :data="datasets"
+        v-loading="datasetLoading"
+        empty-text="暂无导入记录"
+        :header-cell-style="tableHeaderStyle"
+        row-key="id"
+        @selection-change="handleDatasetSelectionChange"
+      >
+        <el-table-column type="selection" width="48" />
         <el-table-column prop="name" label="数据集名称" min-width="220" />
         <el-table-column label="类型" width="130">
           <template #default="{ row }">
@@ -134,6 +152,16 @@
             <div class="card-subtitle">追踪历史导入批次与入库结果</div>
           </div>
           <div class="card-actions task-filter-bar">
+            <el-button
+              type="danger"
+              plain
+              size="small"
+              :disabled="!taskSelection.length || taskDeleting"
+              :loading="taskDeleting"
+              @click="confirmDeleteTasks"
+            >
+              删除记录
+            </el-button>
             <el-select v-model="taskFilter.status" size="small" class="task-filter-select" @change="applyTaskFilter">
               <el-option label="全部状态" value="ALL" />
               <el-option label="排队中" value="QUEUED" />
@@ -160,6 +188,7 @@
         </div>
       </template>
       <el-table
+        ref="taskTableRef"
         :data="importTasks"
         v-loading="taskLoading"
         empty-text="暂无导入任务"
@@ -168,7 +197,9 @@
         :current-row-key="selectedTaskId"
         row-key="taskId"
         @row-click="handleTaskRowClick"
+        @selection-change="handleTaskSelectionChange"
       >
+        <el-table-column type="selection" width="48" />
         <el-table-column prop="datasetName" label="任务/数据集" min-width="220">
           <template #default="{ row }">
             <div class="task-name">{{ row.datasetName ?? '-' }}</div>
@@ -306,16 +337,79 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import apiClient from '../services/http'
 
 const datasets = ref([])
 const datasetLoading = ref(false)
 
+const datasetTableRef = ref(null)
+const datasetSelection = ref([])
+const datasetDeleting = ref(false)
+
+const clearDatasetSelection = () => {
+  datasetSelection.value = []
+  nextTick(() => {
+    datasetTableRef.value?.clearSelection?.()
+  })
+}
+
+const handleDatasetSelectionChange = selection => {
+  datasetSelection.value = Array.isArray(selection) ? selection : []
+}
+
+const deleteSelectedDatasets = async () => {
+  if (!datasetSelection.value.length) {
+    return
+  }
+  const ids = datasetSelection.value
+    .map(item => item?.id)
+    .filter(id => typeof id === 'number' || typeof id === 'string')
+    .map(id => Number(id))
+    .filter(id => !Number.isNaN(id))
+
+  if (!ids.length) {
+    ElMessage.warning('未找到所选数据集的标识，无法删除')
+    return
+  }
+
+  datasetDeleting.value = true
+  try {
+    await apiClient.delete('/api/datasets/files', { data: ids })
+    ElMessage.success('已删除选中的数据集')
+    clearDatasetSelection()
+    await Promise.all([fetchDatasets(), fetchImportTasks(true)])
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.message || '删除数据集失败')
+  } finally {
+    datasetDeleting.value = false
+  }
+}
+
+const confirmDeleteDatasets = () => {
+  if (!datasetSelection.value.length || datasetDeleting.value) {
+    return
+  }
+  ElMessageBox.confirm(
+    '删除后将同步清理对应的入库数据，相关导入任务记录将标记为已归档，可在列表中删除。是否继续？',
+    '删除数据集',
+    {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning'
+    }
+  )
+    .then(() => deleteSelectedDatasets())
+    .catch(() => {})
+}
+
 const importTasks = ref([])
 const taskLoading = ref(false)
+const taskTableRef = ref(null)
+const taskSelection = ref([])
+const taskDeleting = ref(false)
 const taskFilter = reactive({ status: 'ALL', keyword: '' })
 const taskPagination = reactive({ page: 1, size: 10, total: 0 })
 
@@ -496,11 +590,23 @@ const fetchDatasets = async () => {
   try {
     const { data } = await apiClient.get('/api/datasets/files')
     datasets.value = data?.data ?? []
+    clearDatasetSelection()
   } catch (error) {
     ElMessage.error(error?.response?.data?.message || '加载数据集列表失败')
   } finally {
     datasetLoading.value = false
   }
+}
+
+const clearTaskSelection = () => {
+  taskSelection.value = []
+  nextTick(() => {
+    taskTableRef.value?.clearSelection?.()
+  })
+}
+
+const handleTaskSelectionChange = selection => {
+  taskSelection.value = Array.isArray(selection) ? selection : []
 }
 
 const fetchImportTasks = async (silent = false) => {
@@ -519,6 +625,7 @@ const fetchImportTasks = async (silent = false) => {
     const { data } = await apiClient.get('/api/data-import/tasks', { params })
     const payload = data?.data ?? {}
     importTasks.value = Array.isArray(payload.content) ? payload.content : []
+    clearTaskSelection()
     taskPagination.total = Number(payload.totalElements ?? 0)
     taskPagination.size = Number(payload.size ?? taskPagination.size)
     const currentExists = importTasks.value.some(item => item.taskId === selectedTaskId.value)
@@ -647,6 +754,49 @@ const handleTaskRowClick = async row => {
   if (!row?.taskId) return
   selectedTaskId.value = row.taskId
   await fetchTaskDetail(row.taskId)
+}
+
+const deleteSelectedTasks = async () => {
+  if (!taskSelection.value.length) {
+    return
+  }
+  const ids = taskSelection.value
+    .map(item => item?.taskId)
+    .filter(id => typeof id === 'string' && id.trim())
+
+  if (!ids.length) {
+    ElMessage.warning('未找到所选任务的标识，无法删除')
+    return
+  }
+
+  taskDeleting.value = true
+  try {
+    await apiClient.delete('/api/data-import/tasks', { data: ids })
+    ElMessage.success('已删除选中的导入任务记录')
+    clearTaskSelection()
+    if (ids.includes(selectedTaskId.value)) {
+      selectedTaskId.value = ''
+      selectedTaskDetail.value = null
+    }
+    await fetchImportTasks(true)
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.message || '删除导入任务记录失败')
+  } finally {
+    taskDeleting.value = false
+  }
+}
+
+const confirmDeleteTasks = () => {
+  if (!taskSelection.value.length || taskDeleting.value) {
+    return
+  }
+  ElMessageBox.confirm('删除后将无法恢复所选导入任务记录，确定继续？', '删除记录', {
+    confirmButtonText: '删除',
+    cancelButtonText: '取消',
+    type: 'warning'
+  })
+    .then(() => deleteSelectedTasks())
+    .catch(() => {})
 }
 
 const beforeUpload = file => {

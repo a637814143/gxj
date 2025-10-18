@@ -4,4 +4,8 @@ import com.gxj.cropyield.modules.forecast.entity.ForecastTask;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface ForecastTaskRepository extends JpaRepository<ForecastTask, Long> {
+
+    boolean existsByCropId(Long cropId);
+
+    boolean existsByRegionId(Long regionId);
 }

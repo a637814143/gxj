@@ -14,11 +14,10 @@ import com.gxj.cropyield.modules.base.entity.Crop;
 import com.gxj.cropyield.modules.base.entity.Region;
 import com.gxj.cropyield.modules.base.repository.CropRepository;
 import com.gxj.cropyield.modules.base.repository.RegionRepository;
-import com.gxj.cropyield.modules.dataset.dto.DatasetFileRequest;
 import com.gxj.cropyield.modules.dataset.dto.YieldRecordResponse;
+import com.gxj.cropyield.modules.dataset.entity.DatasetFile;
 import com.gxj.cropyield.modules.dataset.entity.DatasetFile.DatasetType;
 import com.gxj.cropyield.modules.dataset.repository.DatasetFileRepository;
-import com.gxj.cropyield.modules.dataset.service.DatasetFileService;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
@@ -32,7 +31,6 @@ import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.springframework.dao.DataAccessException;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -67,7 +65,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -94,7 +91,6 @@ public class DataImportService {
 
     private final CropRepository cropRepository;
     private final RegionRepository regionRepository;
-    private final DatasetFileService datasetFileService;
     private final DatasetFileRepository datasetFileRepository;
     private final DataImportJobRepository jobRepository;
     private final JdbcTemplate jdbcTemplate;
@@ -102,18 +98,29 @@ public class DataImportService {
 
     public DataImportService(CropRepository cropRepository,
                              RegionRepository regionRepository,
-                             DatasetFileService datasetFileService,
                              DatasetFileRepository datasetFileRepository,
                              DataImportJobRepository jobRepository,
                              JdbcTemplate jdbcTemplate,
                              ObjectMapper objectMapper) {
         this.cropRepository = cropRepository;
         this.regionRepository = regionRepository;
-        this.datasetFileService = datasetFileService;
         this.datasetFileRepository = datasetFileRepository;
         this.jobRepository = jobRepository;
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
+    }
+
+    @Transactional
+    public int deleteTasks(List<String> taskIds) {
+        if (taskIds == null || taskIds.isEmpty()) {
+            return 0;
+        }
+        List<DataImportJob> jobs = jobRepository.findByTaskIdIn(taskIds);
+        if (jobs.isEmpty()) {
+            return 0;
+        }
+        jobRepository.deleteAll(jobs);
+        return jobs.size();
     }
 
     public DataImportJobView submitImport(MultipartFile file, DatasetType datasetType, String datasetName, String datasetDescription) {
@@ -224,12 +231,17 @@ public class DataImportService {
                 }
             }
 
+            DatasetFile datasetFile = null;
             int inserted = 0;
             int updated = 0;
             if (!validRecords.isEmpty()) {
+                datasetFile = ensureDatasetFile(job);
+                if (datasetFile != null) {
+                    job.setDatasetFileId(datasetFile.getId());
+                }
                 job.setMessage("正在批量写入数据库");
                 jobRepository.save(job);
-                UpsertResult result = upsertRecords(validRecords);
+                UpsertResult result = upsertRecords(validRecords, datasetFile);
                 inserted = result.inserted();
                 updated = result.updated();
             }
@@ -253,8 +265,8 @@ public class DataImportService {
             job.setMessage(buildCompletionMessage(job));
             jobRepository.save(job);
 
-            if (inserted + updated > 0) {
-                upsertDatasetFile(job);
+            if (datasetFile != null) {
+                updateDatasetFileMetadata(datasetFile, job);
             }
         } catch (Exception exception) {
             job.setStatus(DataImportJobStatus.FAILED);
@@ -264,27 +276,34 @@ public class DataImportService {
         }
     }
 
-    private void upsertDatasetFile(DataImportJob job) {
-        DatasetFileRequest request = new DatasetFileRequest(
-                job.getDatasetName(),
-                job.getDatasetType(),
-                job.getStoragePath(),
-                buildDatasetDescription(job)
-        );
-        try {
-            datasetFileService.create(request);
-        } catch (DataIntegrityViolationException exception) {
-            datasetFileRepository.findByName(job.getDatasetName())
-                    .ifPresent(existing -> {
-                        existing.setType(job.getDatasetType());
-                        existing.setStoragePath(job.getStoragePath());
-                        existing.setDescription(request.description());
-                        datasetFileRepository.save(existing);
-                    });
-        }
+    private DatasetFile ensureDatasetFile(DataImportJob job) {
+        return datasetFileRepository.findByName(job.getDatasetName())
+                .map(existing -> {
+                    existing.setType(job.getDatasetType());
+                    existing.setStoragePath(job.getStoragePath());
+                    if (job.getDatasetDescription() != null && !job.getDatasetDescription().isBlank()) {
+                        existing.setDescription(job.getDatasetDescription());
+                    }
+                    return datasetFileRepository.save(existing);
+                })
+                .orElseGet(() -> {
+                    DatasetFile created = new DatasetFile();
+                    created.setName(job.getDatasetName());
+                    created.setType(job.getDatasetType());
+                    created.setStoragePath(job.getStoragePath());
+                    created.setDescription(job.getDatasetDescription());
+                    return datasetFileRepository.save(created);
+                });
     }
 
-    private UpsertResult upsertRecords(List<ValidRecord> records) {
+    private void updateDatasetFileMetadata(DatasetFile datasetFile, DataImportJob job) {
+        datasetFile.setType(job.getDatasetType());
+        datasetFile.setStoragePath(job.getStoragePath());
+        datasetFile.setDescription(buildDatasetDescription(job));
+        datasetFileRepository.save(datasetFile);
+    }
+
+    private UpsertResult upsertRecords(List<ValidRecord> records, DatasetFile datasetFile) {
         int batchSize = 500;
         int inserted = 0;
         int updated = 0;
@@ -292,9 +311,10 @@ public class DataImportService {
             List<ValidRecord> batch = records.subList(i, Math.min(i + batchSize, records.size()));
             Set<RowKey> existing = fetchExistingKeys(batch);
             String sql = """
-                    INSERT INTO dataset_yield_record (crop_id, region_id, year, sown_area, production, yield_per_hectare, average_price, data_source, collected_at, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+                    INSERT INTO dataset_yield_record (dataset_file_id, crop_id, region_id, year, sown_area, production, yield_per_hectare, average_price, data_source, collected_at, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
                     ON DUPLICATE KEY UPDATE
+                        dataset_file_id = VALUES(dataset_file_id),
                         sown_area = VALUES(sown_area),
                         production = VALUES(production),
                         yield_per_hectare = VALUES(yield_per_hectare),
@@ -305,18 +325,19 @@ public class DataImportService {
                     """;
             try {
                 jdbcTemplate.batchUpdate(sql, batch, batch.size(), (preparedStatement, record) -> {
-                    preparedStatement.setLong(1, record.crop().getId());
-                    preparedStatement.setLong(2, record.region().getId());
-                    preparedStatement.setInt(3, record.year());
-                    setNullableDouble(preparedStatement, 4, record.sownArea());
-                    setNullableDouble(preparedStatement, 5, record.production());
-                    setNullableDouble(preparedStatement, 6, record.yieldPerHectare());
-                    setNullableDouble(preparedStatement, 7, record.averagePrice());
-                    preparedStatement.setString(8, record.dataSource());
+                    preparedStatement.setLong(1, datasetFile.getId());
+                    preparedStatement.setLong(2, record.crop().getId());
+                    preparedStatement.setLong(3, record.region().getId());
+                    preparedStatement.setInt(4, record.year());
+                    setNullableDouble(preparedStatement, 5, record.sownArea());
+                    setNullableDouble(preparedStatement, 6, record.production());
+                    setNullableDouble(preparedStatement, 7, record.yieldPerHectare());
+                    setNullableDouble(preparedStatement, 8, record.averagePrice());
+                    preparedStatement.setString(9, record.dataSource());
                     if (record.collectedAt() != null) {
-                        preparedStatement.setObject(9, java.sql.Date.valueOf(record.collectedAt()));
+                        preparedStatement.setObject(10, java.sql.Date.valueOf(record.collectedAt()));
                     } else {
-                        preparedStatement.setObject(9, null);
+                        preparedStatement.setObject(10, null);
                     }
                 });
             } catch (DataAccessException exception) {
@@ -811,6 +832,7 @@ public class DataImportService {
         double progress = total == 0 ? 0 : Math.min(1.0, (double) (processed + failed + skipped) / total);
         return new DataImportJobView(
                 job.getTaskId(),
+                job.getDatasetFileId(),
                 job.getDatasetName(),
                 job.getDatasetType(),
                 job.getOriginalFilename(),

@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS data_import_job (
     dataset_name VARCHAR(128),
     dataset_description VARCHAR(256),
     dataset_type VARCHAR(32) NOT NULL,
+    dataset_file_id BIGINT UNSIGNED,
     status VARCHAR(32) NOT NULL,
     original_filename VARCHAR(256),
     storage_path VARCHAR(512),
@@ -62,7 +63,9 @@ CREATE TABLE IF NOT EXISTS data_import_job (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_import_task (task_id),
-    KEY idx_import_status (status)
+    KEY idx_import_status (status),
+    KEY idx_import_dataset_file (dataset_file_id),
+    CONSTRAINT fk_import_dataset_file FOREIGN KEY (dataset_file_id) REFERENCES dataset_file (id) ON DELETE SET NULL
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '数据导入任务记录';
 
 CREATE TABLE IF NOT EXISTS data_import_job_error (
@@ -80,6 +83,7 @@ CREATE TABLE IF NOT EXISTS data_import_job_error (
 
 CREATE TABLE IF NOT EXISTS dataset_yield_record (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    dataset_file_id BIGINT UNSIGNED,
     crop_id BIGINT UNSIGNED NOT NULL,
     region_id BIGINT UNSIGNED NOT NULL,
     year INT NOT NULL,
@@ -92,14 +96,17 @@ CREATE TABLE IF NOT EXISTS dataset_yield_record (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_yield_crop_region_year (crop_id, region_id, year),
+    KEY idx_yield_dataset_file (dataset_file_id),
     KEY idx_yield_crop (crop_id),
     KEY idx_yield_region (region_id),
+    CONSTRAINT fk_yield_dataset_file FOREIGN KEY (dataset_file_id) REFERENCES dataset_file (id) ON DELETE CASCADE,
     CONSTRAINT fk_yield_crop FOREIGN KEY (crop_id) REFERENCES base_crop (id) ON DELETE CASCADE,
     CONSTRAINT fk_yield_region FOREIGN KEY (region_id) REFERENCES base_region (id) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '作物年均单产记录';
 
 CREATE TABLE IF NOT EXISTS dataset_price_record (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    dataset_file_id BIGINT UNSIGNED,
     crop_id BIGINT UNSIGNED NOT NULL,
     region_id BIGINT UNSIGNED NOT NULL,
     record_date DATE NOT NULL,
@@ -107,8 +114,10 @@ CREATE TABLE IF NOT EXISTS dataset_price_record (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_price_crop_region_date (crop_id, region_id, record_date),
+    KEY idx_price_dataset_file (dataset_file_id),
     KEY idx_price_crop (crop_id),
     KEY idx_price_region (region_id),
+    CONSTRAINT fk_price_dataset_file FOREIGN KEY (dataset_file_id) REFERENCES dataset_file (id) ON DELETE CASCADE,
     CONSTRAINT fk_price_crop FOREIGN KEY (crop_id) REFERENCES base_crop (id) ON DELETE CASCADE,
     CONSTRAINT fk_price_region FOREIGN KEY (region_id) REFERENCES base_region (id) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '作物价格时间序列';

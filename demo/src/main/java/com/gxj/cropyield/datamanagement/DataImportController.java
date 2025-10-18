@@ -6,13 +6,17 @@ import com.gxj.cropyield.datamanagement.dto.DataImportJobPageResponse;
 import com.gxj.cropyield.datamanagement.dto.DataImportJobView;
 import com.gxj.cropyield.modules.dataset.entity.DatasetFile.DatasetType;
 import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 import org.springframework.web.multipart.MultipartFile;
 
 @RestController
@@ -45,5 +49,11 @@ public class DataImportController {
     @GetMapping("/tasks/{taskId}")
     public ApiResponse<DataImportJobDetailView> getTask(@PathVariable String taskId) {
         return ApiResponse.success(dataImportService.getJobDetail(taskId));
+    }
+
+    @DeleteMapping("/tasks")
+    public ApiResponse<Void> deleteTasks(@RequestBody List<String> taskIds) {
+        dataImportService.deleteTasks(taskIds);
+        return ApiResponse.success();
     }
 }
