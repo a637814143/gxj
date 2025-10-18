@@ -52,10 +52,45 @@
       <el-form label-width="120px" :model="settings" class="setting-form">
         <el-form-item label="默认区域">
           <el-select v-model="settings.defaultRegion" placeholder="请选择">
-            <el-option label="黑龙江" value="heilongjiang" />
-            <el-option label="河南" value="henan" />
-            <el-option label="四川" value="sichuan" />
+            <el-option
+              v-for="region in regions"
+              :key="region.id"
+              :label="region.name"
+              :value="region.id"
+            />
           </el-select>
+        </el-form-item>
+        <el-form-item label="区域管理">
+          <div class="region-manage">
+            <div class="region-add">
+              <el-input v-model="newRegionName" placeholder="输入区域名称" />
+              <el-button type="primary" @click="addRegion">新增区域</el-button>
+            </div>
+            <el-table :data="regions" border size="small" class="region-table">
+              <el-table-column prop="name" label="区域名称">
+                <template #default="{ row }">
+                  <div v-if="editingRegionId === row.id" class="region-edit-row">
+                    <el-input v-model="editRegionName" class="edit-input" />
+                  </div>
+                  <span v-else>{{ row.name }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="200">
+                <template #default="{ row }">
+                  <div class="table-actions">
+                    <template v-if="editingRegionId === row.id">
+                      <el-button size="small" type="primary" @click="confirmEdit(row)">保存</el-button>
+                      <el-button size="small" @click="cancelEdit">取消</el-button>
+                    </template>
+                    <template v-else>
+                      <el-button size="small" type="primary" text @click="startEdit(row)">编辑</el-button>
+                      <el-button size="small" type="danger" text @click="removeRegion(row)">删除</el-button>
+                    </template>
+                  </div>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
         </el-form-item>
         <el-form-item label="通知邮箱">
           <el-input v-model="settings.notifyEmail" placeholder="请输入" />
@@ -69,8 +104,15 @@
 </template>
 
 <script setup>
-import { computed, reactive } from 'vue'
-import { ElMessage } from 'element-plus'
+import { computed, reactive, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+
+const regions = ref([
+  { id: 'heilongjiang', name: '黑龙江' },
+  { id: 'henan', name: '河南' },
+  { id: 'sichuan', name: '四川' },
+  { id: 'yunnan', name: '云南' }
+])
 
 const settings = reactive({
   defaultRegion: 'henan',
@@ -78,10 +120,23 @@ const settings = reactive({
   clusterEnabled: true
 })
 
+if (!regions.value.some((region) => region.id === settings.defaultRegion) && regions.value.length) {
+  settings.defaultRegion = regions.value[0].id
+}
+
+const newRegionName = ref('')
+const editingRegionId = ref(null)
+const editRegionName = ref('')
+
+const defaultRegionName = computed(() => {
+  const match = regions.value.find((region) => region.id === settings.defaultRegion)
+  return match ? match.name : '未设置'
+})
+
 const highlightStats = computed(() => [
   {
     label: '默认区域',
-    value: settings.defaultRegion === 'henan' ? '河南' : settings.defaultRegion === 'heilongjiang' ? '黑龙江' : '四川',
+    value: defaultRegionName.value,
     sub: '用于快速定位数据导入与预测范围'
   },
   {
@@ -112,6 +167,88 @@ function formatTrend(value) {
   if (value > 0) return `较昨日 +${value}`
   if (value < 0) return `较昨日 ${value}`
   return '较昨日 持平'
+}
+
+const createRegionId = () => {
+  let base = `custom-${Date.now()}`
+  while (regions.value.some((region) => region.id === base)) {
+    base = `custom-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+  }
+  return base
+}
+
+const addRegion = () => {
+  const name = newRegionName.value.trim()
+  if (!name) {
+    ElMessage.warning('请输入区域名称')
+    return
+  }
+  if (regions.value.some((region) => region.name === name)) {
+    ElMessage.warning('区域名称已存在')
+    return
+  }
+  regions.value.push({ id: createRegionId(), name })
+  if (!settings.defaultRegion) {
+    settings.defaultRegion = regions.value[0].id
+  }
+  newRegionName.value = ''
+  ElMessage.success('区域已新增')
+}
+
+const startEdit = (region) => {
+  editingRegionId.value = region.id
+  editRegionName.value = region.name
+}
+
+const cancelEdit = () => {
+  editingRegionId.value = null
+  editRegionName.value = ''
+}
+
+const confirmEdit = (region) => {
+  const name = editRegionName.value.trim()
+  if (!name) {
+    ElMessage.warning('请输入区域名称')
+    return
+  }
+  if (regions.value.some((item) => item.name === name && item.id !== region.id)) {
+    ElMessage.warning('区域名称已存在')
+    return
+  }
+  region.name = name
+  cancelEdit()
+  ElMessage.success('区域已更新')
+}
+
+const removeRegion = async (region) => {
+  if (regions.value.length === 1) {
+    ElMessage.warning('至少保留一个区域配置')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(`确定删除区域「${region.name}」吗？`, '提示', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消'
+    })
+  } catch (error) {
+    return
+  }
+
+  const index = regions.value.findIndex((item) => item.id === region.id)
+  if (index !== -1) {
+    regions.value.splice(index, 1)
+  }
+
+  if (!regions.value.some((item) => item.id === settings.defaultRegion)) {
+    settings.defaultRegion = regions.value.length ? regions.value[0].id : ''
+  }
+
+  if (editingRegionId.value === region.id) {
+    cancelEdit()
+  }
+
+  ElMessage.success('区域已删除')
 }
 
 const save = () => {
@@ -196,6 +333,41 @@ const save = () => {
   background: rgba(255, 255, 255, 0.85);
   box-shadow: inset 0 0 0 1px rgba(34, 98, 255, 0.08);
   backdrop-filter: blur(4px);
+}
+
+.region-manage {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.region-add {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.region-add :deep(.el-input) {
+  flex: 1;
+}
+
+.region-table {
+  width: 100%;
+}
+
+.table-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.region-edit-row {
+  display: flex;
+  align-items: center;
+}
+
+.region-edit-row .edit-input {
+  width: 100%;
 }
 
 .hero-stat-label {

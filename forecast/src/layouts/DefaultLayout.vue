@@ -2,29 +2,17 @@
   <el-container class="layout">
     <el-aside width="240px" class="sidebar">
       <div class="logo">农作物产量预测平台</div>
-      <el-menu :default-active="active" router>
-        <el-menu-item index="/dashboard" :route="{ name: 'dashboard' }">
-          <span>仪表盘</span>
-        </el-menu-item>
-        <el-menu-item index="/data" :route="{ name: 'data' }">
-          <span>数据中心</span>
-        </el-menu-item>
-        <el-menu-item index="/visualization" :route="{ name: 'visualization' }">
-          <span>数据可视化</span>
-        </el-menu-item>
-        <el-menu-item index="/forecast" :route="{ name: 'forecast' }">
-          <span>预测中心</span>
-        </el-menu-item>
-        <el-menu-item index="/report" :route="{ name: 'report' }">
-          <span>报告中心</span>
-        </el-menu-item>
-        <el-menu-item index="/users" :route="{ name: 'users' }">
-          <span>用户管理</span>
-        </el-menu-item>
-        <el-menu-item index="/settings" :route="{ name: 'settings' }">
-          <span>系统设置</span>
+      <el-menu v-if="menuItems.length" :default-active="active" router>
+        <el-menu-item
+          v-for="item in menuItems"
+          :key="item.name"
+          :index="item.path"
+          :route="{ name: item.name }"
+        >
+          <span>{{ item.label }}</span>
         </el-menu-item>
       </el-menu>
+      <div v-else class="empty-menu">暂无可访问功能</div>
     </el-aside>
     <el-container>
       <el-header class="header">
@@ -45,13 +33,27 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { useAuthorization } from '../composables/useAuthorization'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const { canAccessRoute } = useAuthorization()
+
+const rawMenuItems = [
+  { label: '仪表盘', name: 'dashboard', path: '/dashboard' },
+  { label: '数据中心', name: 'data', path: '/data' },
+  { label: '数据可视化', name: 'visualization', path: '/visualization' },
+  { label: '预测中心', name: 'forecast', path: '/forecast' },
+  { label: '报告中心', name: 'report', path: '/report' },
+  { label: '用户管理', name: 'users', path: '/users' },
+  { label: '系统设置', name: 'settings', path: '/settings' }
+]
+
+const menuItems = computed(() => rawMenuItems.filter(item => canAccessRoute(item.name)))
 
 const titles = {
   dashboard: '概览仪表盘',
@@ -77,6 +79,20 @@ const handleLogout = () => {
   authStore.logout()
   router.push({ name: 'login', query: { redirect: route.fullPath } }).catch(() => {})
 }
+
+watch(
+  () => [route.name, menuItems.value],
+  ([currentName, items]) => {
+    if (!Array.isArray(items) || !items.length) {
+      return
+    }
+    const hasCurrent = items.some(item => item.name === currentName)
+    if (!hasCurrent) {
+      router.replace({ name: items[0].name }).catch(() => {})
+    }
+  },
+  { immediate: true }
+)
 </script>
 
 <style scoped>
@@ -112,6 +128,12 @@ const handleLogout = () => {
 .el-menu-item.is-active {
   background-color: rgba(255, 255, 255, 0.1);
   color: #fff;
+}
+
+.empty-menu {
+  padding: 24px 16px;
+  font-size: 14px;
+  color: #cfd8dc;
 }
 
 .header {
