@@ -72,11 +72,12 @@ public class DatasetFileServiceImpl implements DatasetFileService {
         if (type == null || file.getId() == null) {
             return 0L;
         }
-        return switch (type) {
+        Long removed = switch (type) {
             case YIELD -> yieldRecordRepository.deleteByDatasetFileId(file.getId());
             case PRICE -> priceRecordRepository.deleteByDatasetFileId(file.getId());
             default -> 0L;
         };
+        return removed == null ? 0L : removed;
     }
 
     private void recordDeletionJob(DatasetFile file, long removedRecords) {

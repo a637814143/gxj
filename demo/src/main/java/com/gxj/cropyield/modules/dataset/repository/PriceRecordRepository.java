@@ -5,5 +5,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface PriceRecordRepository extends JpaRepository<PriceRecord, Long> {
 
-    long deleteByDatasetFileId(Long datasetFileId);
+    Long deleteByDatasetFileId(Long datasetFileId);
 }
