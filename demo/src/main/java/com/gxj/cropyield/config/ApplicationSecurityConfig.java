@@ -72,7 +72,7 @@ public class ApplicationSecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/captcha", "/api/auth/refresh", "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/datasets/**", "/api/dashboard/**", "/api/base/**", "/api/forecast/models/**", "/api/forecast/tasks/**", "/api/report/**").hasAnyRole("ADMIN", "AGRICULTURE_DEPT", "FARMER")
+                .requestMatchers(HttpMethod.GET, "/api/datasets/**", "/api/yields/**", "/api/dashboard/**", "/api/base/**", "/api/forecast/models/**", "/api/forecast/tasks/**", "/api/report/**").hasAnyRole("ADMIN", "AGRICULTURE_DEPT", "FARMER")
                 .requestMatchers(HttpMethod.POST, "/api/forecast/models/**", "/api/forecast/tasks/**").hasAnyRole("ADMIN", "AGRICULTURE_DEPT")
                 .requestMatchers(HttpMethod.GET, "/api/report/export/**").hasAnyRole("ADMIN", "AGRICULTURE_DEPT")
                 .requestMatchers(HttpMethod.POST, "/api/report/**", "/api/report/export/**").hasAnyRole("ADMIN", "AGRICULTURE_DEPT")

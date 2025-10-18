@@ -9,6 +9,9 @@
         <el-menu-item index="/data" :route="{ name: 'data' }">
           <span>数据中心</span>
         </el-menu-item>
+        <el-menu-item index="/visualization" :route="{ name: 'visualization' }">
+          <span>数据可视化</span>
+        </el-menu-item>
         <el-menu-item index="/forecast" :route="{ name: 'forecast' }">
           <span>预测中心</span>
         </el-menu-item>
@@ -50,6 +53,7 @@ const authStore = useAuthStore()
 const titles = {
   dashboard: '概览仪表盘',
   data: '数据资源管理',
+  visualization: '数据可视化洞察',
   forecast: '预测建模与任务',
   report: '报告输出与分享',
   settings: '系统设置'
