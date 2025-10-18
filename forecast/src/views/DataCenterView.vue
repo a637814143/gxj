@@ -239,17 +239,22 @@
         </el-table-column>
         <el-table-column prop="message" label="任务摘要" min-width="240" show-overflow-tooltip />
       </el-table>
-      <el-pagination
-        v-if="taskPagination.total > taskPagination.size"
-        class="task-pagination"
-        layout="total, sizes, prev, pager, next, jumper"
-        :total="taskPagination.total"
-        :current-page="taskPagination.page"
-        :page-size="taskPagination.size"
-        :page-sizes="[10, 20, 50]"
-        @current-change="handleTaskPageChange"
-        @size-change="handleTaskSizeChange"
-      />
+      <div class="task-pagination-area">
+        <div class="pagination-info">
+          <span class="pagination-badge">每页显示 5 条</span>
+          <span>分页展示（5 条/页）</span>
+          <span>共 {{ taskPagination.total }} 条，当前第 {{ taskPagination.page }}/{{ taskTotalPages }} 页</span>
+        </div>
+        <el-pagination
+          class="task-pagination"
+          :current-page="taskPagination.page"
+          :page-size="taskPagination.size"
+          :total="taskPagination.total"
+          layout="prev, pager, next"
+          background
+          @current-change="handleTaskPageChange"
+        />
+      </div>
       <div v-if="importWarnings.length" class="warnings">
         <el-alert
           v-for="(warning, index) in importWarnings"
@@ -342,6 +347,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import apiClient from '../services/http'
 
+const TASK_PAGE_SIZE = 5
+
 const datasets = ref([])
 const datasetLoading = ref(false)
 
@@ -411,7 +418,12 @@ const taskTableRef = ref(null)
 const taskSelection = ref([])
 const taskDeleting = ref(false)
 const taskFilter = reactive({ status: 'ALL', keyword: '' })
-const taskPagination = reactive({ page: 1, size: 10, total: 0 })
+const taskPagination = reactive({ page: 1, size: TASK_PAGE_SIZE, total: 0 })
+const taskTotalPages = computed(() => {
+  const total = Math.max(taskPagination.total, 0)
+  const size = taskPagination.size || TASK_PAGE_SIZE
+  return Math.max(1, Math.ceil(total / size || 1))
+})
 
 const selectedTaskId = ref('')
 const selectedTaskDetail = ref(null)
@@ -624,10 +636,19 @@ const fetchImportTasks = async (silent = false) => {
     }
     const { data } = await apiClient.get('/api/data-import/tasks', { params })
     const payload = data?.data ?? {}
+    const totalElements = Number(payload.totalElements ?? 0)
+    const totalPageCount = Math.max(1, Math.ceil(Math.max(totalElements, 0) / TASK_PAGE_SIZE))
+    if (taskPagination.page > totalPageCount && totalElements > 0) {
+      taskPagination.page = totalPageCount
+      await fetchImportTasks(true)
+      return
+    }
     importTasks.value = Array.isArray(payload.content) ? payload.content : []
     clearTaskSelection()
-    taskPagination.total = Number(payload.totalElements ?? 0)
-    taskPagination.size = Number(payload.size ?? taskPagination.size)
+    taskPagination.total = totalElements
+    taskPagination.size = TASK_PAGE_SIZE
+    const serverPage = Number(payload.number ?? taskPagination.page - 1)
+    taskPagination.page = Math.min(Math.max(serverPage + 1, 1), totalPageCount)
     const currentExists = importTasks.value.some(item => item.taskId === selectedTaskId.value)
     if (!importTasks.value.length) {
       selectedTaskId.value = ''
@@ -735,15 +756,6 @@ const resetTaskFilter = async () => {
 
 const handleTaskPageChange = async page => {
   taskPagination.page = page
-  await fetchImportTasks(true)
-  if (selectedTaskId.value) {
-    await fetchTaskDetail(selectedTaskId.value, true)
-  }
-}
-
-const handleTaskSizeChange = async size => {
-  taskPagination.size = size
-  taskPagination.page = 1
   await fetchImportTasks(true)
   if (selectedTaskId.value) {
     await fetchTaskDetail(selectedTaskId.value, true)
@@ -1121,10 +1133,37 @@ onBeforeUnmount(() => {
   margin-top: 2px;
 }
 
-.task-pagination {
+.task-pagination-area {
   margin-top: 16px;
   display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.task-pagination {
+  display: flex;
   justify-content: flex-end;
+}
+
+.pagination-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #607d8b;
+  font-size: 12px;
+}
+
+.pagination-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #e3f2fd;
+  color: #1565c0;
+  font-weight: 600;
+  font-size: 12px;
 }
 
 .error-summary {

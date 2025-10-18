@@ -93,16 +93,21 @@
 
       <div class="table-footer">
         <div class="table-tip">建议为农业部门及企业/农户分配匹配的角色权限，保障数据安全。</div>
-        <el-pagination
-          v-model:current-page="pagination.page"
-          v-model:page-size="pagination.size"
-          :page-sizes="[10, 20, 30, 50]"
-          layout="total, sizes, prev, pager, next"
-          :total="pagination.total"
-          background
-          @size-change="handleSizeChange"
-          @current-change="handlePageChange"
-        />
+        <div class="table-pagination">
+          <div class="pagination-info">
+            <span class="pagination-badge">每页显示 5 条</span>
+            <span>分页展示（5 条/页）</span>
+            <span>共 {{ pagination.total }} 条，当前第 {{ pagination.page }}/{{ totalPages }} 页</span>
+          </div>
+          <el-pagination
+            :current-page="pagination.page"
+            :page-size="pagination.size"
+            :total="pagination.total"
+            layout="prev, pager, next"
+            background
+            @current-change="handlePageChange"
+          />
+        </div>
       </div>
     </el-card>
 
@@ -183,9 +188,16 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import apiClient from '../services/http'
 import { useAuthStore } from '../stores/auth'
 
+const PAGE_SIZE = 5
+
 const users = ref([])
 const loading = ref(false)
-const pagination = reactive({ page: 1, size: 10, total: 0 })
+const pagination = reactive({ page: 1, size: PAGE_SIZE, total: 0 })
+const totalPages = computed(() => {
+  const total = Math.max(pagination.total, 0)
+  const size = pagination.size || PAGE_SIZE
+  return Math.max(1, Math.ceil(total / size || 1))
+})
 
 const roleOptions = ref([])
 const roleLoading = ref(false)
@@ -280,15 +292,16 @@ const fetchUsers = async () => {
     const { data } = await apiClient.get('/api/auth/users', {
       params: {
         page: Math.max(pagination.page - 1, 0),
-        size: pagination.size
+        size: PAGE_SIZE
       }
     })
     const response = data?.data
     users.value = Array.isArray(response?.records) ? response.records : []
     pagination.total = Number(response?.total ?? 0)
     const currentPage = Number(response?.page ?? 0)
-    pagination.page = currentPage + 1
-    pagination.size = Number(response?.size ?? pagination.size)
+    const totalPageCount = Math.max(1, Math.ceil(Math.max(pagination.total, 0) / PAGE_SIZE))
+    pagination.page = Math.min(Math.max(currentPage + 1, 1), totalPageCount)
+    pagination.size = PAGE_SIZE
   } catch (error) {
     ElMessage.error(error?.response?.data?.message || '获取用户列表失败')
   } finally {
@@ -365,12 +378,6 @@ const canDelete = user => {
 
 const handlePageChange = page => {
   pagination.page = page
-  fetchUsers()
-}
-
-const handleSizeChange = size => {
-  pagination.size = size
-  pagination.page = 1
   fetchUsers()
 }
 
@@ -643,6 +650,33 @@ onMounted(async () => {
 .table-tip {
   color: #546e7a;
   font-size: 13px;
+}
+
+.table-pagination {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.pagination-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #607d8b;
+  font-size: 12px;
+}
+
+.pagination-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #e3f2fd;
+  color: #1565c0;
+  font-weight: 600;
+  font-size: 12px;
 }
 
 .full-width {

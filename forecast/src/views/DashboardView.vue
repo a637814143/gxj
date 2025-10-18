@@ -101,7 +101,7 @@
         </div>
       </template>
       <el-table
-        :data="filteredTableData"
+        :data="paginatedTableData"
         :border="false"
         :stripe="true"
         :header-cell-style="tableHeaderStyle"
@@ -132,19 +132,38 @@
         </el-table-column>
       </el-table>
       <div class="table-footer">
-        <div class="table-tip">共 {{ filteredTableData.length }} 条记录，可通过筛选条件查看特定地区或作物</div>
+        <div class="table-tip">
+          <div class="pagination-info">
+            <span class="pagination-badge">每页显示 5 条</span>
+            <span>分页展示（5 条/页）</span>
+            <span>共 {{ filteredTableData.length }} 条，当前第 {{ tablePagination.page }}/{{ totalTablePages }} 页</span>
+          </div>
+          <div class="tip-extra">可通过筛选条件查看特定地区或作物</div>
+        </div>
+        <el-pagination
+          class="table-pagination"
+          :current-page="tablePagination.page"
+          :page-size="tablePagination.size"
+          :total="filteredTableData.length"
+          layout="prev, pager, next"
+          background
+          @current-change="handleTablePageChange"
+        />
       </div>
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { computed, reactive, ref, onMounted } from 'vue'
+import { computed, reactive, ref, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import apiClient from '../services/http'
 
 const summary = ref(null)
 const summaryLoading = ref(false)
+
+const TABLE_PAGE_SIZE = 5
+const tablePagination = reactive({ page: 1, size: TABLE_PAGE_SIZE })
 
 const currentYear = new Date().getFullYear()
 const yearOptions = computed(() => Array.from({ length: 6 }, (_, index) => currentYear - index))
@@ -252,6 +271,18 @@ const filteredTableData = computed(() => {
   return records
 })
 
+const paginatedTableData = computed(() => {
+  const size = tablePagination.size || TABLE_PAGE_SIZE
+  const start = (tablePagination.page - 1) * size
+  return filteredTableData.value.slice(start, start + size)
+})
+
+const totalTablePages = computed(() => {
+  const size = tablePagination.size || TABLE_PAGE_SIZE
+  const total = filteredTableData.value.length
+  return Math.max(1, Math.ceil((total || 0) / size || 1))
+})
+
 const searching = computed(() => summaryLoading.value)
 
 const updateFilterOptions = () => {
@@ -292,6 +323,7 @@ const fetchDashboardSummary = async () => {
 }
 
 const handleSearch = () => {
+  tablePagination.page = 1
   fetchDashboardSummary()
 }
 
@@ -300,12 +332,38 @@ const handleReset = () => {
   filterForm.region = 'ALL'
   filterForm.year = null
   filterForm.cycle = 'ALL'
+  tablePagination.page = 1
   fetchDashboardSummary()
+}
+
+const handleTablePageChange = page => {
+  tablePagination.page = page
 }
 
 onMounted(() => {
   fetchDashboardSummary()
 })
+
+watch(
+  () => [filterForm.crop, filterForm.region, filterForm.year],
+  () => {
+    tablePagination.page = 1
+  }
+)
+
+watch(
+  filteredTableData,
+  records => {
+    const totalPages = Math.max(1, Math.ceil((records.length || 0) / (tablePagination.size || TABLE_PAGE_SIZE) || 1))
+    if (tablePagination.page > totalPages) {
+      tablePagination.page = totalPages
+    }
+    if (tablePagination.page < 1) {
+      tablePagination.page = 1
+    }
+  },
+  { immediate: true }
+)
 
 function formatNumber(value, fractionDigits = 2) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) {
@@ -605,8 +663,34 @@ const tableCellStyle = () => ({
 
 .table-tip {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 6px;
+}
+
+.tip-extra {
+  color: #7a8bad;
+}
+
+.table-pagination {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.pagination-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #607d8b;
+}
+
+.pagination-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #e3f2fd;
+  color: #1565c0;
+  font-weight: 600;
 }
 
 @media (max-width: 992px) {
