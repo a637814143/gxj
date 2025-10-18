@@ -1,25 +1,45 @@
 <template>
   <div class="visualization-page">
-    <section class="overview-card">
-      <div class="overview-copy">
-        <div class="overview-badge">云惠农作业智能分析系统</div>
-        <h1 class="overview-title">数据可视化洞察中心</h1>
-        <p class="overview-desc">
+    <section class="hero-card">
+      <div class="hero-copy">
+        <div class="hero-badge">云惠农作业智能分析系统</div>
+        <h1 class="hero-title">数据可视化洞察中心</h1>
+        <p class="hero-desc">
           从时间趋势、结构构成与区域分布三个维度，为业务团队提供对农情数据的动态感知能力，助力制定科学的种植与调度策略。
         </p>
-        <div class="overview-stats">
-          <div v-for="item in highlightStats" :key="item.label" class="overview-stat">
-            <div class="stat-label">{{ item.label }}</div>
-            <div class="stat-value">{{ item.value }}</div>
-            <div class="stat-sub">{{ item.sub }}</div>
+        <div class="hero-stats">
+          <div v-for="item in highlightStats" :key="item.label" class="hero-stat">
+            <div class="hero-stat-label">{{ item.label }}</div>
+            <div class="hero-stat-value">{{ item.value }}</div>
+            <div class="hero-stat-sub">{{ item.sub }}</div>
           </div>
         </div>
       </div>
-      <div class="overview-hint">
-        <div class="hint-title">智能洞察建议</div>
-        <ul>
-          <li v-for="tip in insightTips" :key="tip">{{ tip }}</li>
-        </ul>
+      <div class="hero-side">
+        <div class="snapshot-card">
+          <div class="snapshot-title">当前筛选概览</div>
+          <div class="snapshot-chip">{{ selectionTagText }}</div>
+          <ul class="snapshot-list">
+            <li>
+              <span class="snapshot-label">记录总量</span>
+              <span class="snapshot-value">{{ snapshotMetrics.total }}</span>
+            </li>
+            <li>
+              <span class="snapshot-label">覆盖作物</span>
+              <span class="snapshot-value">{{ snapshotMetrics.crops }}</span>
+            </li>
+            <li>
+              <span class="snapshot-label">时间范围</span>
+              <span class="snapshot-value">{{ snapshotMetrics.range }}</span>
+            </li>
+          </ul>
+        </div>
+        <div class="insight-card">
+          <div class="insight-card-title">智能洞察建议</div>
+          <ul class="insight-list">
+            <li v-for="tip in insightTips" :key="tip">{{ tip }}</li>
+          </ul>
+        </div>
       </div>
     </section>
 
@@ -32,14 +52,15 @@
       :description="fetchError"
     />
 
-    <div class="page-actions">
-      <div class="actions-info">
-        <el-tag v-if="hasCategoryOptions" class="category-tag" type="success" effect="light">
-          {{ selectedCategoryLabel }}
-        </el-tag>
+    <div class="filter-bar">
+      <div class="filter-summary">
+        <el-tag v-if="hasAnySelection" class="filter-tag" type="success" effect="light">{{ selectionTagText }}</el-tag>
         <span>{{ datasetSummaryText }}</span>
       </div>
-      <div class="actions-controls">
+      <div class="filter-controls">
+        <el-select v-model="selectedChartMode" class="chart-mode-select" placeholder="选择图表视图">
+          <el-option v-for="option in chartModeOptions" :key="option.value" :label="option.label" :value="option.value" />
+        </el-select>
         <el-select
           v-model="selectedCategory"
           class="category-select"
@@ -53,12 +74,44 @@
             :value="option.value"
           />
         </el-select>
-        <el-button type="primary" :loading="isLoading" @click="loadYieldRecords">刷新可视化数据</el-button>
+        <el-select
+          v-model="selectedCrop"
+          class="crop-select"
+          :disabled="!cropSelectOptions.length"
+          placeholder="筛选作物"
+        >
+          <el-option
+            v-for="option in cropSelectOptions"
+            :key="option.value"
+            :label="option.display"
+            :value="option.value"
+          />
+        </el-select>
+        <el-select
+          v-model="selectedYear"
+          class="year-select"
+          :disabled="!yearSelectOptions.length"
+          placeholder="筛选年份"
+        >
+          <el-option
+            v-for="option in yearSelectOptions"
+            :key="option.value"
+            :label="option.display"
+            :value="option.value"
+          />
+        </el-select>
+        <el-button type="primary" :loading="isLoading" @click="loadYieldRecords">刷新数据</el-button>
       </div>
     </div>
 
-    <el-row :gutter="24" class="chart-grid">
-      <el-col :md="12" :sm="24">
+    <el-row v-show="isTrendVisible || isStructureVisible" :gutter="24" class="chart-grid">
+      <el-col
+        v-show="isTrendVisible"
+        :md="trendSpan"
+        :lg="trendSpan"
+        :sm="24"
+        :xs="24"
+      >
         <el-card class="chart-card" shadow="hover" v-loading="isLoading">
           <template #header>
             <div class="chart-header">
@@ -82,7 +135,13 @@
           </div>
         </el-card>
       </el-col>
-      <el-col :md="12" :sm="24">
+      <el-col
+        v-show="isStructureVisible"
+        :md="structureSpan"
+        :lg="structureSpan"
+        :sm="24"
+        :xs="24"
+      >
         <el-card class="chart-card" shadow="hover" v-loading="isLoading">
           <template #header>
             <div class="chart-header">
@@ -108,7 +167,7 @@
       </el-col>
     </el-row>
 
-    <el-row :gutter="24" class="chart-grid">
+    <el-row v-show="isMapVisible" :gutter="24" class="chart-grid">
       <el-col :span="24">
         <el-card class="chart-card" shadow="hover" v-loading="isLoading">
           <template #header>
@@ -138,7 +197,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
 import chinaGeoJson from '../assets/china-geo.json'
@@ -162,8 +221,19 @@ const yieldRecords = ref([])
 
 const CATEGORY_ALL = '__ALL__'
 const UNCATEGORIZED_LABEL = '未分类作物'
+const ALL_CROPS = '__ALL_CROPS__'
+const ALL_YEARS = '__ALL_YEARS__'
+const chartModeOptions = [
+  { label: '展示全部图表', value: 'all' },
+  { label: '仅产量趋势', value: 'trend' },
+  { label: '仅结构占比', value: 'structure' },
+  { label: '仅地理热力', value: 'map' }
+]
 
 const selectedCategory = ref(CATEGORY_ALL)
+const selectedCrop = ref(ALL_CROPS)
+const selectedYear = ref(ALL_YEARS)
+const selectedChartMode = ref('all')
 
 const numberFormatters = {
   0: new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 0 }),
@@ -280,13 +350,32 @@ const resolveCategoryLabel = category => {
   return text || UNCATEGORIZED_LABEL
 }
 
-const filteredRecords = computed(() => {
-  const category = selectedCategory.value
+const resolveCropName = crop => {
+  if (crop == null) {
+    return '未命名作物'
+  }
+  const text = String(crop).trim()
+  return text || '未命名作物'
+}
+
+const categoryFilteredRecords = computed(() => {
   const records = normalizedRecords.value
-  if (category === CATEGORY_ALL) {
+  if (selectedCategory.value === CATEGORY_ALL) {
     return records
   }
-  return records.filter(record => resolveCategoryLabel(record?.cropCategory) === category)
+  return records.filter(record => resolveCategoryLabel(record?.cropCategory) === selectedCategory.value)
+})
+
+const filteredRecords = computed(() => {
+  let records = categoryFilteredRecords.value
+  if (selectedCrop.value !== ALL_CROPS) {
+    records = records.filter(record => resolveCropName(record?.cropName) === selectedCrop.value)
+  }
+  if (selectedYear.value !== ALL_YEARS) {
+    const year = Number(selectedYear.value)
+    records = records.filter(record => record.year === year)
+  }
+  return records
 })
 
 const computeMetrics = records => {
@@ -374,10 +463,10 @@ const categorySelectOptions = computed(() => {
   const formattedTotal = formatNumber(totalRecords, 0)
   return [
     {
-      label: '全部作物类别',
+      label: '全部类别',
       value: CATEGORY_ALL,
       count: totalRecords,
-      display: `全部作物类别 · ${formattedTotal} 条记录`
+      display: `全部类别 · ${formattedTotal} 条记录`
     },
     ...categoryOptions.value.map(option => ({
       ...option,
@@ -386,9 +475,140 @@ const categorySelectOptions = computed(() => {
   ]
 })
 
-const hasCategoryOptions = computed(() => categorySelectOptions.value.length > 0)
-const selectedCategoryLabel = computed(() => (selectedCategory.value === CATEGORY_ALL ? '全部作物' : selectedCategory.value))
+const cropOptions = computed(() => {
+  const counter = new Map()
+  categoryFilteredRecords.value.forEach(record => {
+    const label = resolveCropName(record?.cropName)
+    counter.set(label, (counter.get(label) ?? 0) + 1)
+  })
+  return Array.from(counter.entries())
+    .sort((a, b) => {
+      if (b[1] === a[1]) {
+        return a[0].localeCompare(b[0], 'zh-CN')
+      }
+      return b[1] - a[1]
+    })
+    .map(([label, count]) => ({ label, value: label, count }))
+})
+
+const cropSelectOptions = computed(() => {
+  const total = categoryFilteredRecords.value.length
+  if (!total) {
+    return []
+  }
+  const formattedTotal = formatNumber(total, 0)
+  return [
+    {
+      label: '全部作物',
+      value: ALL_CROPS,
+      count: total,
+      display: `全部作物 · ${formattedTotal} 条记录`
+    },
+    ...cropOptions.value.map(option => ({
+      ...option,
+      display: `${option.label} · ${formatNumber(option.count, 0)} 条记录`
+    }))
+  ]
+})
+
+const yearOptions = computed(() => {
+  const counter = new Map()
+  categoryFilteredRecords.value.forEach(record => {
+    if (typeof record.year === 'number' && !Number.isNaN(record.year)) {
+      counter.set(record.year, (counter.get(record.year) ?? 0) + 1)
+    }
+  })
+  return Array.from(counter.entries())
+    .sort((a, b) => b[0] - a[0])
+    .map(([year, count]) => ({ label: `${year}`, value: year, count }))
+})
+
+const yearSelectOptions = computed(() => {
+  const total = categoryFilteredRecords.value.length
+  if (!total) {
+    return []
+  }
+  const formattedTotal = formatNumber(total, 0)
+  return [
+    {
+      label: '全部年份',
+      value: ALL_YEARS,
+      count: total,
+      display: `全部年份 · ${formattedTotal} 条记录`
+    },
+    ...yearOptions.value.map(option => ({
+      ...option,
+      display: `${option.label} 年 · ${formatNumber(option.count, 0)} 条记录`
+    }))
+  ]
+})
+
+const selectedCategoryLabel = computed(() => (selectedCategory.value === CATEGORY_ALL ? '全部类别' : selectedCategory.value))
+const selectedCropLabel = computed(() => (selectedCrop.value === ALL_CROPS ? '全部作物' : selectedCrop.value))
+const selectedYearLabel = computed(() => (selectedYear.value === ALL_YEARS ? '全部年份' : `${selectedYear.value}`))
+
 const isAllCategorySelected = computed(() => selectedCategory.value === CATEGORY_ALL)
+const hasCropFilter = computed(() => selectedCrop.value !== ALL_CROPS)
+const hasYearFilter = computed(() => selectedYear.value !== ALL_YEARS)
+const hasAnySelection = computed(() => !isAllCategorySelected.value || hasCropFilter.value || hasYearFilter.value)
+
+const selectionSummaryText = computed(() => {
+  const parts = []
+  if (!isAllCategorySelected.value) {
+    parts.push(selectedCategoryLabel.value)
+  }
+  if (hasCropFilter.value) {
+    parts.push(selectedCropLabel.value)
+  }
+  if (hasYearFilter.value) {
+    parts.push(`${selectedYearLabel.value} 年`)
+  }
+  return parts.length ? parts.join(' · ') : '全局视图'
+})
+
+const selectionTagText = computed(() => (hasAnySelection.value ? selectionSummaryText.value : '全局视图'))
+
+const selectionFocusLabel = computed(() => {
+  if (!hasAnySelection.value) {
+    return ''
+  }
+  const parts = []
+  if (!isAllCategorySelected.value) {
+    parts.push(selectedCategoryLabel.value)
+  }
+  if (hasCropFilter.value) {
+    parts.push(selectedCropLabel.value)
+  }
+  return parts.join(' · ')
+})
+
+const snapshotMetrics = computed(() => {
+  if (!datasetMetrics.value.totalRecords) {
+    return { total: '0 条', crops: '-', range: '等待导入数据' }
+  }
+  if (hasAnySelection.value && !activeMetrics.value.totalRecords) {
+    return { total: '0 条', crops: '-', range: '筛选条件暂无数据' }
+  }
+  const metrics = hasAnySelection.value ? activeMetrics.value : datasetMetrics.value
+  const { totalRecords, cropCount, earliestYear, latestYear } = metrics
+  const rangeLabel =
+    earliestYear && latestYear
+      ? earliestYear === latestYear
+        ? `${latestYear} 年`
+        : `${earliestYear} - ${latestYear} 年`
+      : '年份待补充'
+  return {
+    total: `${formatNumber(totalRecords, 0)} 条`,
+    crops: `${formatNumber(cropCount, 0)} 种`,
+    range: rangeLabel
+  }
+})
+
+const isTrendVisible = computed(() => selectedChartMode.value === 'all' || selectedChartMode.value === 'trend')
+const isStructureVisible = computed(() => selectedChartMode.value === 'all' || selectedChartMode.value === 'structure')
+const isMapVisible = computed(() => selectedChartMode.value === 'all' || selectedChartMode.value === 'map')
+const trendSpan = computed(() => (isTrendVisible.value && isStructureVisible.value ? 12 : 24))
+const structureSpan = computed(() => (isTrendVisible.value && isStructureVisible.value ? 12 : 24))
 
 watch(categorySelectOptions, options => {
   if (!options.length) {
@@ -404,18 +624,53 @@ watch(categorySelectOptions, options => {
   }
 })
 
+watch(cropSelectOptions, options => {
+  if (!options.length) {
+    selectedCrop.value = ALL_CROPS
+    return
+  }
+  if (selectedCrop.value === ALL_CROPS) {
+    return
+  }
+  const matched = options.some(option => option.value === selectedCrop.value)
+  if (!matched) {
+    selectedCrop.value = ALL_CROPS
+  }
+})
+
+watch(yearSelectOptions, options => {
+  if (!options.length) {
+    selectedYear.value = ALL_YEARS
+    return
+  }
+  if (selectedYear.value === ALL_YEARS) {
+    return
+  }
+  const matched = options.some(option => option.value === selectedYear.value)
+  if (!matched) {
+    selectedYear.value = ALL_YEARS
+  }
+})
+
+watch(selectedCategory, () => {
+  selectedCrop.value = ALL_CROPS
+  selectedYear.value = ALL_YEARS
+})
+
 const datasetSummaryText = computed(() => {
   if (!datasetMetrics.value.totalRecords) {
     return '当前暂无导入的农情数据，上传后将自动生成可视化图表。'
   }
-  if (!isAllCategorySelected.value && !activeMetrics.value.totalRecords) {
-    return `${selectedCategoryLabel.value} 暂无可视化数据，请选择其他作物类别或刷新数据。`
+  if (hasAnySelection.value && !activeMetrics.value.totalRecords) {
+    return `${selectionSummaryText.value} 暂无可视化数据，请调整筛选条件或刷新数据。`
   }
-  const metrics = isAllCategorySelected.value ? datasetMetrics.value : activeMetrics.value
-  if (isAllCategorySelected.value) {
-    return `已汇总 ${formatNumber(metrics.totalRecords, 0)} 条产量记录，涵盖 ${formatNumber(metrics.cropCount, 0)} 种作物与 ${formatNumber(metrics.regionCount, 0)} 个地区。`
+  const metrics = hasAnySelection.value ? activeMetrics.value : datasetMetrics.value
+  const cropText = `${formatNumber(metrics.cropCount, 0)} 种作物`
+  const regionText = `${formatNumber(metrics.regionCount, 0)} 个地区`
+  if (!hasAnySelection.value) {
+    return `已汇总 ${formatNumber(metrics.totalRecords, 0)} 条产量记录，涵盖 ${cropText}与 ${regionText}。`
   }
-  return `${selectedCategoryLabel.value} 类别共 ${formatNumber(metrics.totalRecords, 0)} 条记录，覆盖 ${formatNumber(metrics.cropCount, 0)} 种作物与 ${formatNumber(metrics.regionCount, 0)} 个地区。`
+  return `${selectionSummaryText.value} 共匹配 ${formatNumber(metrics.totalRecords, 0)} 条记录，覆盖 ${cropText}与 ${regionText}。`
 })
 
 const highlightStats = computed(() => {
@@ -426,30 +681,30 @@ const highlightStats = computed(() => {
       { label: '最新数据', value: '-', sub: '暂无采集时间信息' }
     ]
   }
-  if (!isAllCategorySelected.value && !activeMetrics.value.totalRecords) {
+  if (hasAnySelection.value && !activeMetrics.value.totalRecords) {
     return [
-      { label: '当前类别', value: selectedCategoryLabel.value, sub: '暂无匹配数据' },
-      { label: '覆盖作物', value: '-', sub: '导入更多该类别的作物记录' },
+      { label: '当前视图', value: selectionSummaryText.value, sub: '暂无匹配数据' },
+      { label: '覆盖作物', value: '-', sub: '调整筛选条件后再试' },
       { label: '数据时间范围', value: '-', sub: '暂无年份信息' }
     ]
   }
-  const metrics = isAllCategorySelected.value ? datasetMetrics.value : activeMetrics.value
+  const metrics = hasAnySelection.value ? activeMetrics.value : datasetMetrics.value
   const { cropCount, categoryCount, regionCount, totalRecords, earliestYear, latestYear, latestCollectedAt } = metrics
   const yearLabel = earliestYear && latestYear ? (earliestYear === latestYear ? `${latestYear} 年` : `${earliestYear} - ${latestYear} 年`) : '年份待补充'
-  if (isAllCategorySelected.value) {
-    return [
-      { label: '覆盖作物', value: `${formatNumber(cropCount, 0)} 种`, sub: `涵盖 ${formatNumber(categoryCount, 0)} 类作物` },
-      { label: '覆盖地区', value: `${formatNumber(regionCount, 0)} 个`, sub: `累计 ${formatNumber(totalRecords, 0)} 条产量记录` },
-      { label: '数据时间范围', value: yearLabel, sub: latestCollectedAt ? `最近采集于 ${latestCollectedAt}` : '采集时间待补充' }
-    ]
-  }
   return [
-    { label: '当前类别', value: selectedCategoryLabel.value, sub: `累计 ${formatNumber(totalRecords, 0)} 条记录` },
-    { label: '覆盖作物', value: `${formatNumber(cropCount, 0)} 种`, sub: `涉及 ${formatNumber(regionCount, 0)} 个地区` },
+    {
+      label: '当前视图',
+      value: selectionTagText.value,
+      sub: hasAnySelection.value ? `筛选后 ${formatNumber(totalRecords, 0)} 条记录` : `累计 ${formatNumber(totalRecords, 0)} 条记录`
+    },
+    {
+      label: '覆盖作物',
+      value: `${formatNumber(cropCount, 0)} 种`,
+      sub: hasAnySelection.value ? `涉及 ${formatNumber(regionCount, 0)} 个地区` : `涵盖 ${formatNumber(categoryCount, 0)} 类作物`
+    },
     { label: '数据时间范围', value: yearLabel, sub: latestCollectedAt ? `最近采集于 ${latestCollectedAt}` : '采集时间待补充' }
   ]
 })
-
 const trendChartData = computed(() => {
   const records = filteredRecords.value.filter(record => typeof record.year === 'number' && record.production != null)
   if (!records.length) {
@@ -460,7 +715,7 @@ const trendChartData = computed(() => {
 
   records.forEach(record => {
     const year = record.year
-    const cropName = record?.cropName || '未命名作物'
+    const cropName = resolveCropName(record?.cropName)
     yearSet.add(year)
     if (!cropYearMap.has(cropName)) {
       cropYearMap.set(cropName, new Map())
@@ -487,16 +742,19 @@ const structureData = computed(() => {
   if (!records.length) {
     return { year: null, items: [], metricKey: 'production', metricLabel: '产量 (万吨)' }
   }
-  const metrics = isAllCategorySelected.value ? datasetMetrics.value : activeMetrics.value
-  const targetYear = metrics.latestYear
-  const filteredByYear = typeof targetYear === 'number' ? records.filter(record => record.year === targetYear) : []
+  const metrics = hasAnySelection.value ? activeMetrics.value : datasetMetrics.value
+  const preferredYear =
+    selectedYear.value !== ALL_YEARS && typeof selectedYear.value === 'number'
+      ? selectedYear.value
+      : metrics.latestYear
+  const filteredByYear = typeof preferredYear === 'number' ? records.filter(record => record.year === preferredYear) : []
   const sourceRecords = filteredByYear.length ? filteredByYear : records
   const metricKey = sourceRecords.some(record => record.sownArea != null) ? 'sownArea' : 'production'
   const metricLabel = metricKey === 'sownArea' ? '播种面积 (千公顷)' : '产量 (万吨)'
   const cropMap = new Map()
 
   sourceRecords.forEach(record => {
-    const cropName = record?.cropName || '未命名作物'
+    const cropName = resolveCropName(record?.cropName)
     const value = record[metricKey]
     if (value == null) return
     const previous = cropMap.get(cropName) ?? 0
@@ -508,7 +766,7 @@ const structureData = computed(() => {
     .sort((a, b) => b.value - a.value)
 
   return {
-    year: filteredByYear.length ? targetYear : null,
+    year: filteredByYear.length ? preferredYear : null,
     items,
     metricKey,
     metricLabel
@@ -605,56 +863,63 @@ const trendSubtitle = computed(() => {
   if (!datasetMetrics.value.totalRecords) {
     return '导入产量数据后可查看逐年趋势对比。'
   }
-  if (!isAllCategorySelected.value && !activeMetrics.value.totalRecords) {
-    return `${selectedCategoryLabel.value} 暂无可用的产量趋势数据。`
+  if (hasAnySelection.value && !activeMetrics.value.totalRecords) {
+    return `${selectionSummaryText.value} 暂无可用的产量趋势数据。`
   }
-  const metrics = isAllCategorySelected.value ? datasetMetrics.value : activeMetrics.value
+  const metrics = hasAnySelection.value ? activeMetrics.value : datasetMetrics.value
   if (metrics.earliestYear && metrics.latestYear) {
     if (metrics.earliestYear === metrics.latestYear) {
-      if (isAllCategorySelected.value) {
+      if (!hasAnySelection.value) {
         return `基于 ${metrics.latestYear} 年导入的 ${formatNumber(metrics.cropCount, 0)} 种作物产量记录`
       }
-      return `聚焦 ${selectedCategoryLabel.value}，展示 ${metrics.latestYear} 年的 ${formatNumber(metrics.cropCount, 0)} 种作物产量记录`
+      return `${selectionSummaryText.value} 聚焦 ${metrics.latestYear} 年的 ${formatNumber(metrics.cropCount, 0)} 种作物产量记录`
     }
-    if (isAllCategorySelected.value) {
+    if (!hasAnySelection.value) {
       return `覆盖 ${metrics.earliestYear} - ${metrics.latestYear} 年的 ${formatNumber(metrics.cropCount, 0)} 种作物产量趋势`
     }
-    return `聚焦 ${selectedCategoryLabel.value}，覆盖 ${metrics.earliestYear} - ${metrics.latestYear} 年的产量趋势`
+    return `${selectionSummaryText.value} 覆盖 ${metrics.earliestYear} - ${metrics.latestYear} 年的产量趋势`
   }
-  if (isAllCategorySelected.value) {
+  if (!hasAnySelection.value) {
     return `已导入 ${formatNumber(metrics.totalRecords, 0)} 条产量记录，自动生成趋势分析`
   }
-  return `${selectedCategoryLabel.value} 共 ${formatNumber(metrics.totalRecords, 0)} 条产量记录，自动生成趋势分析`
+  return `${selectionSummaryText.value} 共 ${formatNumber(metrics.totalRecords, 0)} 条产量记录，自动生成趋势分析`
 })
 
 const structureSubtitle = computed(() => {
   const data = structureData.value
   if (!data.items.length) {
-    return isAllCategorySelected.value
-      ? '暂无可用于结构分析的数据，请补充作物种植信息。'
-      : `${selectedCategoryLabel.value} 暂无可用于结构分析的数据。`
+    return hasAnySelection.value
+      ? `${selectionSummaryText.value} 暂无可用于结构分析的数据。`
+      : '暂无可用于结构分析的数据，请补充作物种植信息。'
   }
-  const yearText = data.year ? `${data.year} 年` : '最新导入数据'
-  if (isAllCategorySelected.value) {
+  const yearText = data.year ? `${data.year} 年` : hasYearFilter.value ? `${selectedYearLabel.value} 年` : '最新导入数据'
+  if (!hasAnySelection.value) {
     return `${yearText}的作物${data.metricLabel}构成占比`
   }
-  return `${yearText}的 ${selectedCategoryLabel.value} ${data.metricLabel}构成占比`
+  if (selectionFocusLabel.value) {
+    return `${yearText}的 ${selectionFocusLabel.value} ${data.metricLabel}构成占比`
+  }
+  if (hasYearFilter.value) {
+    return `${selectedYearLabel.value} 年的作物${data.metricLabel}构成占比`
+  }
+  return `${selectionSummaryText.value} 的 ${data.metricLabel}构成占比`
 })
 
 const mapSubtitle = computed(() => {
   if (!datasetMetrics.value.totalRecords) {
     return '导入省级产量数据后可查看区域热力。'
   }
-  if (!isAllCategorySelected.value && !activeMetrics.value.totalRecords) {
-    return `${selectedCategoryLabel.value} 暂无省级分布数据，建议补充地区字段。`
+  if (hasAnySelection.value && !activeMetrics.value.totalRecords) {
+    return `${selectionSummaryText.value} 暂无省级分布数据，建议补充地区字段。`
   }
   const { items, excluded } = mapData.value
   if (!items.length) {
-    return isAllCategorySelected.value
-      ? '暂无匹配到省级行政区的数据，请完善地区信息。'
-      : `${selectedCategoryLabel.value} 暂无匹配到省级行政区的数据，请完善地区信息。`
+    return hasAnySelection.value
+      ? `${selectionSummaryText.value} 暂无匹配到省级行政区的数据，请完善地区信息。`
+      : '暂无匹配到省级行政区的数据，请完善地区信息。'
   }
-  const prefix = isAllCategorySelected.value ? '按省份汇总产量' : `${selectedCategoryLabel.value} 省份产量分布`
+  const focus = selectionFocusLabel.value || (hasAnySelection.value ? selectionSummaryText.value : '按省份汇总产量')
+  const prefix = hasAnySelection.value ? `${focus} 省份产量分布` : '按省份汇总产量'
   return `${prefix}，覆盖 ${items.length} 个省级地区${excluded ? `，忽略 ${excluded} 条缺少省级信息的记录` : ''}`
 })
 
@@ -663,7 +928,17 @@ const trendSummaryText = computed(() => {
   if (!data.series.length) {
     return ''
   }
-  const prefix = isAllCategorySelected.value ? '' : `${selectedCategoryLabel.value} `
+  if (!hasAnySelection.value) {
+    return `共展示 ${data.series.length} 种作物在 ${data.years.length} 个年份的产量变化`
+  }
+  const parts = []
+  if (selectionFocusLabel.value) {
+    parts.push(selectionFocusLabel.value)
+  }
+  if (hasYearFilter.value) {
+    parts.push(`${selectedYearLabel.value} 年`)
+  }
+  const prefix = parts.length ? `${parts.join(' · ')} ` : ''
   return `${prefix}共展示 ${data.series.length} 种作物在 ${data.years.length} 个年份的产量变化`
 })
 
@@ -673,10 +948,16 @@ const structureSummaryText = computed(() => {
     return ''
   }
   const yearText = data.year ? `${data.year} 年` : '最新数据'
-  if (isAllCategorySelected.value) {
+  if (!hasAnySelection.value) {
     return `${yearText}共有 ${data.items.length} 种作物，${data.metricLabel}占比如上`
   }
-  return `${selectedCategoryLabel.value} 在 ${yearText}共有 ${data.items.length} 种作物，${data.metricLabel}占比如上`
+  if (selectionFocusLabel.value) {
+    return `${selectionFocusLabel.value} 在 ${yearText}共有 ${data.items.length} 种作物，${data.metricLabel}占比如上`
+  }
+  if (hasYearFilter.value) {
+    return `${selectedYearLabel.value} 年共有 ${data.items.length} 种作物，${data.metricLabel}占比如上`
+  }
+  return `${selectionSummaryText.value} 共涉及 ${data.items.length} 种作物，${data.metricLabel}占比如上`
 })
 
 const mapSummaryText = computed(() => {
@@ -685,11 +966,12 @@ const mapSummaryText = computed(() => {
     if (!datasetMetrics.value.totalRecords) {
       return ''
     }
-    return isAllCategorySelected.value
-      ? '请检查导入数据的地区字段，确保包含省级名称。'
-      : `${selectedCategoryLabel.value} 暂无匹配的省级信息，请检查导入数据的地区字段。`
+    return hasAnySelection.value
+      ? `${selectionSummaryText.value} 暂无匹配的省级信息，请检查导入数据的地区字段。`
+      : '请检查导入数据的地区字段，确保包含省级名称。'
   }
-  const prefix = isAllCategorySelected.value ? '热力图已聚合' : `${selectedCategoryLabel.value} 热力图已聚合`
+  const focus = selectionFocusLabel.value || (hasAnySelection.value ? selectionSummaryText.value : '热力图已聚合')
+  const prefix = hasAnySelection.value ? `${focus} 热力图已聚合` : '热力图已聚合'
   return `${prefix} ${items.length} 个省级行政区${excluded ? `，${excluded} 条记录未匹配成功` : ''}`
 })
 
@@ -701,29 +983,32 @@ const insightTips = computed(() => {
       '上传完成后可点击“刷新可视化数据”以获取最新图表。'
     ]
   }
-  if (!isAllCategorySelected.value && !activeMetrics.value.totalRecords) {
+  if (hasAnySelection.value && !activeMetrics.value.totalRecords) {
     return [
-      `${selectedCategoryLabel.value} 暂无可视化数据，请确认数据中心已导入对应类别。`,
-      '可通过右侧下拉框切换其他作物类别快速获取洞察。',
-      '若刚完成导入，请点击“刷新可视化数据”同步最新记录。'
+      `${selectionSummaryText.value} 暂无可视化数据，请确认数据中心已导入对应数据。`,
+      '可通过筛选栏调整作物、年份或清空条件以查看整体趋势。',
+      '若刚完成导入，请点击“刷新数据”同步最新记录。'
     ]
   }
   const tips = []
   const growth = trendGrowth.value
   if (growth && growth.growthRate != null) {
     const direction = growth.growthRate >= 0 ? '增长' : '下降'
-    tips.push(`${growth.latestYear} 年 ${growth.name} 产量较上一年${direction} ${formatNumber(Math.abs(growth.growthRate), 1)}%，请结合库存与销售计划及时调整。`)
+    const scope = selectionFocusLabel.value || (hasAnySelection.value ? selectionSummaryText.value : '整体')
+    tips.push(`${growth.latestYear} 年 ${scope.includes(growth.name) ? '' : scope + '中 '}${growth.name} 产量较上一年${direction} ${formatNumber(Math.abs(growth.growthRate), 1)}%，请结合库存与销售计划及时调整。`)
   } else {
     tips.push('建议持续补充多年度数据，以便识别作物产量波动趋势。')
   }
   const structureTop = topStructureCrop.value
   if (structureTop) {
     const yearText = structureData.value.year ? `${structureData.value.year} 年` : '最新年度'
-    tips.push(`${yearText}中 ${structureTop.name} 占比最高，优先关注投入与风险控制。`)
+    const focus = selectionFocusLabel.value ? `${selectionFocusLabel.value} ` : ''
+    tips.push(`${yearText}中 ${focus}${structureTop.name} 占比最高，优先关注投入与风险控制。`)
   }
   const regionTop = topRegion.value
   if (regionTop) {
-    tips.push(`${regionTop.name} 是目前产量最高的省级地区，可结合物流能力进行重点调度。`)
+    const context = hasAnySelection.value ? selectionSummaryText.value : '整体数据'
+    tips.push(`${regionTop.name} 是目前${context}中产量最高的省级地区，可结合物流能力进行重点调度。`)
   }
   while (tips.length < 3) {
     tips.push('导入更多地区或作物数据，有助于提升可视化分析的全面性。')
@@ -879,6 +1164,12 @@ const handleResize = () => {
   mapChartInstance.value?.resize()
 }
 
+watch(selectedChartMode, () => {
+  nextTick(() => {
+    handleResize()
+  })
+})
+
 const loadYieldRecords = async () => {
   isLoading.value = true
   fetchError.value = ''
@@ -940,137 +1231,210 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 24px;
+  padding-bottom: 32px;
 }
 
-.overview-card {
-  display: flex;
+.hero-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 32px;
-  background: linear-gradient(135deg, #f0fdf4 0%, #e0f2f1 100%);
   padding: 32px;
   border-radius: 24px;
-  box-shadow: 0 12px 32px rgba(16, 86, 82, 0.12);
-  border: 1px solid rgba(16, 86, 82, 0.15);
+  background: linear-gradient(120deg, #e8f2ff 0%, #f5f9ff 45%, #ffffff 100%);
+  box-shadow: 0 28px 60px rgba(64, 118, 255, 0.16);
+  overflow: hidden;
 }
 
-.overview-copy {
-  flex: 2;
+.hero-card::before {
+  content: '';
+  position: absolute;
+  top: -160px;
+  right: -160px;
+  width: 420px;
+  height: 420px;
+  background: radial-gradient(circle at center, rgba(64, 118, 255, 0.28), transparent 68%);
+  transform: rotate(10deg);
 }
 
-.overview-badge {
+.hero-copy {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.hero-badge {
   display: inline-flex;
   align-items: center;
-  padding: 6px 14px;
+  padding: 6px 16px;
   font-size: 12px;
   font-weight: 600;
-  color: #0b5345;
-  background: rgba(13, 71, 60, 0.12);
+  color: #3a6cff;
+  background: rgba(58, 108, 255, 0.12);
   border-radius: 999px;
-  letter-spacing: 2px;
+  letter-spacing: 1.4px;
 }
 
-.overview-title {
-  margin: 16px 0 12px;
-  font-size: 28px;
-  font-weight: 600;
-  color: #0d473c;
+.hero-title {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 700;
+  color: #0d1b3d;
 }
 
-.overview-desc {
-  font-size: 15px;
+.hero-desc {
+  margin: 0;
+  font-size: 14px;
   line-height: 1.8;
-  color: #265c55;
+  color: #405174;
+  max-width: 560px;
 }
 
-.overview-stats {
-  display: flex;
+.hero-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 16px;
-  margin-top: 24px;
-  flex-wrap: wrap;
 }
 
-.overview-stat {
-  min-width: 160px;
-  padding: 16px 20px;
-  border-radius: 16px;
+.hero-stat {
+  padding: 18px;
+  border-radius: 18px;
   background: rgba(255, 255, 255, 0.9);
-  box-shadow: inset 0 0 0 1px rgba(13, 71, 60, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(58, 108, 255, 0.12);
+  backdrop-filter: blur(4px);
 }
 
-.stat-label {
-  font-size: 13px;
-  color: #4f776f;
-}
-
-.stat-value {
-  margin-top: 8px;
-  font-size: 22px;
-  font-weight: 600;
-  color: #0f5132;
-}
-
-.stat-sub {
-  margin-top: 6px;
+.hero-stat-label {
   font-size: 12px;
-  color: #6c8f86;
+  color: #5f6f94;
+  margin-bottom: 6px;
 }
 
-.overview-hint {
-  flex: 1;
-  padding: 24px;
+.hero-stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1f3f95;
+  margin-bottom: 6px;
+}
+
+.hero-stat-sub {
+  font-size: 12px;
+  color: #6c7fa5;
+}
+
+.hero-side {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.snapshot-card {
   border-radius: 20px;
-  background: rgba(11, 61, 46, 0.82);
-  color: #ecfdf5;
+  padding: 24px;
+  background: linear-gradient(160deg, rgba(58, 108, 255, 0.12) 0%, rgba(255, 255, 255, 0.95) 100%);
+  box-shadow: 0 18px 40px rgba(58, 108, 255, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.snapshot-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a2f6b;
+}
+
+.snapshot-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(58, 108, 255, 0.15);
+  color: #1d3a85;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.snapshot-list {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.hint-title {
+.snapshot-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  color: #3a4d76;
+}
+
+.snapshot-label {
+  color: #5f6f94;
+}
+
+.snapshot-value {
+  font-weight: 600;
+  color: #1d3a85;
+}
+
+.insight-card {
+  border-radius: 20px;
+  padding: 24px;
+  background: linear-gradient(160deg, rgba(34, 197, 94, 0.08) 0%, rgba(255, 255, 255, 0.95) 85%);
+  box-shadow: 0 18px 40px rgba(45, 153, 101, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: #1a2f6b;
+}
+
+.insight-card-title {
   font-size: 16px;
   font-weight: 600;
 }
 
-.overview-hint ul {
+.insight-list {
   margin: 0;
   padding-left: 20px;
-  line-height: 1.8;
-  color: rgba(236, 253, 245, 0.85);
   font-size: 14px;
+  line-height: 1.8;
+  color: #3a4d76;
 }
 
 .page-alert {
   border-radius: 16px;
 }
 
-.page-actions {
+.filter-bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 16px;
   flex-wrap: wrap;
-  background: #f2fbf7;
-  border: 1px solid rgba(13, 71, 60, 0.12);
+  background: #f6f9ff;
+  border: 1px solid rgba(58, 108, 255, 0.16);
   border-radius: 16px;
-  padding: 14px 20px;
-  color: #0d473c;
+  padding: 16px 20px;
+  color: #1d3a85;
   font-size: 14px;
 }
 
-.actions-info {
+.filter-summary {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   font-weight: 500;
 }
 
-.actions-controls {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.category-tag {
+.filter-tag {
   border-radius: 999px;
   font-size: 12px;
   height: auto;
@@ -1078,8 +1442,18 @@ onBeforeUnmount(() => {
   padding: 2px 10px;
 }
 
-.category-select {
-  min-width: 220px;
+.filter-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.chart-mode-select,
+.category-select,
+.crop-select,
+.year-select {
+  min-width: 200px;
 }
 
 .chart-body {
@@ -1103,7 +1477,7 @@ onBeforeUnmount(() => {
 
 .chart-summary {
   font-size: 13px;
-  color: #50746a;
+  color: #4a638a;
 }
 
 .chart-grid {
@@ -1113,6 +1487,7 @@ onBeforeUnmount(() => {
 .chart-card {
   border-radius: 20px;
   overflow: hidden;
+  box-shadow: 0 12px 32px rgba(64, 118, 255, 0.08);
 }
 
 .chart-header {
@@ -1124,12 +1499,12 @@ onBeforeUnmount(() => {
 .chart-title {
   font-size: 18px;
   font-weight: 600;
-  color: #0d473c;
+  color: #1a2f6b;
 }
 
 .chart-subtitle {
   font-size: 13px;
-  color: #5d8078;
+  color: #5c6f92;
 }
 
 .chart {
@@ -1142,27 +1517,26 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 992px) {
-  .overview-card {
-    flex-direction: column;
+  .hero-card {
+    grid-template-columns: 1fr;
   }
 
-  .overview-hint {
-    width: 100%;
-  }
-
-  .page-actions {
+  .filter-bar {
     flex-direction: column;
     align-items: stretch;
-    gap: 12px;
   }
 
-  .actions-controls {
+  .filter-controls {
     width: 100%;
-    justify-content: space-between;
   }
 
-  .category-select {
-    width: 100%;
+  .filter-controls :deep(.el-select),
+  .filter-controls .chart-mode-select,
+  .filter-controls .category-select,
+  .filter-controls .crop-select,
+  .filter-controls .year-select {
+    flex: 1 1 100%;
+    min-width: 0;
   }
 
   .chart {
