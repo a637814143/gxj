@@ -273,6 +273,25 @@ const formatNumber = (value, digits = 0) => {
   return formatter.format(numeric)
 }
 
+const formatAxisValue = value => {
+  const numeric = Number(value)
+  if (Number.isNaN(numeric)) {
+    return '0'
+  }
+  const magnitude = Math.abs(numeric)
+  let digits = 0
+  if (magnitude < 1) {
+    digits = 3
+  } else if (magnitude < 10) {
+    digits = 2
+  } else if (magnitude < 100) {
+    digits = 1
+  }
+  const fixed = numeric.toFixed(digits)
+  const sanitized = digits ? fixed.replace(/\.0+$/, '').replace(/\.$/, '') : fixed
+  return sanitized.length ? sanitized : '0'
+}
+
 const hexToRgba = (hex, alpha) => {
   if (!hex) return `rgba(66, 165, 245, ${alpha})`
   let sanitized = hex.replace('#', '')
@@ -1086,7 +1105,26 @@ const updateTrendChart = data => {
     legend: { data: legendData },
     grid: { left: 40, right: 20, top: 60, bottom: 40 },
     xAxis: { type: 'category', boundaryGap: false, data: data.years },
-    yAxis: { type: 'value', name: data.metricLabel },
+    yAxis: {
+      type: 'value',
+      name: data.metricLabel,
+      axisLabel: {
+        formatter: value => {
+          const numeric = Number(value)
+          if (!Number.isFinite(numeric)) {
+            return '0'
+          }
+          const abs = Math.abs(numeric)
+          if (abs >= 1000) {
+            return formatNumber(numeric, 0)
+          }
+          if (abs >= 100) {
+            return formatNumber(numeric, 1)
+          }
+          return formatAxisValue(numeric)
+        }
+      }
+    },
     series
   })
 }
