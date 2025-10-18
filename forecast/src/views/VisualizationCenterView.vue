@@ -311,7 +311,7 @@ const formatAxisValue = value => {
 const formatTrendAxisLabel = value => {
   const numeric = Number(value)
   if (!Number.isFinite(numeric)) {
-    return '0'
+    return ''
   }
   const magnitude = Math.abs(numeric)
   let digits = 3
@@ -324,7 +324,8 @@ const formatTrendAxisLabel = value => {
   } else if (magnitude >= 1) {
     digits = 2
   }
-  return formatPlainNumber(numeric, digits)
+  const formatted = formatPlainNumber(numeric, digits)
+  return formatted || '0'
 }
 
 const extractMetricUnit = label => {
@@ -1184,16 +1185,43 @@ const updateTrendChart = data => {
     tooltip: {
       trigger: 'axis',
       triggerOn: 'mousemove|click',
+      axisPointer: {
+        type: chartType === 'bar' ? 'shadow' : 'line',
+        snap: true,
+        lineStyle: { color: '#3a5bff', width: 1 },
+        shadowStyle: { opacity: 0.12 },
+        label: {
+          backgroundColor: '#3a5bff',
+          borderRadius: 6,
+          padding: [4, 8],
+          formatter: ({ value }) => formatTrendAxisLabel(value)
+        }
+      },
       valueFormatter: value => formatTrendMetricValue(value, metricUnit)
     },
     legend: { data: legendData },
-    grid: { left: 40, right: 20, top: 60, bottom: 40 },
+    grid: { left: 64, right: 24, top: 64, bottom: 48 },
     xAxis: { type: 'category', boundaryGap: chartType === 'bar', data: data.years },
     yAxis: {
       type: 'value',
       name: data.metricLabel,
       axisLabel: {
-        formatter: formatTrendAxisLabel
+        show: true,
+        color: '#374c7e',
+        fontWeight: 500,
+        formatter: formatTrendAxisLabel,
+        margin: 14
+      },
+      nameTextStyle: {
+        color: '#2b3f6d',
+        fontWeight: 600,
+        padding: [0, 0, 8, 0]
+      },
+      axisLine: {
+        lineStyle: { color: '#a9b9e3' }
+      },
+      splitLine: {
+        lineStyle: { color: '#e4ebff' }
       }
     },
     series
@@ -1212,6 +1240,27 @@ const handleTrendPointClick = params => {
     ElMessage.closeAll()
   }
   ElMessage({ type: 'info', message, duration: 3000, showClose: true })
+  if (trendChartInstance.value) {
+    trendChartInstance.value.dispatchAction({
+      type: 'showTip',
+      seriesIndex: params.seriesIndex,
+      dataIndex: params.dataIndex
+    })
+    trendChartInstance.value.dispatchAction({
+      type: 'highlight',
+      seriesIndex: params.seriesIndex,
+      dataIndex: params.dataIndex
+    })
+    if (typeof window !== 'undefined' && typeof window.setTimeout === 'function') {
+      window.setTimeout(() => {
+        trendChartInstance.value?.dispatchAction({
+          type: 'downplay',
+          seriesIndex: params.seriesIndex,
+          dataIndex: params.dataIndex
+        })
+      }, 3200)
+    }
+  }
 }
 
 const updateStructureChart = data => {
