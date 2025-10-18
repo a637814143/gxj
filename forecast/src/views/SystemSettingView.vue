@@ -39,19 +39,19 @@
       </div>
     </section>
 
-    <el-card class="setting-card" shadow="hover">
+    <el-card class="setting-card" shadow="hover" v-loading="loading">
       <template #header>
         <div class="card-header">
           <div>
             <div class="card-title">基础参数配置</div>
             <div class="card-subtitle">调整默认区域、通知策略与计算资源开关</div>
           </div>
-          <el-button type="primary" @click="save">保存设置</el-button>
+          <el-button type="primary" :loading="saving" :disabled="loading" @click="save">保存设置</el-button>
         </div>
       </template>
       <el-form label-width="120px" :model="settings" class="setting-form">
         <el-form-item label="默认区域">
-          <el-select v-model="settings.defaultRegion" placeholder="请选择">
+          <el-select v-model="settings.defaultRegion" placeholder="请选择" :disabled="loading || regionLoading">
             <el-option
               v-for="region in regions"
               :key="region.id"
@@ -63,14 +63,14 @@
         <el-form-item label="区域管理">
           <div class="region-manage">
             <div class="region-add">
-              <el-input v-model="newRegionName" placeholder="输入区域名称" />
-              <el-button type="primary" @click="addRegion">新增区域</el-button>
+              <el-input v-model="newRegionName" placeholder="输入区域名称" :disabled="loading || regionLoading" />
+              <el-button type="primary" :loading="regionLoading" :disabled="loading" @click="addRegion">新增区域</el-button>
             </div>
-            <el-table :data="regions" border size="small" class="region-table">
+            <el-table :data="regions" border size="small" class="region-table" :loading="regionLoading">
               <el-table-column prop="name" label="区域名称">
                 <template #default="{ row }">
                   <div v-if="editingRegionId === row.id" class="region-edit-row">
-                    <el-input v-model="editRegionName" class="edit-input" />
+                    <el-input v-model="editRegionName" class="edit-input" :disabled="regionLoading" />
                   </div>
                   <span v-else>{{ row.name }}</span>
                 </template>
@@ -79,12 +79,12 @@
                 <template #default="{ row }">
                   <div class="table-actions">
                     <template v-if="editingRegionId === row.id">
-                      <el-button size="small" type="primary" @click="confirmEdit(row)">保存</el-button>
-                      <el-button size="small" @click="cancelEdit">取消</el-button>
+                      <el-button size="small" type="primary" :loading="regionLoading" @click="confirmEdit(row)">保存</el-button>
+                      <el-button size="small" :disabled="regionLoading" @click="cancelEdit">取消</el-button>
                     </template>
                     <template v-else>
-                      <el-button size="small" type="primary" text @click="startEdit(row)">编辑</el-button>
-                      <el-button size="small" type="danger" text @click="removeRegion(row)">删除</el-button>
+                      <el-button size="small" type="primary" text :disabled="regionLoading" @click="startEdit(row)">编辑</el-button>
+                      <el-button size="small" type="danger" text :disabled="regionLoading" @click="removeRegion(row)">删除</el-button>
                     </template>
                   </div>
                 </template>
@@ -104,33 +104,31 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import apiClient from '../services/http'
 
-const regions = ref([
-  { id: 'heilongjiang', name: '黑龙江' },
-  { id: 'henan', name: '河南' },
-  { id: 'sichuan', name: '四川' },
-  { id: 'yunnan', name: '云南' }
-])
+const regions = ref([])
+const loading = ref(false)
+const regionLoading = ref(false)
+const saving = ref(false)
 
 const settings = reactive({
-  defaultRegion: 'henan',
-  notifyEmail: 'agri.ops@example.com',
-  clusterEnabled: true
+  defaultRegion: null,
+  notifyEmail: '',
+  clusterEnabled: true,
+  pendingChangeCount: 0,
+  securityStrategy: '',
+  updatedAt: null
 })
-
-if (!regions.value.some((region) => region.id === settings.defaultRegion) && regions.value.length) {
-  settings.defaultRegion = regions.value[0].id
-}
 
 const newRegionName = ref('')
 const editingRegionId = ref(null)
 const editRegionName = ref('')
 
 const defaultRegionName = computed(() => {
-  const match = regions.value.find((region) => region.id === settings.defaultRegion)
-  return match ? match.name : '未设置'
+  const target = regions.value.find(region => region.id === settings.defaultRegion)
+  return target?.name ?? '未设置'
 })
 
 const highlightStats = computed(() => [
@@ -151,17 +149,32 @@ const highlightStats = computed(() => [
   }
 ])
 
-const quickOverview = computed(() => [
-  { label: '待审批变更', value: settings.clusterEnabled ? '0 项' : '1 项', trend: settings.clusterEnabled ? 0 : 1 },
-  { label: '上次更新', value: '3 天前', trend: 0 },
-  { label: '安全策略', value: '双因素', trend: 0 }
-])
+const quickOverview = computed(() => {
+  const pending = Number.isFinite(settings.pendingChangeCount) ? settings.pendingChangeCount : 0
+  return [
+    { label: '待审批变更', value: `${pending} 项`, trend: pending > 0 ? 1 : 0 },
+    { label: '上次更新', value: formatLastUpdated(settings.updatedAt), trend: 0 },
+    { label: '安全策略', value: settings.securityStrategy || '未配置', trend: 0 }
+  ]
+})
 
-const reminders = [
-  '建议为敏感操作开启审批流程与操作日志留存',
-  '通知邮箱支持多人配置，可用逗号分隔',
-  '集群资源调整后需同步运维团队确认容量'
-]
+const reminders = computed(() => {
+  const notices = []
+  if (settings.notifyEmail) {
+    notices.push(`通知邮箱 ${settings.notifyEmail} 将接收任务提醒与报表推送`)
+  } else {
+    notices.push('尚未配置通知邮箱，建议及时补充以接收预测告警')
+  }
+
+  if (settings.clusterEnabled) {
+    notices.push('模型计算集群已启用，可在高峰期保持自动扩容能力')
+  } else {
+    notices.push('当前集群关闭，建议在高峰任务前开启以保障性能')
+  }
+
+  notices.push(`默认区域已设置为「${defaultRegionName.value}」，可通过下方区域管理动态调整`)
+  return notices
+})
 
 function formatTrend(value) {
   if (value > 0) return `较昨日 +${value}`
@@ -169,33 +182,135 @@ function formatTrend(value) {
   return '较昨日 持平'
 }
 
-const createRegionId = () => {
-  let base = `custom-${Date.now()}`
-  while (regions.value.some((region) => region.id === base)) {
-    base = `custom-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+function formatLastUpdated(value) {
+  if (!value) return '暂无记录'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
   }
-  return base
+  const diff = Date.now() - date.getTime()
+  const minutes = Math.floor(diff / 60000)
+  if (minutes < 1) return '刚刚'
+  if (minutes < 60) return `${minutes} 分钟前`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours} 小时前`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `${days} 天前`
+  const months = Math.floor(days / 30)
+  if (months < 12) return `${months} 个月前`
+  const years = Math.floor(days / 365)
+  return `${years} 年前`
 }
 
-const addRegion = () => {
+const applyRegionList = list => {
+  const normalized = Array.isArray(list)
+    ? list
+        .filter(item => item && item.id != null)
+        .map(item => ({
+          id: item.id,
+          name: item.name,
+          code: item.code,
+          level: item.level,
+          parentCode: item.parentCode,
+          parentName: item.parentName,
+          description: item.description
+        }))
+    : []
+
+  regions.value = normalized.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hans-CN'))
+  ensureDefaultRegionValidity()
+}
+
+const applySettings = payload => {
+  settings.defaultRegion = payload?.defaultRegionId ?? null
+  settings.notifyEmail = payload?.notifyEmail ?? ''
+  settings.clusterEnabled = Boolean(payload?.clusterEnabled)
+  settings.pendingChangeCount = Number(payload?.pendingChangeCount ?? 0)
+  settings.securityStrategy = payload?.securityStrategy ?? ''
+  settings.updatedAt = payload?.updatedAt ?? null
+  ensureDefaultRegionValidity()
+}
+
+const ensureDefaultRegionValidity = () => {
+  if (!regions.value.length) {
+    return
+  }
+  if (settings.defaultRegion == null) {
+    settings.defaultRegion = regions.value[0].id
+    return
+  }
+  const exists = regions.value.some(region => region.id === settings.defaultRegion)
+  if (!exists) {
+    settings.defaultRegion = regions.value[0].id
+  }
+}
+
+const fetchRegions = async () => {
+  regionLoading.value = true
+  try {
+    const { data } = await apiClient.get('/api/base/regions')
+    const list = Array.isArray(data?.data) ? data.data : data
+    applyRegionList(list)
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.message || '加载区域列表失败')
+    applyRegionList([])
+  } finally {
+    regionLoading.value = false
+  }
+}
+
+const fetchSettings = async () => {
+  loading.value = true
+  try {
+    const { data } = await apiClient.get('/api/system/settings')
+    applySettings(data?.data ?? data ?? {})
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.message || '加载系统设置失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+const initialize = async () => {
+  loading.value = true
+  try {
+    await Promise.all([fetchRegions(), fetchSettings()])
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  initialize()
+})
+
+const addRegion = async () => {
   const name = newRegionName.value.trim()
   if (!name) {
     ElMessage.warning('请输入区域名称')
     return
   }
-  if (regions.value.some((region) => region.name === name)) {
+  if (regions.value.some(region => region.name === name)) {
     ElMessage.warning('区域名称已存在')
     return
   }
-  regions.value.push({ id: createRegionId(), name })
-  if (!settings.defaultRegion) {
-    settings.defaultRegion = regions.value[0].id
+  regionLoading.value = true
+  try {
+    await apiClient.post('/api/base/regions', { name, level: 'PREFECTURE' })
+    await fetchRegions()
+    if (!settings.defaultRegion && regions.value.length) {
+      settings.defaultRegion = regions.value[0].id
+    }
+    newRegionName.value = ''
+    ElMessage.success('区域已新增')
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.message || '新增区域失败')
+  } finally {
+    regionLoading.value = false
   }
-  newRegionName.value = ''
-  ElMessage.success('区域已新增')
 }
 
-const startEdit = (region) => {
+const startEdit = region => {
   editingRegionId.value = region.id
   editRegionName.value = region.name
 }
@@ -205,22 +320,38 @@ const cancelEdit = () => {
   editRegionName.value = ''
 }
 
-const confirmEdit = (region) => {
+const confirmEdit = async region => {
   const name = editRegionName.value.trim()
   if (!name) {
     ElMessage.warning('请输入区域名称')
     return
   }
-  if (regions.value.some((item) => item.name === name && item.id !== region.id)) {
+  if (regions.value.some(item => item.name === name && item.id !== region.id)) {
     ElMessage.warning('区域名称已存在')
     return
   }
-  region.name = name
-  cancelEdit()
-  ElMessage.success('区域已更新')
+
+  regionLoading.value = true
+  try {
+    await apiClient.put(`/api/base/regions/${region.id}`, {
+      code: region.code,
+      name,
+      level: region.level,
+      parentCode: region.parentCode,
+      parentName: region.parentName,
+      description: region.description
+    })
+    await fetchRegions()
+    cancelEdit()
+    ElMessage.success('区域已更新')
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.message || '更新区域失败')
+  } finally {
+    regionLoading.value = false
+  }
 }
 
-const removeRegion = async (region) => {
+const removeRegion = async region => {
   if (regions.value.length === 1) {
     ElMessage.warning('至少保留一个区域配置')
     return
@@ -235,24 +366,39 @@ const removeRegion = async (region) => {
     return
   }
 
-  const index = regions.value.findIndex((item) => item.id === region.id)
-  if (index !== -1) {
-    regions.value.splice(index, 1)
+  regionLoading.value = true
+  try {
+    await apiClient.delete(`/api/base/regions/${region.id}`)
+    await fetchRegions()
+    if (editingRegionId.value === region.id) {
+      cancelEdit()
+    }
+    ElMessage.success('区域已删除')
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.message || '删除区域失败')
+  } finally {
+    regionLoading.value = false
   }
-
-  if (!regions.value.some((item) => item.id === settings.defaultRegion)) {
-    settings.defaultRegion = regions.value.length ? regions.value[0].id : ''
-  }
-
-  if (editingRegionId.value === region.id) {
-    cancelEdit()
-  }
-
-  ElMessage.success('区域已删除')
 }
 
-const save = () => {
-  ElMessage.success('设置已保存，后续将与后端接口对接')
+const save = async () => {
+  saving.value = true
+  try {
+    const payload = {
+      defaultRegionId: settings.defaultRegion ?? null,
+      notifyEmail: settings.notifyEmail.trim() ? settings.notifyEmail.trim() : null,
+      clusterEnabled: settings.clusterEnabled,
+      pendingChangeCount: settings.pendingChangeCount,
+      securityStrategy: settings.securityStrategy.trim() ? settings.securityStrategy.trim() : null
+    }
+    const { data } = await apiClient.put('/api/system/settings', payload)
+    applySettings(data?.data ?? data ?? {})
+    ElMessage.success('设置已保存')
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.message || '保存设置失败')
+  } finally {
+    saving.value = false
+  }
 }
 </script>
 

@@ -11,6 +11,16 @@ ON DUPLICATE KEY UPDATE
     parent_name = VALUES(parent_name),
     description = VALUES(description);
 
+-- 初始化系统设置
+INSERT INTO system_setting (id, default_region_id, notify_email, cluster_enabled, pending_change_count, security_strategy)
+VALUES (1, 2, 'agri.ops@example.com', 1, 1, '双因素')
+ON DUPLICATE KEY UPDATE
+    default_region_id = VALUES(default_region_id),
+    notify_email = VALUES(notify_email),
+    cluster_enabled = VALUES(cluster_enabled),
+    pending_change_count = VALUES(pending_change_count),
+    security_strategy = VALUES(security_strategy);
+
 -- 初始化基础农作物信息
 INSERT INTO base_crop (id, code, name, category, description)
 VALUES
@@ -116,13 +126,19 @@ ON DUPLICATE KEY UPDATE
     evaluation = VALUES(evaluation);
 
 -- 初始化预测报告摘要
-INSERT INTO report_summary (id, title, description, forecast_result_id, insights)
+INSERT INTO report_summary (id, title, description, author, coverage_period, forecast_result_id, insights, status, published_at, auto_generated)
 VALUES
-    (1, '2024 年小麦产量预测报告', '基于 LSTM 模型的年度预测结果概览。', 1, '建议提前储备灌溉水源，并关注 6-7 月的降雨波动。')
+    (1, '2024 年春季小麦产量预测报告', '综合气象与历史产量生成的春季预测分析。', '农业数据分析组', '2023 Q4 - 2024 Q1', 1, '建议关注 6 月份降雨波动并提前协调灌溉计划。', 'PUBLISHED', '2024-03-28 09:00:00', 0),
+    (2, '2024 年玉米产业监测月报', '监测玉米价格与产量风险的月度动态。', '市场监测专班', '2024-03', 2, '玉米价格波动加剧，建议储备调节库存并加强市场预警。', 'PENDING', '2024-04-05 10:00:00', 1)
 ON DUPLICATE KEY UPDATE
     description = VALUES(description),
+    author = VALUES(author),
+    coverage_period = VALUES(coverage_period),
     forecast_result_id = VALUES(forecast_result_id),
-    insights = VALUES(insights);
+    insights = VALUES(insights),
+    status = VALUES(status),
+    published_at = VALUES(published_at),
+    auto_generated = VALUES(auto_generated);
 
 -- 初始化系统权限
 INSERT INTO sys_permission (code, name, description)

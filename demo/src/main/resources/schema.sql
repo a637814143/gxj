@@ -16,6 +16,18 @@ CREATE TABLE IF NOT EXISTS base_region (
     KEY idx_base_region_level (level)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '基础行政区域信息';
 
+CREATE TABLE IF NOT EXISTS system_setting (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    default_region_id BIGINT UNSIGNED,
+    notify_email VARCHAR(128),
+    cluster_enabled TINYINT(1) NOT NULL DEFAULT 1,
+    pending_change_count INT NOT NULL DEFAULT 0,
+    security_strategy VARCHAR(64),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_system_setting_region FOREIGN KEY (default_region_id) REFERENCES base_region (id) ON DELETE SET NULL
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '系统配置项';
+
 CREATE TABLE IF NOT EXISTS base_crop (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     code VARCHAR(64) NOT NULL,
@@ -207,8 +219,13 @@ CREATE TABLE IF NOT EXISTS report_summary (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     title VARCHAR(128) NOT NULL,
     description VARCHAR(512),
+    author VARCHAR(128),
+    coverage_period VARCHAR(128),
     forecast_result_id BIGINT UNSIGNED,
     insights VARCHAR(2048),
+    status VARCHAR(32),
+    published_at DATETIME,
+    auto_generated TINYINT(1) NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     KEY idx_report_result (forecast_result_id),

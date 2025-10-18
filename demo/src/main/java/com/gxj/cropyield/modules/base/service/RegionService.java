@@ -10,4 +10,8 @@ public interface RegionService {
     List<Region> listAll();
 
     Region create(RegionRequest request);
+
+    Region update(Long id, RegionRequest request);
+
+    void delete(Long id);
 }
