@@ -62,9 +62,6 @@ public class SystemSettingServiceImpl implements SystemSettingService {
 
     private SystemSetting createDefaultSetting() {
         SystemSetting setting = new SystemSetting();
-        setting.setClusterEnabled(true);
-        setting.setPendingChangeCount(0);
-        setting.setSecurityStrategy("双因素");
         return systemSettingRepository.save(setting);
     }
 
