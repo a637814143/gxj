@@ -33,8 +33,28 @@
     />
 
     <div class="page-actions">
-      <div class="actions-info">{{ datasetSummaryText }}</div>
-      <el-button type="primary" :loading="isLoading" @click="loadYieldRecords">刷新可视化数据</el-button>
+      <div class="actions-info">
+        <el-tag v-if="hasCategoryOptions" class="category-tag" type="success" effect="light">
+          {{ selectedCategoryLabel }}
+        </el-tag>
+        <span>{{ datasetSummaryText }}</span>
+      </div>
+      <div class="actions-controls">
+        <el-select
+          v-model="selectedCategory"
+          class="category-select"
+          :disabled="!categorySelectOptions.length"
+          placeholder="选择作物类别"
+        >
+          <el-option
+            v-for="option in categorySelectOptions"
+            :key="option.value"
+            :label="option.display"
+            :value="option.value"
+          />
+        </el-select>
+        <el-button type="primary" :loading="isLoading" @click="loadYieldRecords">刷新可视化数据</el-button>
+      </div>
     </div>
 
     <el-row :gutter="24" class="chart-grid">
@@ -139,6 +159,11 @@ const mapHasData = ref(false)
 const isLoading = ref(false)
 const fetchError = ref('')
 const yieldRecords = ref([])
+
+const CATEGORY_ALL = '__ALL__'
+const UNCATEGORIZED_LABEL = '未分类作物'
+
+const selectedCategory = ref(CATEGORY_ALL)
 
 const numberFormatters = {
   0: new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 0 }),
@@ -247,8 +272,24 @@ const normalizedRecords = computed(() =>
   }))
 )
 
-const datasetMetrics = computed(() => {
+const resolveCategoryLabel = category => {
+  if (category == null) {
+    return UNCATEGORIZED_LABEL
+  }
+  const text = String(category).trim()
+  return text || UNCATEGORIZED_LABEL
+}
+
+const filteredRecords = computed(() => {
+  const category = selectedCategory.value
   const records = normalizedRecords.value
+  if (category === CATEGORY_ALL) {
+    return records
+  }
+  return records.filter(record => resolveCategoryLabel(record?.cropCategory) === category)
+})
+
+const computeMetrics = records => {
   if (!records.length) {
     return {
       totalRecords: 0,
@@ -276,7 +317,7 @@ const datasetMetrics = computed(() => {
       regionSet.add(record.regionName)
     }
     if (record?.cropCategory) {
-      categorySet.add(record.cropCategory)
+      categorySet.add(resolveCategoryLabel(record.cropCategory))
     }
     if (typeof record.year === 'number' && !Number.isNaN(record.year)) {
       if (record.year < earliestYear) {
@@ -299,41 +340,118 @@ const datasetMetrics = computed(() => {
     totalRecords: records.length,
     cropCount: cropSet.size,
     regionCount: regionSet.size,
-    categoryCount: categorySet.size,
+    categoryCount: categorySet.size || (records.length ? 1 : 0),
     earliestYear: Number.isFinite(earliestYear) ? earliestYear : null,
     latestYear: Number.isFinite(latestYear) ? latestYear : null,
     latestCollectedAt
   }
+}
+
+const datasetMetrics = computed(() => computeMetrics(normalizedRecords.value))
+const activeMetrics = computed(() => computeMetrics(filteredRecords.value))
+
+const categoryOptions = computed(() => {
+  const counter = new Map()
+  normalizedRecords.value.forEach(record => {
+    const label = resolveCategoryLabel(record?.cropCategory)
+    counter.set(label, (counter.get(label) ?? 0) + 1)
+  })
+  return Array.from(counter.entries())
+    .sort((a, b) => {
+      if (b[1] === a[1]) {
+        return a[0].localeCompare(b[0], 'zh-CN')
+      }
+      return b[1] - a[1]
+    })
+    .map(([label, count]) => ({ label, value: label, count }))
+})
+
+const categorySelectOptions = computed(() => {
+  const totalRecords = datasetMetrics.value.totalRecords
+  if (!totalRecords) {
+    return []
+  }
+  const formattedTotal = formatNumber(totalRecords, 0)
+  return [
+    {
+      label: '全部作物类别',
+      value: CATEGORY_ALL,
+      count: totalRecords,
+      display: `全部作物类别 · ${formattedTotal} 条记录`
+    },
+    ...categoryOptions.value.map(option => ({
+      ...option,
+      display: `${option.label} · ${formatNumber(option.count, 0)} 条记录`
+    }))
+  ]
+})
+
+const hasCategoryOptions = computed(() => categorySelectOptions.value.length > 0)
+const selectedCategoryLabel = computed(() => (selectedCategory.value === CATEGORY_ALL ? '全部作物' : selectedCategory.value))
+const isAllCategorySelected = computed(() => selectedCategory.value === CATEGORY_ALL)
+
+watch(categorySelectOptions, options => {
+  if (!options.length) {
+    selectedCategory.value = CATEGORY_ALL
+    return
+  }
+  if (selectedCategory.value === CATEGORY_ALL) {
+    return
+  }
+  const matched = options.some(option => option.value === selectedCategory.value)
+  if (!matched) {
+    selectedCategory.value = CATEGORY_ALL
+  }
 })
 
 const datasetSummaryText = computed(() => {
-  const metrics = datasetMetrics.value
-  if (!metrics.totalRecords) {
+  if (!datasetMetrics.value.totalRecords) {
     return '当前暂无导入的农情数据，上传后将自动生成可视化图表。'
   }
-  return `已汇总 ${formatNumber(metrics.totalRecords, 0)} 条产量记录，涵盖 ${formatNumber(metrics.cropCount, 0)} 种作物与 ${formatNumber(metrics.regionCount, 0)} 个地区。`
+  if (!isAllCategorySelected.value && !activeMetrics.value.totalRecords) {
+    return `${selectedCategoryLabel.value} 暂无可视化数据，请选择其他作物类别或刷新数据。`
+  }
+  const metrics = isAllCategorySelected.value ? datasetMetrics.value : activeMetrics.value
+  if (isAllCategorySelected.value) {
+    return `已汇总 ${formatNumber(metrics.totalRecords, 0)} 条产量记录，涵盖 ${formatNumber(metrics.cropCount, 0)} 种作物与 ${formatNumber(metrics.regionCount, 0)} 个地区。`
+  }
+  return `${selectedCategoryLabel.value} 类别共 ${formatNumber(metrics.totalRecords, 0)} 条记录，覆盖 ${formatNumber(metrics.cropCount, 0)} 种作物与 ${formatNumber(metrics.regionCount, 0)} 个地区。`
 })
 
 const highlightStats = computed(() => {
-  const metrics = datasetMetrics.value
-  if (!metrics.totalRecords) {
+  if (!datasetMetrics.value.totalRecords) {
     return [
       { label: '数据记录', value: '0 条', sub: '等待导入农情数据集' },
       { label: '覆盖作物', value: '-', sub: '导入后自动识别作物类别' },
       { label: '最新数据', value: '-', sub: '暂无采集时间信息' }
     ]
   }
+  if (!isAllCategorySelected.value && !activeMetrics.value.totalRecords) {
+    return [
+      { label: '当前类别', value: selectedCategoryLabel.value, sub: '暂无匹配数据' },
+      { label: '覆盖作物', value: '-', sub: '导入更多该类别的作物记录' },
+      { label: '数据时间范围', value: '-', sub: '暂无年份信息' }
+    ]
+  }
+  const metrics = isAllCategorySelected.value ? datasetMetrics.value : activeMetrics.value
   const { cropCount, categoryCount, regionCount, totalRecords, earliestYear, latestYear, latestCollectedAt } = metrics
   const yearLabel = earliestYear && latestYear ? (earliestYear === latestYear ? `${latestYear} 年` : `${earliestYear} - ${latestYear} 年`) : '年份待补充'
+  if (isAllCategorySelected.value) {
+    return [
+      { label: '覆盖作物', value: `${formatNumber(cropCount, 0)} 种`, sub: `涵盖 ${formatNumber(categoryCount, 0)} 类作物` },
+      { label: '覆盖地区', value: `${formatNumber(regionCount, 0)} 个`, sub: `累计 ${formatNumber(totalRecords, 0)} 条产量记录` },
+      { label: '数据时间范围', value: yearLabel, sub: latestCollectedAt ? `最近采集于 ${latestCollectedAt}` : '采集时间待补充' }
+    ]
+  }
   return [
-    { label: '覆盖作物', value: `${formatNumber(cropCount, 0)} 种`, sub: `涵盖 ${formatNumber(categoryCount, 0)} 类作物` },
-    { label: '覆盖地区', value: `${formatNumber(regionCount, 0)} 个`, sub: `累计 ${formatNumber(totalRecords, 0)} 条产量记录` },
+    { label: '当前类别', value: selectedCategoryLabel.value, sub: `累计 ${formatNumber(totalRecords, 0)} 条记录` },
+    { label: '覆盖作物', value: `${formatNumber(cropCount, 0)} 种`, sub: `涉及 ${formatNumber(regionCount, 0)} 个地区` },
     { label: '数据时间范围', value: yearLabel, sub: latestCollectedAt ? `最近采集于 ${latestCollectedAt}` : '采集时间待补充' }
   ]
 })
 
 const trendChartData = computed(() => {
-  const records = normalizedRecords.value.filter(record => typeof record.year === 'number' && record.production != null)
+  const records = filteredRecords.value.filter(record => typeof record.year === 'number' && record.production != null)
   if (!records.length) {
     return { years: [], series: [], metricLabel: '产量 (万吨)' }
   }
@@ -365,11 +483,11 @@ const trendChartData = computed(() => {
 })
 
 const structureData = computed(() => {
-  const records = normalizedRecords.value.filter(record => record.production != null || record.sownArea != null)
+  const records = filteredRecords.value.filter(record => record.production != null || record.sownArea != null)
   if (!records.length) {
     return { year: null, items: [], metricKey: 'production', metricLabel: '产量 (万吨)' }
   }
-  const metrics = datasetMetrics.value
+  const metrics = isAllCategorySelected.value ? datasetMetrics.value : activeMetrics.value
   const targetYear = metrics.latestYear
   const filteredByYear = typeof targetYear === 'number' ? records.filter(record => record.year === targetYear) : []
   const sourceRecords = filteredByYear.length ? filteredByYear : records
@@ -398,7 +516,7 @@ const structureData = computed(() => {
 })
 
 const mapData = computed(() => {
-  const records = normalizedRecords.value.filter(record => record.production != null)
+  const records = filteredRecords.value.filter(record => record.production != null)
   if (!records.length) {
     return { items: [], min: 0, max: 0, excluded: 0 }
   }
@@ -484,38 +602,60 @@ const trendGrowth = computed(() => {
 })
 
 const trendSubtitle = computed(() => {
-  const metrics = datasetMetrics.value
-  if (!metrics.totalRecords) {
+  if (!datasetMetrics.value.totalRecords) {
     return '导入产量数据后可查看逐年趋势对比。'
   }
+  if (!isAllCategorySelected.value && !activeMetrics.value.totalRecords) {
+    return `${selectedCategoryLabel.value} 暂无可用的产量趋势数据。`
+  }
+  const metrics = isAllCategorySelected.value ? datasetMetrics.value : activeMetrics.value
   if (metrics.earliestYear && metrics.latestYear) {
     if (metrics.earliestYear === metrics.latestYear) {
-      return `基于 ${metrics.latestYear} 年导入的 ${formatNumber(metrics.cropCount, 0)} 种作物产量记录`
+      if (isAllCategorySelected.value) {
+        return `基于 ${metrics.latestYear} 年导入的 ${formatNumber(metrics.cropCount, 0)} 种作物产量记录`
+      }
+      return `聚焦 ${selectedCategoryLabel.value}，展示 ${metrics.latestYear} 年的 ${formatNumber(metrics.cropCount, 0)} 种作物产量记录`
     }
-    return `覆盖 ${metrics.earliestYear} - ${metrics.latestYear} 年的 ${formatNumber(metrics.cropCount, 0)} 种作物产量趋势`
+    if (isAllCategorySelected.value) {
+      return `覆盖 ${metrics.earliestYear} - ${metrics.latestYear} 年的 ${formatNumber(metrics.cropCount, 0)} 种作物产量趋势`
+    }
+    return `聚焦 ${selectedCategoryLabel.value}，覆盖 ${metrics.earliestYear} - ${metrics.latestYear} 年的产量趋势`
   }
-  return `已导入 ${formatNumber(metrics.totalRecords, 0)} 条产量记录，自动生成趋势分析`
+  if (isAllCategorySelected.value) {
+    return `已导入 ${formatNumber(metrics.totalRecords, 0)} 条产量记录，自动生成趋势分析`
+  }
+  return `${selectedCategoryLabel.value} 共 ${formatNumber(metrics.totalRecords, 0)} 条产量记录，自动生成趋势分析`
 })
 
 const structureSubtitle = computed(() => {
   const data = structureData.value
   if (!data.items.length) {
-    return '暂无可用于结构分析的数据，请补充作物种植信息。'
+    return isAllCategorySelected.value
+      ? '暂无可用于结构分析的数据，请补充作物种植信息。'
+      : `${selectedCategoryLabel.value} 暂无可用于结构分析的数据。`
   }
   const yearText = data.year ? `${data.year} 年` : '最新导入数据'
-  return `${yearText}的作物${data.metricLabel}构成占比`
+  if (isAllCategorySelected.value) {
+    return `${yearText}的作物${data.metricLabel}构成占比`
+  }
+  return `${yearText}的 ${selectedCategoryLabel.value} ${data.metricLabel}构成占比`
 })
 
 const mapSubtitle = computed(() => {
-  const metrics = datasetMetrics.value
-  if (!metrics.totalRecords) {
+  if (!datasetMetrics.value.totalRecords) {
     return '导入省级产量数据后可查看区域热力。'
+  }
+  if (!isAllCategorySelected.value && !activeMetrics.value.totalRecords) {
+    return `${selectedCategoryLabel.value} 暂无省级分布数据，建议补充地区字段。`
   }
   const { items, excluded } = mapData.value
   if (!items.length) {
-    return '暂无匹配到省级行政区的数据，请完善地区信息。'
+    return isAllCategorySelected.value
+      ? '暂无匹配到省级行政区的数据，请完善地区信息。'
+      : `${selectedCategoryLabel.value} 暂无匹配到省级行政区的数据，请完善地区信息。`
   }
-  return `按省份汇总产量，覆盖 ${items.length} 个省级地区${excluded ? `，忽略 ${excluded} 条缺少省级信息的记录` : ''}`
+  const prefix = isAllCategorySelected.value ? '按省份汇总产量' : `${selectedCategoryLabel.value} 省份产量分布`
+  return `${prefix}，覆盖 ${items.length} 个省级地区${excluded ? `，忽略 ${excluded} 条缺少省级信息的记录` : ''}`
 })
 
 const trendSummaryText = computed(() => {
@@ -523,7 +663,8 @@ const trendSummaryText = computed(() => {
   if (!data.series.length) {
     return ''
   }
-  return `共展示 ${data.series.length} 种作物在 ${data.years.length} 个年份的产量变化`
+  const prefix = isAllCategorySelected.value ? '' : `${selectedCategoryLabel.value} `
+  return `${prefix}共展示 ${data.series.length} 种作物在 ${data.years.length} 个年份的产量变化`
 })
 
 const structureSummaryText = computed(() => {
@@ -532,24 +673,39 @@ const structureSummaryText = computed(() => {
     return ''
   }
   const yearText = data.year ? `${data.year} 年` : '最新数据'
-  return `${yearText}共有 ${data.items.length} 种作物，${data.metricLabel}占比如上`
+  if (isAllCategorySelected.value) {
+    return `${yearText}共有 ${data.items.length} 种作物，${data.metricLabel}占比如上`
+  }
+  return `${selectedCategoryLabel.value} 在 ${yearText}共有 ${data.items.length} 种作物，${data.metricLabel}占比如上`
 })
 
 const mapSummaryText = computed(() => {
   const { items, excluded } = mapData.value
   if (!items.length) {
-    return datasetMetrics.value.totalRecords ? '请检查导入数据的地区字段，确保包含省级名称。' : ''
+    if (!datasetMetrics.value.totalRecords) {
+      return ''
+    }
+    return isAllCategorySelected.value
+      ? '请检查导入数据的地区字段，确保包含省级名称。'
+      : `${selectedCategoryLabel.value} 暂无匹配的省级信息，请检查导入数据的地区字段。`
   }
-  return `热力图已聚合 ${items.length} 个省级行政区${excluded ? `，${excluded} 条记录未匹配成功` : ''}`
+  const prefix = isAllCategorySelected.value ? '热力图已聚合' : `${selectedCategoryLabel.value} 热力图已聚合`
+  return `${prefix} ${items.length} 个省级行政区${excluded ? `，${excluded} 条记录未匹配成功` : ''}`
 })
 
 const insightTips = computed(() => {
-  const metrics = datasetMetrics.value
-  if (!metrics.totalRecords) {
+  if (!datasetMetrics.value.totalRecords) {
     return [
       '导入数据中心的农情数据后，系统将自动生成趋势、结构和热力图。',
       '请确保导入文件包含作物、地区和年份等关键字段。',
       '上传完成后可点击“刷新可视化数据”以获取最新图表。'
+    ]
+  }
+  if (!isAllCategorySelected.value && !activeMetrics.value.totalRecords) {
+    return [
+      `${selectedCategoryLabel.value} 暂无可视化数据，请确认数据中心已导入对应类别。`,
+      '可通过右侧下拉框切换其他作物类别快速获取洞察。',
+      '若刚完成导入，请点击“刷新可视化数据”同步最新记录。'
     ]
   }
   const tips = []
@@ -890,6 +1046,8 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
   background: #f2fbf7;
   border: 1px solid rgba(13, 71, 60, 0.12);
   border-radius: 16px;
@@ -903,6 +1061,25 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   font-weight: 500;
+}
+
+.actions-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.category-tag {
+  border-radius: 999px;
+  font-size: 12px;
+  height: auto;
+  line-height: 1.4;
+  padding: 2px 10px;
+}
+
+.category-select {
+  min-width: 220px;
 }
 
 .chart-body {
@@ -975,8 +1152,17 @@ onBeforeUnmount(() => {
 
   .page-actions {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
     gap: 12px;
+  }
+
+  .actions-controls {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .category-select {
+    width: 100%;
   }
 
   .chart {
