@@ -31,4 +31,12 @@ public class DatasetFileServiceImpl implements DatasetFileService {
         datasetFile.setDescription(request.description());
         return datasetFileRepository.save(datasetFile);
     }
+
+    @Override
+    public void deleteByIds(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return;
+        }
+        datasetFileRepository.deleteAllById(ids);
+    }
 }

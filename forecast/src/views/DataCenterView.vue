@@ -50,12 +50,30 @@
             <div class="card-subtitle">查看已导入的 Excel 数据文件并维护基础信息</div>
           </div>
           <div class="card-actions">
+            <el-button
+              type="danger"
+              plain
+              :disabled="!datasetSelection.length || datasetDeleting"
+              :loading="datasetDeleting"
+              @click="confirmDeleteDatasets"
+            >
+              删除数据集
+            </el-button>
             <el-button @click="fetchDatasets" :loading="datasetLoading">刷新</el-button>
             <el-button type="primary" @click="openUpload">上传数据</el-button>
           </div>
         </div>
       </template>
-      <el-table :data="datasets" v-loading="datasetLoading" empty-text="暂无导入记录" :header-cell-style="tableHeaderStyle">
+      <el-table
+        ref="datasetTableRef"
+        :data="datasets"
+        v-loading="datasetLoading"
+        empty-text="暂无导入记录"
+        :header-cell-style="tableHeaderStyle"
+        row-key="id"
+        @selection-change="handleDatasetSelectionChange"
+      >
+        <el-table-column type="selection" width="48" />
         <el-table-column prop="name" label="数据集名称" min-width="220" />
         <el-table-column label="类型" width="130">
           <template #default="{ row }">
@@ -306,13 +324,73 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import apiClient from '../services/http'
 
 const datasets = ref([])
 const datasetLoading = ref(false)
+
+const datasetTableRef = ref(null)
+const datasetSelection = ref([])
+const datasetDeleting = ref(false)
+
+const clearDatasetSelection = () => {
+  datasetSelection.value = []
+  nextTick(() => {
+    datasetTableRef.value?.clearSelection?.()
+  })
+}
+
+const handleDatasetSelectionChange = selection => {
+  datasetSelection.value = Array.isArray(selection) ? selection : []
+}
+
+const deleteSelectedDatasets = async () => {
+  if (!datasetSelection.value.length) {
+    return
+  }
+  const ids = datasetSelection.value
+    .map(item => item?.id)
+    .filter(id => typeof id === 'number' || typeof id === 'string')
+    .map(id => Number(id))
+    .filter(id => !Number.isNaN(id))
+
+  if (!ids.length) {
+    ElMessage.warning('未找到所选数据集的标识，无法删除')
+    return
+  }
+
+  datasetDeleting.value = true
+  try {
+    await apiClient.delete('/api/datasets/files', { data: ids })
+    ElMessage.success('已删除选中的数据集')
+    clearDatasetSelection()
+    await fetchDatasets()
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.message || '删除数据集失败')
+  } finally {
+    datasetDeleting.value = false
+  }
+}
+
+const confirmDeleteDatasets = () => {
+  if (!datasetSelection.value.length || datasetDeleting.value) {
+    return
+  }
+  ElMessageBox.confirm(
+    '删除后数据将无法恢复，且不会影响历史导入任务记录。是否继续？',
+    '删除数据集',
+    {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning'
+    }
+  )
+    .then(() => deleteSelectedDatasets())
+    .catch(() => {})
+}
 
 const importTasks = ref([])
 const taskLoading = ref(false)
@@ -496,6 +574,7 @@ const fetchDatasets = async () => {
   try {
     const { data } = await apiClient.get('/api/datasets/files')
     datasets.value = data?.data ?? []
+    clearDatasetSelection()
   } catch (error) {
     ElMessage.error(error?.response?.data?.message || '加载数据集列表失败')
   } finally {
