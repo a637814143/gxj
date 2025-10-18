@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 
 public record DataImportJobView(
         String taskId,
+        Long datasetFileId,
         String datasetName,
         DatasetType datasetType,
         String originalFilename,

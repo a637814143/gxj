@@ -23,6 +23,7 @@ public class DatasetSchemaMigrator implements ApplicationRunner {
     public void run(ApplicationArguments args) {
         ensureDatasetFileColumn("dataset_yield_record", "idx_yield_dataset_file", "fk_yield_dataset_file");
         ensureDatasetFileColumn("dataset_price_record", "idx_price_dataset_file", "fk_price_dataset_file");
+        ensureImportJobColumn();
     }
 
     private void ensureDatasetFileColumn(String tableName, String indexName, String constraintName) {
@@ -40,6 +41,25 @@ public class DatasetSchemaMigrator implements ApplicationRunner {
             String ddl = "ALTER TABLE " + tableName +
                     " ADD CONSTRAINT " + constraintName +
                     " FOREIGN KEY (dataset_file_id) REFERENCES dataset_file (id) ON DELETE CASCADE";
+            executeDdl(tableName, "add dataset_file foreign key", ddl);
+        }
+    }
+
+    private void ensureImportJobColumn() {
+        String tableName = "data_import_job";
+        if (!columnExists(tableName, "dataset_file_id")) {
+            String ddl = "ALTER TABLE " + tableName +
+                    " ADD COLUMN dataset_file_id BIGINT UNSIGNED NULL AFTER dataset_type";
+            executeDdl(tableName, "add dataset_file_id column", ddl);
+        }
+        if (!indexExists(tableName, "idx_import_dataset_file")) {
+            String ddl = "ALTER TABLE " + tableName +
+                    " ADD INDEX idx_import_dataset_file (dataset_file_id)";
+            executeDdl(tableName, "add dataset_file index", ddl);
+        }
+        if (!foreignKeyExists(tableName, "fk_import_dataset_file")) {
+            String ddl = "ALTER TABLE " + tableName +
+                    " ADD CONSTRAINT fk_import_dataset_file FOREIGN KEY (dataset_file_id) REFERENCES dataset_file (id) ON DELETE SET NULL";
             executeDdl(tableName, "add dataset_file foreign key", ddl);
         }
     }

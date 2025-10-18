@@ -14,7 +14,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -61,10 +63,38 @@ public class DatasetFileServiceImpl implements DatasetFileService {
             return;
         }
         for (DatasetFile file : files) {
+            archiveImportJobs(file);
             long removed = cleanupDatasetRecords(file);
             recordDeletionJob(file, removed);
         }
         datasetFileRepository.deleteAll(files);
+    }
+
+    private void archiveImportJobs(DatasetFile file) {
+        Set<DataImportJob> relatedJobs = new LinkedHashSet<>();
+        if (file.getId() != null) {
+            relatedJobs.addAll(jobRepository.findByDatasetFileId(file.getId()));
+        }
+        if (file.getName() != null && !file.getName().isBlank()) {
+            relatedJobs.addAll(jobRepository.findByDatasetName(file.getName()));
+        }
+        if (relatedJobs.isEmpty()) {
+            return;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        relatedJobs.forEach(job -> {
+            job.setDatasetFileId(null);
+            if (job.getFinishedAt() == null) {
+                job.setFinishedAt(now);
+            }
+            String original = job.getMessage();
+            if (original == null || original.isBlank()) {
+                job.setMessage("关联数据集已删除，记录已归档。");
+            } else if (!original.contains("关联数据集已删除")) {
+                job.setMessage("关联数据集已删除，记录已归档。原摘要：" + original);
+            }
+        });
+        jobRepository.saveAll(relatedJobs);
     }
 
     private long cleanupDatasetRecords(DatasetFile file) {
@@ -87,6 +117,7 @@ public class DatasetFileServiceImpl implements DatasetFileService {
         job.setDatasetDescription(file.getDescription());
         job.setDatasetType(file.getType());
         job.setStatus(DataImportJobStatus.SUCCEEDED);
+        job.setDatasetFileId(null);
         job.setOriginalFilename(file.getName());
         job.setStoragePath(file.getStoragePath());
         int processed = removedRecords > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) removedRecords;

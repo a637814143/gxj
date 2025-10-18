@@ -110,6 +110,19 @@ public class DataImportService {
         this.objectMapper = objectMapper;
     }
 
+    @Transactional
+    public int deleteTasks(List<String> taskIds) {
+        if (taskIds == null || taskIds.isEmpty()) {
+            return 0;
+        }
+        List<DataImportJob> jobs = jobRepository.findByTaskIdIn(taskIds);
+        if (jobs.isEmpty()) {
+            return 0;
+        }
+        jobRepository.deleteAll(jobs);
+        return jobs.size();
+    }
+
     public DataImportJobView submitImport(MultipartFile file, DatasetType datasetType, String datasetName, String datasetDescription) {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("请上传包含数据的文件");
@@ -223,6 +236,9 @@ public class DataImportService {
             int updated = 0;
             if (!validRecords.isEmpty()) {
                 datasetFile = ensureDatasetFile(job);
+                if (datasetFile != null) {
+                    job.setDatasetFileId(datasetFile.getId());
+                }
                 job.setMessage("正在批量写入数据库");
                 jobRepository.save(job);
                 UpsertResult result = upsertRecords(validRecords, datasetFile);
@@ -816,6 +832,7 @@ public class DataImportService {
         double progress = total == 0 ? 0 : Math.min(1.0, (double) (processed + failed + skipped) / total);
         return new DataImportJobView(
                 job.getTaskId(),
+                job.getDatasetFileId(),
                 job.getDatasetName(),
                 job.getDatasetType(),
                 job.getOriginalFilename(),

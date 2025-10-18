@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS data_import_job (
     dataset_name VARCHAR(128),
     dataset_description VARCHAR(256),
     dataset_type VARCHAR(32) NOT NULL,
+    dataset_file_id BIGINT UNSIGNED,
     status VARCHAR(32) NOT NULL,
     original_filename VARCHAR(256),
     storage_path VARCHAR(512),
@@ -62,7 +63,9 @@ CREATE TABLE IF NOT EXISTS data_import_job (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_import_task (task_id),
-    KEY idx_import_status (status)
+    KEY idx_import_status (status),
+    KEY idx_import_dataset_file (dataset_file_id),
+    CONSTRAINT fk_import_dataset_file FOREIGN KEY (dataset_file_id) REFERENCES dataset_file (id) ON DELETE SET NULL
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '数据导入任务记录';
 
 CREATE TABLE IF NOT EXISTS data_import_job_error (
