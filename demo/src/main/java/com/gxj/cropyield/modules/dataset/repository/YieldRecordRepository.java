@@ -20,6 +20,16 @@ public interface YieldRecordRepository extends JpaRepository<YieldRecord, Long> 
 
     Long deleteByDatasetFileId(Long datasetFileId);
 
+    boolean existsByCropId(Long cropId);
+
+    boolean existsByRegionId(Long regionId);
+
+    @Query("select distinct record.crop.id from YieldRecord record where record.datasetFile.id = :datasetFileId")
+    List<Long> findDistinctCropIdsByDatasetFileId(@Param("datasetFileId") Long datasetFileId);
+
+    @Query("select distinct record.region.id from YieldRecord record where record.datasetFile.id = :datasetFileId")
+    List<Long> findDistinctRegionIdsByDatasetFileId(@Param("datasetFileId") Long datasetFileId);
+
     @Query("""
             SELECT record FROM YieldRecord record
             WHERE (:cropId IS NULL OR record.crop.id = :cropId)

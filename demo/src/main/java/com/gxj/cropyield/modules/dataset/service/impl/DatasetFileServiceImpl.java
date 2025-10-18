@@ -3,6 +3,8 @@ package com.gxj.cropyield.modules.dataset.service.impl;
 import com.gxj.cropyield.datamanagement.model.DataImportJob;
 import com.gxj.cropyield.datamanagement.model.DataImportJobStatus;
 import com.gxj.cropyield.datamanagement.repository.DataImportJobRepository;
+import com.gxj.cropyield.modules.base.repository.CropRepository;
+import com.gxj.cropyield.modules.base.repository.RegionRepository;
 import com.gxj.cropyield.modules.dataset.dto.DatasetFileRequest;
 import com.gxj.cropyield.modules.dataset.entity.DatasetFile;
 import com.gxj.cropyield.modules.dataset.entity.DatasetFile.DatasetType;
@@ -10,6 +12,8 @@ import com.gxj.cropyield.modules.dataset.repository.DatasetFileRepository;
 import com.gxj.cropyield.modules.dataset.repository.PriceRecordRepository;
 import com.gxj.cropyield.modules.dataset.repository.YieldRecordRepository;
 import com.gxj.cropyield.modules.dataset.service.DatasetFileService;
+import com.gxj.cropyield.modules.forecast.repository.ForecastRunRepository;
+import com.gxj.cropyield.modules.forecast.repository.ForecastTaskRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +22,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Service
 public class DatasetFileServiceImpl implements DatasetFileService {
@@ -26,15 +32,27 @@ public class DatasetFileServiceImpl implements DatasetFileService {
     private final YieldRecordRepository yieldRecordRepository;
     private final PriceRecordRepository priceRecordRepository;
     private final DataImportJobRepository jobRepository;
+    private final CropRepository cropRepository;
+    private final RegionRepository regionRepository;
+    private final ForecastTaskRepository forecastTaskRepository;
+    private final ForecastRunRepository forecastRunRepository;
 
     public DatasetFileServiceImpl(DatasetFileRepository datasetFileRepository,
                                   YieldRecordRepository yieldRecordRepository,
                                   PriceRecordRepository priceRecordRepository,
-                                  DataImportJobRepository jobRepository) {
+                                  DataImportJobRepository jobRepository,
+                                  CropRepository cropRepository,
+                                  RegionRepository regionRepository,
+                                  ForecastTaskRepository forecastTaskRepository,
+                                  ForecastRunRepository forecastRunRepository) {
         this.datasetFileRepository = datasetFileRepository;
         this.yieldRecordRepository = yieldRecordRepository;
         this.priceRecordRepository = priceRecordRepository;
         this.jobRepository = jobRepository;
+        this.cropRepository = cropRepository;
+        this.regionRepository = regionRepository;
+        this.forecastTaskRepository = forecastTaskRepository;
+        this.forecastRunRepository = forecastRunRepository;
     }
 
     @Override
@@ -62,12 +80,18 @@ public class DatasetFileServiceImpl implements DatasetFileService {
         if (files.isEmpty()) {
             return;
         }
+        Set<Long> candidateCropIds = new LinkedHashSet<>();
+        Set<Long> candidateRegionIds = new LinkedHashSet<>();
         for (DatasetFile file : files) {
             archiveImportJobs(file);
+            CleanupImpact impact = collectCleanupImpact(file);
+            candidateCropIds.addAll(impact.cropIds());
+            candidateRegionIds.addAll(impact.regionIds());
             long removed = cleanupDatasetRecords(file);
             recordDeletionJob(file, removed);
         }
         datasetFileRepository.deleteAll(files);
+        pruneBaseEntities(candidateCropIds, candidateRegionIds);
     }
 
     private void archiveImportJobs(DatasetFile file) {
@@ -133,5 +157,48 @@ public class DatasetFileServiceImpl implements DatasetFileService {
         job.setStartedAt(now);
         job.setFinishedAt(now);
         jobRepository.save(job);
+    }
+
+    private CleanupImpact collectCleanupImpact(DatasetFile file) {
+        if (file.getId() == null) {
+            return new CleanupImpact(Set.of(), Set.of());
+        }
+        Set<Long> cropIds = new LinkedHashSet<>();
+        Set<Long> regionIds = new LinkedHashSet<>();
+        cropIds.addAll(yieldRecordRepository.findDistinctCropIdsByDatasetFileId(file.getId()));
+        regionIds.addAll(yieldRecordRepository.findDistinctRegionIdsByDatasetFileId(file.getId()));
+        cropIds.addAll(priceRecordRepository.findDistinctCropIdsByDatasetFileId(file.getId()));
+        regionIds.addAll(priceRecordRepository.findDistinctRegionIdsByDatasetFileId(file.getId()));
+        return new CleanupImpact(cropIds, regionIds);
+    }
+
+    private void pruneBaseEntities(Set<Long> cropIds, Set<Long> regionIds) {
+        if (!cropIds.isEmpty()) {
+            List<Long> removableCrops = cropIds.stream()
+                    .filter(Objects::nonNull)
+                    .filter(id -> !yieldRecordRepository.existsByCropId(id))
+                    .filter(id -> !priceRecordRepository.existsByCropId(id))
+                    .filter(id -> !forecastTaskRepository.existsByCropId(id))
+                    .filter(id -> !forecastRunRepository.existsByCropId(id))
+                    .collect(Collectors.toList());
+            if (!removableCrops.isEmpty()) {
+                cropRepository.deleteAllById(removableCrops);
+            }
+        }
+        if (!regionIds.isEmpty()) {
+            List<Long> removableRegions = regionIds.stream()
+                    .filter(Objects::nonNull)
+                    .filter(id -> !yieldRecordRepository.existsByRegionId(id))
+                    .filter(id -> !priceRecordRepository.existsByRegionId(id))
+                    .filter(id -> !forecastTaskRepository.existsByRegionId(id))
+                    .filter(id -> !forecastRunRepository.existsByRegionId(id))
+                    .collect(Collectors.toList());
+            if (!removableRegions.isEmpty()) {
+                regionRepository.deleteAllById(removableRegions);
+            }
+        }
+    }
+
+    private record CleanupImpact(Set<Long> cropIds, Set<Long> regionIds) {
     }
 }
