@@ -280,6 +280,15 @@ const formatNumber = (value, digits = 0) => {
   return formatter.format(numeric)
 }
 
+const formatPlainNumber = (value, digits = 0) => {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) {
+    return '0'
+  }
+  const fixed = numeric.toFixed(Math.max(digits, 0))
+  return digits > 0 ? fixed.replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.0+$/, '').replace(/\.$/, '') : fixed
+}
+
 const formatAxisValue = value => {
   const numeric = Number(value)
   if (Number.isNaN(numeric)) {
@@ -297,6 +306,51 @@ const formatAxisValue = value => {
   const fixed = numeric.toFixed(digits)
   const sanitized = digits ? fixed.replace(/\.0+$/, '').replace(/\.$/, '') : fixed
   return sanitized.length ? sanitized : '0'
+}
+
+const formatTrendAxisLabel = value => {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) {
+    return '0'
+  }
+  const magnitude = Math.abs(numeric)
+  let digits = 3
+  if (magnitude >= 1000) {
+    digits = 0
+  } else if (magnitude >= 100) {
+    digits = 1
+  } else if (magnitude >= 10) {
+    digits = 1
+  } else if (magnitude >= 1) {
+    digits = 2
+  }
+  return formatPlainNumber(numeric, digits)
+}
+
+const extractMetricUnit = label => {
+  if (!label) return ''
+  const match = label.match(/\(([^)]+)\)/)
+  return match ? match[1] : ''
+}
+
+const formatTrendMetricValue = (value, unitLabel = '') => {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) {
+    return '0'
+  }
+  const magnitude = Math.abs(numeric)
+  let digits = 3
+  if (magnitude >= 1000) {
+    digits = 0
+  } else if (magnitude >= 100) {
+    digits = 1
+  } else if (magnitude >= 10) {
+    digits = 1
+  } else if (magnitude >= 1) {
+    digits = 2
+  }
+  const formatted = formatPlainNumber(numeric, digits)
+  return unitLabel ? `${formatted} ${unitLabel}` : formatted
 }
 
 const hexToRgba = (hex, alpha) => {
@@ -1045,6 +1099,7 @@ const insightTips = computed(() => {
 const initCharts = () => {
   if (trendChartRef.value && !trendChartInstance.value) {
     trendChartInstance.value = echarts.init(trendChartRef.value)
+    trendChartInstance.value.on('click', handleTrendPointClick)
   }
   if (structureChartRef.value && !structureChartInstance.value) {
     structureChartInstance.value = echarts.init(structureChartRef.value)
@@ -1058,7 +1113,10 @@ const initCharts = () => {
 }
 
 const disposeCharts = () => {
-  trendChartInstance.value?.dispose()
+  if (trendChartInstance.value) {
+    trendChartInstance.value.off?.('click', handleTrendPointClick)
+    trendChartInstance.value.dispose()
+  }
   structureChartInstance.value?.dispose()
   mapChartInstance.value?.dispose()
   trendChartInstance.value = null
@@ -1087,6 +1145,7 @@ const updateTrendChart = data => {
   }
   const chartType = selectedTrendType.value === 'bar' ? 'bar' : 'line'
   const legendData = data.series.map(item => item.name)
+  const metricUnit = extractMetricUnit(data.metricLabel)
   const series = data.series.map((item, index) => {
     const color = colorPalette[index % colorPalette.length]
     const common = {
@@ -1122,7 +1181,11 @@ const updateTrendChart = data => {
 
   trendChartInstance.value.setOption({
     color: colorPalette,
-    tooltip: { trigger: 'axis' },
+    tooltip: {
+      trigger: 'axis',
+      triggerOn: 'mousemove|click',
+      valueFormatter: value => formatTrendMetricValue(value, metricUnit)
+    },
     legend: { data: legendData },
     grid: { left: 40, right: 20, top: 60, bottom: 40 },
     xAxis: { type: 'category', boundaryGap: chartType === 'bar', data: data.years },
@@ -1130,24 +1193,25 @@ const updateTrendChart = data => {
       type: 'value',
       name: data.metricLabel,
       axisLabel: {
-        formatter: value => {
-          const numeric = Number(value)
-          if (!Number.isFinite(numeric)) {
-            return '0'
-          }
-          const abs = Math.abs(numeric)
-          if (abs >= 1000) {
-            return formatNumber(numeric, 0)
-          }
-          if (abs >= 100) {
-            return formatNumber(numeric, 1)
-          }
-          return formatAxisValue(numeric)
-        }
+        formatter: formatTrendAxisLabel
       }
     },
     series
   })
+}
+
+const handleTrendPointClick = params => {
+  if (!params || params.value == null || params.componentType !== 'series') {
+    return
+  }
+  const { seriesName, name, value } = params
+  const unit = extractMetricUnit(trendChartData.value.metricLabel)
+  const valueText = formatTrendMetricValue(value, unit)
+  const message = `${seriesName} - ${name}：${valueText}`
+  if (typeof ElMessage.closeAll === 'function') {
+    ElMessage.closeAll()
+  }
+  ElMessage({ type: 'info', message, duration: 3000, showClose: true })
 }
 
 const updateStructureChart = data => {
