@@ -115,9 +115,15 @@
         <el-card class="chart-card" shadow="hover" v-loading="isLoading">
           <template #header>
             <div class="chart-header">
-              <div>
+              <div class="chart-heading">
                 <div class="chart-title">产量趋势分析</div>
                 <div class="chart-subtitle">{{ trendSubtitle }}</div>
+              </div>
+              <div class="chart-actions">
+                <el-radio-group v-model="selectedTrendType" size="small" class="chart-toggle">
+                  <el-radio-button label="line">折线图</el-radio-button>
+                  <el-radio-button label="bar">柱状图</el-radio-button>
+                </el-radio-group>
               </div>
             </div>
           </template>
@@ -145,7 +151,7 @@
         <el-card class="chart-card" shadow="hover" v-loading="isLoading">
           <template #header>
             <div class="chart-header">
-              <div>
+              <div class="chart-heading">
                 <div class="chart-title">种植结构占比</div>
                 <div class="chart-subtitle">{{ structureSubtitle }}</div>
               </div>
@@ -172,7 +178,7 @@
         <el-card class="chart-card" shadow="hover" v-loading="isLoading">
           <template #header>
             <div class="chart-header">
-              <div>
+              <div class="chart-heading">
                 <div class="chart-title">地理分布热力</div>
                 <div class="chart-subtitle">{{ mapSubtitle }}</div>
               </div>
@@ -234,6 +240,7 @@ const selectedCategory = ref(CATEGORY_ALL)
 const selectedCrop = ref(ALL_CROPS)
 const selectedYear = ref(ALL_YEARS)
 const selectedChartMode = ref('all')
+const selectedTrendType = ref('line')
 
 const numberFormatters = {
   0: new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 0 }),
@@ -1078,23 +1085,37 @@ const updateTrendChart = data => {
     trendChartInstance.value.clear()
     return
   }
+  const chartType = selectedTrendType.value === 'bar' ? 'bar' : 'line'
   const legendData = data.series.map(item => item.name)
   const series = data.series.map((item, index) => {
     const color = colorPalette[index % colorPalette.length]
-    return {
+    const common = {
       name: item.name,
-      type: 'line',
-      smooth: true,
-      symbolSize: 8,
+      type: chartType,
       emphasis: { focus: 'series' },
       data: item.data,
-      itemStyle: { color },
-      lineStyle: { width: 3 },
-      areaStyle: {
-        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-          { offset: 0, color: hexToRgba(color, 0.32) },
-          { offset: 1, color: hexToRgba(color, 0.05) }
-        ])
+      itemStyle: { color }
+    }
+    if (chartType === 'line') {
+      return {
+        ...common,
+        smooth: true,
+        symbolSize: 8,
+        lineStyle: { width: 3 },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: hexToRgba(color, 0.32) },
+            { offset: 1, color: hexToRgba(color, 0.05) }
+          ])
+        }
+      }
+    }
+    return {
+      ...common,
+      barMaxWidth: 42,
+      itemStyle: {
+        color,
+        borderRadius: [6, 6, 0, 0]
       }
     }
   })
@@ -1104,7 +1125,7 @@ const updateTrendChart = data => {
     tooltip: { trigger: 'axis' },
     legend: { data: legendData },
     grid: { left: 40, right: 20, top: 60, bottom: 40 },
-    xAxis: { type: 'category', boundaryGap: false, data: data.years },
+    xAxis: { type: 'category', boundaryGap: chartType === 'bar', data: data.years },
     yAxis: {
       type: 'value',
       name: data.metricLabel,
@@ -1234,6 +1255,11 @@ watch(
   },
   { deep: true, immediate: true }
 )
+
+watch(selectedTrendType, () => {
+  const data = trendChartData.value
+  updateTrendChart(data)
+})
 
 watch(
   structureData,
@@ -1530,6 +1556,13 @@ onBeforeUnmount(() => {
 
 .chart-header {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.chart-heading {
+  display: flex;
   flex-direction: column;
   gap: 6px;
 }
@@ -1543,6 +1576,15 @@ onBeforeUnmount(() => {
 .chart-subtitle {
   font-size: 13px;
   color: #5c6f92;
+}
+
+.chart-actions {
+  display: flex;
+  align-items: center;
+}
+
+.chart-toggle :deep(.el-radio-button__inner) {
+  padding: 6px 14px;
 }
 
 .chart {
@@ -1575,6 +1617,16 @@ onBeforeUnmount(() => {
   .filter-controls .year-select {
     flex: 1 1 100%;
     min-width: 0;
+  }
+
+  .chart-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .chart-actions {
+    width: 100%;
   }
 
   .chart {
