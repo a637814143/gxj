@@ -9,6 +9,7 @@
 - `docs/database-schema.sql`：可直接执行的数据库初始化 SQL。
 - `demo/`：Spring Boot 后端工程，提供基础模块与 REST API 框架。
 - `forecast/`：Vue3 前端工程，包含页面路由与布局雏形。
+- `machine/`：基于 Flask 的机器学习服务，提供农作物产量预测接口。
 
 ## 快速开始
 
@@ -20,6 +21,18 @@ mvn spring-boot:run
 ```
 
 项目默认使用内存 H2 数据库，并开放 `http://localhost:8080` 的基础 REST 接口。
+
+### 机器学习服务
+
+```bash
+cd machine
+python -m venv .venv
+source .venv/bin/activate  # Windows 使用 .venv\\Scripts\\activate
+pip install -r requirements.txt
+python app.py
+```
+
+启动后默认监听 `http://localhost:5001`，提供 `/predict` 等接口供前端调用，可通过环境变量 `CROP_DATASET_PATH` 指定自定义数据集。
 
 ### 前端
 
