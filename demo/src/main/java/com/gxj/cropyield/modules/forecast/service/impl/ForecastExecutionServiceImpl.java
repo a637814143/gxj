@@ -69,21 +69,28 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
 
         List<YieldRecord> historyRecords = yieldRecordRepository
             .findByRegionIdAndCropIdOrderByYearAsc(region.getId(), crop.getId());
-        if (historyRecords.isEmpty()) {
+        List<YieldRecord> usableHistory = historyRecords.stream()
+            .filter(record -> record.getYieldPerHectare() != null)
+            .collect(Collectors.toList());
+
+        if (usableHistory.isEmpty()) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "缺少历史产量数据，无法生成预测");
         }
 
-        int historyLimit = request.historyYears() != null ? request.historyYears() : Math.min(historyRecords.size(), 10);
-        List<YieldRecord> limitedHistory = historyRecords.stream()
+        int historyLimit = request.historyYears() != null ? request.historyYears() : Math.min(usableHistory.size(), 10);
+        List<YieldRecord> limitedHistory = usableHistory.stream()
             .sorted(Comparator.comparingInt(YieldRecord::getYear))
-            .skip(Math.max(historyRecords.size() - historyLimit, 0))
+            .skip(Math.max(usableHistory.size() - historyLimit, 0))
             .collect(Collectors.toList());
+
+        int requestedForecastPeriods = request.forecastPeriods() != null ? request.forecastPeriods() : 3;
+        int forecastPeriods = Math.max(1, Math.min(requestedForecastPeriods, 3));
 
         ForecastRun run = new ForecastRun();
         run.setRegion(region);
         run.setCrop(crop);
         run.setModel(model);
-        run.setForecastPeriods(request.forecastPeriods() != null ? request.forecastPeriods() : 3);
+        run.setForecastPeriods(forecastPeriods);
         run.setHistoryYears(historyLimit);
         run.setFrequency(request.frequency() != null ? request.frequency() : "YEARLY");
         run.setStatus(ForecastRun.RunStatus.RUNNING);

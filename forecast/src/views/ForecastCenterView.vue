@@ -113,9 +113,9 @@
             </el-form-item>
           </el-col>
           <el-col :xs="24" :sm="12" :md="8">
-            <el-form-item label="预测步数">
-              <el-input-number v-model="selectors.forecastPeriods" :min="1" :max="10" />
-              <span class="form-hint">期</span>
+            <el-form-item label="预测年限">
+              <el-input-number v-model="selectors.forecastPeriods" :min="1" :max="3" />
+              <span class="form-hint">年</span>
             </el-form-item>
           </el-col>
           <el-col :xs="24" :sm="12" :md="8">
@@ -156,7 +156,7 @@
       </div>
     </el-card>
 
-    <el-card v-if="metadata || metrics" class="panel-card" shadow="hover">
+    <el-card v-if="metadata || metrics || forecastTable.length" class="panel-card" shadow="hover">
       <template #header>
         <div class="card-header">
           <div>
@@ -173,7 +173,7 @@
             <li><span>作物</span><strong>{{ metadata.cropName }}</strong></li>
             <li><span>模型</span><strong>{{ metadata.modelName }} ({{ metadata.modelType }})</strong></li>
             <li><span>历史窗口</span><strong>{{ selectors.historyYears }} 年</strong></li>
-            <li><span>预测步数</span><strong>{{ metadata.forecastPeriods }} 期</strong></li>
+            <li><span>预测年限</span><strong>{{ metadata.forecastPeriods }} 年</strong></li>
             <li><span>时间粒度</span><strong>{{ metadata.frequency === 'YEARLY' ? '年度' : '季度' }}</strong></li>
           </ul>
         </div>
@@ -185,6 +185,28 @@
             <li><span>MAPE</span><strong>{{ formatMetric(metrics.mape) }}%</strong></li>
             <li><span>R²</span><strong>{{ formatMetric(metrics.r2) }}</strong></li>
           </ul>
+        </div>
+        <div class="detail-card forecast-projection" v-if="forecastTable.length">
+          <h3>未来 {{ selectors.forecastPeriods }} 年预测</h3>
+          <div class="projection-baseline" v-if="baselineYield !== null">
+            最近年份产量参考：<strong>{{ baselineLabel }}</strong> 吨/公顷
+          </div>
+          <div class="projection-summary" v-if="forecastInsight">
+            到 <strong>{{ forecastInsight.finalPeriod }}</strong> 年预计达到
+            <strong>{{ forecastInsight.finalValue }}</strong> 吨/公顷，
+            较最近年份{{ forecastInsight.diffValue >= 0 ? '增加' : '减少' }}
+            <strong>{{ forecastInsight.diffLabel }}</strong> 吨/公顷（{{ forecastInsight.percentLabel }}）。
+          </div>
+          <div class="projection-list">
+            <div v-for="row in forecastTable" :key="row.period" class="projection-item">
+              <div class="projection-period">{{ row.period }}</div>
+              <div class="projection-value">{{ row.value }} 吨/公顷</div>
+              <div class="projection-band">置信区间：{{ row.lowerBound }} - {{ row.upperBound }}</div>
+              <div class="projection-growth" :class="{ up: row.growthValue > 0, down: row.growthValue < 0 }">
+                {{ row.growthDisplay }}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </el-card>
@@ -235,6 +257,15 @@ function formatTrend(value) {
   return '较昨日 持平'
 }
 
+function formatPercentage(value) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return '--'
+  }
+  const numeric = Number(value)
+  const sign = numeric > 0 ? '+' : ''
+  return `${sign}${numeric.toFixed(2)}%`
+}
+
 const highlightStats = computed(() => {
   const regionCount = optionLists.regions.length
   const cropCount = optionLists.crops.length
@@ -265,8 +296,8 @@ const quickOverview = computed(() => [
     trend: selectors.historyYears > 10 ? 1 : selectors.historyYears < 10 ? -1 : 0
   },
   {
-    label: '预测步数',
-    value: `${selectors.forecastPeriods} 期`,
+    label: '预测年限',
+    value: `${selectors.forecastPeriods} 年`,
     trend: selectors.forecastPeriods > 3 ? 1 : selectors.forecastPeriods < 3 ? -1 : 0
   },
   {
@@ -286,6 +317,65 @@ const combinedPeriods = computed(() => {
   const historyPeriods = historySeries.value.map(item => item.period)
   const forecastPeriods = forecastSeries.value.map(item => item.period)
   return Array.from(new Set([...historyPeriods, ...forecastPeriods]))
+})
+
+const baselineYield = computed(() => {
+  if (!historySeries.value.length) return null
+  return historySeries.value[historySeries.value.length - 1]?.value ?? null
+})
+
+const baselineLabel = computed(() => {
+  if (baselineYield.value === null || baselineYield.value === undefined) {
+    return '--'
+  }
+  return Number(baselineYield.value).toFixed(2)
+})
+
+const forecastTable = computed(() => {
+  const rows = []
+  let reference = baselineYield.value
+  forecastSeries.value.forEach(point => {
+    const value = point.value ?? null
+    const growthValue =
+      reference && value !== null && value !== undefined && reference !== 0
+        ? ((value - reference) / reference) * 100
+        : null
+    rows.push({
+      period: point.period,
+      value: value !== null && value !== undefined ? Number(value).toFixed(2) : '--',
+      lowerBound:
+        point.lowerBound !== null && point.lowerBound !== undefined
+          ? Number(point.lowerBound).toFixed(2)
+          : '--',
+      upperBound:
+        point.upperBound !== null && point.upperBound !== undefined
+          ? Number(point.upperBound).toFixed(2)
+          : '--',
+      growthValue,
+      growthDisplay: growthValue === null ? '暂无同比数据' : `同比 ${formatPercentage(growthValue)}`
+    })
+    reference = value ?? reference
+  })
+  return rows
+})
+
+const forecastInsight = computed(() => {
+  if (!forecastSeries.value.length) return null
+  const lastPoint = forecastSeries.value[forecastSeries.value.length - 1]
+  const baseline = baselineYield.value
+  if (baseline === null || baseline === undefined || baseline === 0 || !lastPoint?.value) {
+    return null
+  }
+  const diff = lastPoint.value - baseline
+  const percent = (diff / baseline) * 100
+  return {
+    finalPeriod: lastPoint.period,
+    finalValue: Number(lastPoint.value).toFixed(2),
+    diffValue: diff,
+    diffLabel: Number(Math.abs(diff)).toFixed(2),
+    percentValue: percent,
+    percentLabel: formatPercentage(percent)
+  }
 })
 
 const chartOption = computed(() => {
@@ -729,6 +819,57 @@ const formatMetric = value => {
 .detail-card strong {
   font-weight: 600;
   color: #303133;
+}
+
+.forecast-projection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.projection-baseline,
+.projection-summary {
+  font-size: 13px;
+  color: #606266;
+  line-height: 1.6;
+}
+
+.projection-summary strong {
+  color: #1f2d3d;
+}
+
+.projection-list {
+  display: grid;
+  gap: 10px;
+}
+
+.projection-item {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid #ebeef5;
+  border-radius: 10px;
+  background: #fafcff;
+}
+
+.projection-period {
+  font-weight: 600;
+  color: #1f2d3d;
+}
+
+.projection-value,
+.projection-band,
+.projection-growth {
+  font-size: 13px;
+  color: #606266;
+}
+
+.projection-growth.up {
+  color: #67c23a;
+}
+
+.projection-growth.down {
+  color: #f56c6c;
 }
 
 @media (max-width: 992px) {
