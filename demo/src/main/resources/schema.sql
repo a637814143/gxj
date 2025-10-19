@@ -1,5 +1,6 @@
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
+SET @current_schema := DATABASE();
 
 
 CREATE TABLE IF NOT EXISTS base_region (
@@ -15,6 +16,18 @@ CREATE TABLE IF NOT EXISTS base_region (
     UNIQUE KEY uq_base_region_code (code),
     KEY idx_base_region_level (level)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '基础行政区域信息';
+
+CREATE TABLE IF NOT EXISTS system_setting (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    default_region_id BIGINT UNSIGNED,
+    notify_email VARCHAR(128),
+    cluster_enabled TINYINT(1) NOT NULL DEFAULT 1,
+    pending_change_count INT NOT NULL DEFAULT 0,
+    security_strategy VARCHAR(64),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_system_setting_region FOREIGN KEY (default_region_id) REFERENCES base_region (id) ON DELETE SET NULL
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '系统配置项';
 
 CREATE TABLE IF NOT EXISTS base_crop (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -207,13 +220,93 @@ CREATE TABLE IF NOT EXISTS report_summary (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     title VARCHAR(128) NOT NULL,
     description VARCHAR(512),
+    author VARCHAR(128),
+    coverage_period VARCHAR(128),
     forecast_result_id BIGINT UNSIGNED,
     insights VARCHAR(2048),
+    status VARCHAR(32),
+    published_at DATETIME,
+    auto_generated TINYINT(1) NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     KEY idx_report_result (forecast_result_id),
     CONSTRAINT fk_report_result FOREIGN KEY (forecast_result_id) REFERENCES forecast_result (id) ON DELETE SET NULL
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '预测报告摘要';
+
+SET @ddl := (
+    SELECT IF(
+        COUNT(*) = 0,
+        'ALTER TABLE report_summary ADD COLUMN author VARCHAR(128) NULL AFTER description',
+        'SELECT 1'
+    )
+    FROM information_schema.columns
+    WHERE table_schema = @current_schema
+      AND table_name = 'report_summary'
+      AND column_name = 'author'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @ddl := (
+    SELECT IF(
+        COUNT(*) = 0,
+        'ALTER TABLE report_summary ADD COLUMN coverage_period VARCHAR(128) NULL AFTER author',
+        'SELECT 1'
+    )
+    FROM information_schema.columns
+    WHERE table_schema = @current_schema
+      AND table_name = 'report_summary'
+      AND column_name = 'coverage_period'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @ddl := (
+    SELECT IF(
+        COUNT(*) = 0,
+        'ALTER TABLE report_summary ADD COLUMN status VARCHAR(32) NULL AFTER insights',
+        'SELECT 1'
+    )
+    FROM information_schema.columns
+    WHERE table_schema = @current_schema
+      AND table_name = 'report_summary'
+      AND column_name = 'status'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @ddl := (
+    SELECT IF(
+        COUNT(*) = 0,
+        'ALTER TABLE report_summary ADD COLUMN published_at DATETIME NULL AFTER status',
+        'SELECT 1'
+    )
+    FROM information_schema.columns
+    WHERE table_schema = @current_schema
+      AND table_name = 'report_summary'
+      AND column_name = 'published_at'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @ddl := (
+    SELECT IF(
+        COUNT(*) = 0,
+        'ALTER TABLE report_summary ADD COLUMN auto_generated TINYINT(1) NOT NULL DEFAULT 0 AFTER published_at',
+        'SELECT 1'
+    )
+    FROM information_schema.columns
+    WHERE table_schema = @current_schema
+      AND table_name = 'report_summary'
+      AND column_name = 'auto_generated'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 CREATE TABLE IF NOT EXISTS sys_permission (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

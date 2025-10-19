@@ -39,7 +39,7 @@
       </div>
     </section>
 
-    <el-card class="report-card" shadow="hover">
+    <el-card class="report-card" shadow="hover" v-loading="loading">
       <template #header>
         <div class="card-header">
           <div>
@@ -49,12 +49,12 @@
           <el-button v-if="canGenerateReport" type="primary" @click="createReport">生成报告</el-button>
         </div>
       </template>
-      <el-empty v-if="!reports.length" description="暂未生成报告" />
-      <el-timeline v-else class="report-timeline">
+      <el-empty v-if="!loading && !reports.length" description="暂未生成报告" />
+      <el-timeline v-else-if="reports.length" class="report-timeline">
         <el-timeline-item
           v-for="report in reports"
           :key="report.id"
-          :timestamp="report.time"
+          :timestamp="formatDate(report.publishedAt)"
           type="success"
         >
           <el-card shadow="never" class="report-item">
@@ -62,39 +62,33 @@
             <p class="desc">{{ report.description }}</p>
             <div class="report-meta">
               <span>作者：{{ report.author }}</span>
-              <span>覆盖周期：{{ report.coverage }}</span>
+              <span>覆盖周期：{{ report.coveragePeriod || '未填写' }}</span>
             </div>
             <el-link type="primary">查看详情</el-link>
           </el-card>
         </el-timeline-item>
       </el-timeline>
+      <template v-else />
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import apiClient from '../services/http'
 import { useAuthorization } from '../composables/useAuthorization'
 
-const reports = [
-  {
-    id: 1,
-    title: '2024年春季小麦产量预测报告',
-    description:
-      '综合天气监测、历史产量和市场需求，预测2024年春季主要产区小麦产量同比增长3.2%。',
-    time: '2024-03-28',
-    author: '农业数据分析组',
-    coverage: '2023 Q4 - 2024 Q1'
-  }
-]
+const reports = ref([])
+const metrics = ref({ totalReports: 0, publishedThisMonth: 0, pendingApproval: 0, autoGenerationEnabled: false })
+const loading = ref(false)
 
 const { hasRole } = useAuthorization()
 const canGenerateReport = computed(() => hasRole(['ADMIN', 'AGRICULTURE_DEPT']))
 
 const highlightStats = computed(() => {
-  const total = reports.length
-  const latest = reports[0]
+  const total = metrics.value.totalReports || reports.value.length
+  const latest = reports.value[0]
   return [
     {
       label: '累计报告',
@@ -103,34 +97,90 @@ const highlightStats = computed(() => {
     },
     {
       label: '最新报告时间',
-      value: latest ? latest.time : '暂无',
+      value: latest ? formatDate(latest.publishedAt) : '暂无',
       sub: latest ? latest.title : '生成后可快速下载'
     },
     {
-      label: '支持导出格式',
-      value: 'PDF / PPTX',
-      sub: '便于在简报与会议中共享'
+      label: '自动生成',
+      value: metrics.value.autoGenerationEnabled ? '已启用' : '未启用',
+      sub: metrics.value.autoGenerationEnabled ? '系统将按计划自动生成定期报告' : '可在系统设置启用自动生成'
     }
   ]
 })
 
 const quickOverview = computed(() => [
-  { label: '本月计划', value: '3 份', trend: 1 },
-  { label: '待审核', value: '1 份', trend: 0 },
-  { label: '自动生成', value: '启用', trend: 0 }
+  { label: '本月发布', value: `${metrics.value.publishedThisMonth ?? 0} 份`, trend: metrics.value.publishedThisMonth > 0 ? 1 : 0 },
+  { label: '待审核', value: `${metrics.value.pendingApproval ?? 0} 份`, trend: metrics.value.pendingApproval > 0 ? 1 : 0 },
+  { label: '自动生成', value: metrics.value.autoGenerationEnabled ? '启用' : '未启用', trend: 0 }
 ])
 
-const reminders = [
-  '报告模板已升级，建议统一使用新版导出样式',
-  '生成报告前请确认数据导入与模型预测已完成',
-  '建议为重点作物配置季度与月度两套报告节奏'
-]
+const reminders = computed(() => {
+  const items = []
+  if (metrics.value.pendingApproval > 0) {
+    items.push(`存在 ${metrics.value.pendingApproval} 份待审核报告，请尽快处理以便发布`) 
+  } else {
+    items.push('暂无待审核报告，可根据计划安排新的分析任务')
+  }
+
+  items.push(
+    metrics.value.autoGenerationEnabled
+      ? '自动生成已启用，建议定期检查模板确保输出格式一致'
+      : '自动生成未启用，可在系统设置中开启以节省手工操作'
+  )
+
+  const latest = reports.value[0]
+  if (latest) {
+    items.push(`最新报告覆盖周期 ${latest.coveragePeriod || '近期数据'}，请及时共享给相关团队`)
+  } else {
+    items.push('尚未生成报告，请先运行预测任务并生成首份报告')
+  }
+
+  return items
+})
 
 function formatTrend(value) {
   if (value > 0) return `较昨日 +${value}`
   if (value < 0) return `较昨日 ${value}`
   return '较昨日 持平'
 }
+
+function formatDate(value) {
+  if (!value) return '暂无'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+  return date.toLocaleDateString('zh-CN')
+}
+
+const fetchReports = async () => {
+  loading.value = true
+  try {
+    const { data } = await apiClient.get('/api/report')
+    const payload = data?.data ?? data ?? {}
+    if (Array.isArray(payload.reports)) {
+      reports.value = payload.reports
+    } else {
+      reports.value = []
+    }
+    metrics.value = {
+      totalReports: payload.metrics?.totalReports ?? reports.value.length,
+      publishedThisMonth: payload.metrics?.publishedThisMonth ?? 0,
+      pendingApproval: payload.metrics?.pendingApproval ?? 0,
+      autoGenerationEnabled: Boolean(payload.metrics?.autoGenerationEnabled)
+    }
+  } catch (error) {
+    reports.value = []
+    metrics.value = { totalReports: 0, publishedThisMonth: 0, pendingApproval: 0, autoGenerationEnabled: false }
+    ElMessage.error(error?.response?.data?.message || '加载报告数据失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  fetchReports()
+})
 
 const createReport = () => {
   if (!canGenerateReport.value) {

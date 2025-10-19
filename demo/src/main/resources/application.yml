@@ -13,10 +13,11 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
   sql:
     init:
-      mode: never
+      mode: always
       schema-locations: classpath:schema.sql
       data-locations: classpath:data.sql
       encoding: UTF-8
+      continue-on-error: true
   jpa:
     database-platform: org.hibernate.dialect.MySQLDialect
     hibernate:
