@@ -79,11 +79,14 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
             .skip(Math.max(historyRecords.size() - historyLimit, 0))
             .collect(Collectors.toList());
 
+        int requestedForecastPeriods = request.forecastPeriods() != null ? request.forecastPeriods() : 3;
+        int forecastPeriods = Math.max(1, Math.min(requestedForecastPeriods, 3));
+
         ForecastRun run = new ForecastRun();
         run.setRegion(region);
         run.setCrop(crop);
         run.setModel(model);
-        run.setForecastPeriods(request.forecastPeriods() != null ? request.forecastPeriods() : 3);
+        run.setForecastPeriods(forecastPeriods);
         run.setHistoryYears(historyLimit);
         run.setFrequency(request.frequency() != null ? request.frequency() : "YEARLY");
         run.setStatus(ForecastRun.RunStatus.RUNNING);
