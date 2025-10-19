@@ -156,6 +156,8 @@
       </div>
     </el-card>
 
+    <MachineLearningYieldCard />
+
     <el-card v-if="metadata || metrics" class="panel-card" shadow="hover">
       <template #header>
         <div class="card-header">
@@ -195,6 +197,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import BaseChart from '@/components/charts/BaseChart.vue'
+import MachineLearningYieldCard from '@/components/MachineLearningYieldCard.vue'
 import apiClient from '../services/http'
 
 const selectors = reactive({
