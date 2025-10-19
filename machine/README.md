@@ -32,6 +32,14 @@ curl -X POST http://localhost:5001/predict \
   }'
 ```
 
+> 💡 **Windows 命令行（cmd.exe）注意**：`\` 续行符与单引号在 Windows 默认终端中不起作用，请将上述命令写成单行，并使用双引号包裹 JSON：
+>
+> ```bat
+> curl -X POST http://localhost:5001/predict -H "Content-Type: application/json" -d "{\"crop\":\"粮食\",\"region\":\"云南省\",\"year\":2024,\"sown_area_kha\":243.0,\"avg_price_yuan_per_ton\":2325}"
+> ```
+>
+> 在 PowerShell 中可以使用反引号 `` ` `` 作为续行符，或同样直接粘贴单行命令。
+
 响应示例：
 
 ```json

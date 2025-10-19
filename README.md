@@ -34,6 +34,8 @@ python app.py
 
 启动后默认监听 `http://localhost:5001`，提供 `/predict` 等接口供前端调用，可通过环境变量 `CROP_DATASET_PATH` 指定自定义数据集。
 
+> ℹ️ Windows `cmd.exe` 中运行示例 `curl` 时请写成单行并用双引号包裹 JSON 负载，详细示例见 [`machine/README.md`](machine/README.md)。
+
 ### 前端
 
 ```bash

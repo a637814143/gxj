@@ -48,7 +48,15 @@ def create_app() -> Flask:
         try:
             payload: Dict[str, Any] = request.get_json(force=True, silent=False)  # type: ignore[assignment]
         except Exception:
-            return jsonify({"success": False, "error": "请求体需要是合法的 JSON"}), 400
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "请求体需要是合法的 JSON，请确认命令没有意外换行；在 Windows CMD 中请将 -d 参数写成单行或使用双引号包裹 JSON。",
+                    }
+                ),
+                400,
+            )
 
         if not isinstance(payload, dict):
             return jsonify({"success": False, "error": "JSON 请求体必须是对象"}), 400
