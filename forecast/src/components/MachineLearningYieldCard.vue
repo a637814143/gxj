@@ -26,6 +26,13 @@
           class="section-alert"
           :title="healthError"
         />
+        <el-alert
+          v-else-if="disablePredict"
+          type="info"
+          :closable="false"
+          class="section-alert"
+          title="请先在上方完成产量预测配置的地区、作物与模型选择，系统会同步到此处。"
+        />
         <el-form
           ref="formRef"
           :model="form"
@@ -58,7 +65,12 @@
           </el-form-item>
           <div class="form-actions">
             <el-button @click="resetForm">重置</el-button>
-            <el-button type="primary" :loading="predictionLoading" @click="submitPrediction">
+            <el-button
+              type="primary"
+              :disabled="disablePredict"
+              :loading="predictionLoading"
+              @click="submitPrediction"
+            >
               发起预测
             </el-button>
           </div>
@@ -142,9 +154,22 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getHealthStatus, previewTrainingData, predictCropYield } from '@/services/machineLearning'
+
+const props = defineProps({
+  prefill: {
+    type: Object,
+    default: () => ({}),
+  },
+  disablePredict: {
+    type: Boolean,
+    default: false,
+  },
+})
+
+const emit = defineEmits(['prediction-success'])
 
 const formRef = ref(null)
 const prediction = ref(null)
@@ -158,15 +183,37 @@ const previewLimit = ref(5)
 const previewLoading = ref(false)
 const previewError = ref('')
 
-const defaultForm = () => ({
+const sanitizePrefill = value => {
+  if (!value || typeof value !== 'object') return {}
+
+  const toNumber = candidate => {
+    const parsed = Number(candidate)
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
+
+  return {
+    crop: typeof value.crop === 'string' && value.crop.trim() ? value.crop.trim() : undefined,
+    region: typeof value.region === 'string' && value.region.trim() ? value.region.trim() : undefined,
+    year: toNumber(value.year),
+    sown_area_kha: toNumber(value.sown_area_kha),
+    avg_price_yuan_per_ton: toNumber(value.avg_price_yuan_per_ton),
+  }
+}
+
+const filterDefined = source =>
+  Object.fromEntries(Object.entries(source).filter(([, item]) => item !== undefined))
+
+const defaultForm = (overrides = {}) => ({
   crop: '粮食',
   region: '云南省',
   year: new Date().getFullYear(),
   sown_area_kha: 240,
   avg_price_yuan_per_ton: 2300,
+  ...overrides,
 })
 
-const form = reactive(defaultForm())
+const lastPrefill = ref(sanitizePrefill(props.prefill))
+const form = reactive(defaultForm(filterDefined(lastPrefill.value)))
 
 const formRules = {
   crop: [{ required: true, message: '请输入作物名称', trigger: 'blur' }],
@@ -199,6 +246,62 @@ const formRules = {
     },
   ],
 }
+
+const shouldResetPrediction = (next, prev) =>
+  Boolean(
+    (prev.crop && !next.crop) ||
+      (prev.region && !next.region) ||
+      (Number.isFinite(prev.year) && !Number.isFinite(next.year)) ||
+      (next.crop && next.crop !== prev.crop) ||
+      (next.region && next.region !== prev.region) ||
+      (Number.isFinite(next.year) && next.year !== prev.year)
+  )
+
+const applyPrefill = (sanitized, previous = {}) => {
+  if (sanitized.crop && (!form.crop || !previous.crop || form.crop === previous.crop)) {
+    form.crop = sanitized.crop
+  }
+  if (sanitized.region && (!form.region || !previous.region || form.region === previous.region)) {
+    form.region = sanitized.region
+  }
+  if (
+    Number.isFinite(sanitized.year) &&
+    (!Number.isFinite(form.year) || !Number.isFinite(previous.year) || form.year === previous.year)
+  ) {
+    form.year = sanitized.year
+  }
+  if (
+    Number.isFinite(sanitized.sown_area_kha) &&
+    (!Number.isFinite(form.sown_area_kha) || !Number.isFinite(previous.sown_area_kha) || form.sown_area_kha === previous.sown_area_kha)
+  ) {
+    form.sown_area_kha = sanitized.sown_area_kha
+  }
+  if (
+    Number.isFinite(sanitized.avg_price_yuan_per_ton) &&
+    (!Number.isFinite(form.avg_price_yuan_per_ton) ||
+      !Number.isFinite(previous.avg_price_yuan_per_ton) ||
+      form.avg_price_yuan_per_ton === previous.avg_price_yuan_per_ton)
+  ) {
+    form.avg_price_yuan_per_ton = sanitized.avg_price_yuan_per_ton
+  }
+}
+
+watch(
+  () => props.prefill,
+  value => {
+    const sanitized = sanitizePrefill(value)
+    const previous = lastPrefill.value || {}
+
+    if (shouldResetPrediction(sanitized, previous)) {
+      prediction.value = null
+      predictionError.value = ''
+    }
+
+    applyPrefill(sanitized, previous)
+    lastPrefill.value = sanitized
+  },
+  { deep: true, immediate: true }
+)
 
 const columnLabels = {
   crop: '作物',
@@ -245,7 +348,7 @@ const extractErrorMessage = error => {
 }
 
 const resetForm = () => {
-  Object.assign(form, defaultForm())
+  Object.assign(form, defaultForm(filterDefined(lastPrefill.value || {})))
   prediction.value = null
   predictionError.value = ''
 }
@@ -281,6 +384,10 @@ const loadPreview = async () => {
 }
 
 const submitPrediction = async () => {
+  if (props.disablePredict) {
+    ElMessage.warning('请先完成上方的产量预测配置后再使用机器学习预测')
+    return
+  }
   if (!formRef.value) return
   try {
     await formRef.value.validate()
@@ -296,6 +403,7 @@ const submitPrediction = async () => {
       throw new Error(response?.error || '预测失败')
     }
     prediction.value = response.data
+    emit('prediction-success', response.data)
     ElMessage.success('预测生成成功')
   } catch (error) {
     prediction.value = null
