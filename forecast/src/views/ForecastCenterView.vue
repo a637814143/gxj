@@ -156,12 +156,6 @@
       </div>
     </el-card>
 
-    <MachineLearningYieldCard
-      :prefill="mlPrefill"
-      :disable-predict="disableSubmit"
-      @prediction-success="handleMlPrediction"
-    />
-
     <el-card v-if="metadata || metrics" class="panel-card" shadow="hover">
       <template #header>
         <div class="card-header">
@@ -194,16 +188,6 @@
             <li><span>R²</span><strong>{{ formatMetric(metrics.r2) }}</strong></li>
           </ul>
         </div>
-        <div class="detail-card" v-if="mlPrediction">
-          <h3>机器学习预测</h3>
-          <ul>
-            <li><span>预测产量 (万吨)</span><strong>{{ formatNumber(mlPrediction.predicted_yield_10kt, 2) }}</strong></li>
-            <li><span>预测产量 (吨)</span><strong>{{ formatNumber(mlPrediction.predicted_yield_tonnes, 0) }}</strong></li>
-            <li><span>年份</span><strong>{{ mlPrediction.inputs?.year ?? '--' }}</strong></li>
-            <li><span>地区</span><strong>{{ mlPrediction.inputs?.region ?? '--' }}</strong></li>
-            <li><span>作物</span><strong>{{ mlPrediction.inputs?.crop ?? '--' }}</strong></li>
-          </ul>
-        </div>
       </div>
     </el-card>
   </div>
@@ -213,7 +197,6 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import BaseChart from '@/components/charts/BaseChart.vue'
-import MachineLearningYieldCard from '@/components/MachineLearningYieldCard.vue'
 import { executeForecast, fetchCrops, fetchModels, fetchRegions } from '@/services/forecast'
 
 const selectors = reactive({
@@ -249,7 +232,6 @@ const forecastSeries = ref([])
 const metrics = ref(null)
 const metadata = ref(null)
 const runId = ref(null)
-const mlPrediction = ref(null)
 const loading = ref(false)
 const errorMessage = ref('')
 
@@ -314,33 +296,6 @@ const reminders = [
   '如需对比不同模型，可复制当前配置并切换模型',
   '关注预测误差指标，及时优化数据质量和模型配置'
 ]
-
-const mlPrefill = computed(() => {
-  const regionName = selectedRegion.value?.name || ''
-  const cropName = selectedCrop.value?.name || ''
-  const fallbackYear = new Date().getFullYear()
-  const metadataYear =
-    metadata.value?.targetYear ??
-    metadata.value?.latestYear ??
-    metadata.value?.year ??
-    fallbackYear
-
-  return {
-    crop: cropName,
-    region: regionName,
-    year: metadataYear,
-    sown_area_kha:
-      metadata.value?.latestSownArea ??
-      metadata.value?.sownArea ??
-      metadata.value?.sown_area_kha ??
-      undefined,
-    avg_price_yuan_per_ton:
-      metadata.value?.latestAvgPrice ??
-      metadata.value?.avgPrice ??
-      metadata.value?.avg_price_yuan_per_ton ??
-      undefined,
-  }
-})
 
 const combinedPeriods = computed(() => {
   const historyPeriods = historySeries.value.map(item => item.period)
@@ -446,14 +401,9 @@ const resetResult = (options = { keepError: false }) => {
   metrics.value = null
   metadata.value = null
   runId.value = null
-  mlPrediction.value = null
   if (!options.keepError) {
     errorMessage.value = ''
   }
-}
-
-const handleMlPrediction = result => {
-  mlPrediction.value = result
 }
 
 const optionFetchers = {
@@ -532,16 +482,6 @@ const formatMetric = value => {
     return '--'
   }
   return Number(value).toFixed(2)
-}
-
-const formatNumber = (value, fractionDigits = 2) => {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) {
-    return '--'
-  }
-  return new Intl.NumberFormat('zh-CN', {
-    minimumFractionDigits: fractionDigits,
-    maximumFractionDigits: fractionDigits,
-  }).format(Number(value))
 }
 </script>
 
