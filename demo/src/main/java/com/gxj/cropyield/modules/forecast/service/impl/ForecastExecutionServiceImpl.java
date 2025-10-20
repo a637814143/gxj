@@ -22,6 +22,9 @@ import com.gxj.cropyield.modules.forecast.repository.ForecastRunRepository;
 import com.gxj.cropyield.modules.forecast.repository.ForecastRunSeriesRepository;
 import com.gxj.cropyield.modules.forecast.repository.ForecastSnapshotRepository;
 import com.gxj.cropyield.modules.forecast.service.ForecastExecutionService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,6 +38,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class ForecastExecutionServiceImpl implements ForecastExecutionService {
+
+    private static final Logger log = LoggerFactory.getLogger(ForecastExecutionServiceImpl.class);
 
     private final RegionRepository regionRepository;
     private final CropRepository cropRepository;
@@ -149,7 +154,11 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
             .map(point -> buildSnapshot(run, point, measurementType, referenceRecord))
             .toList();
         if (!snapshots.isEmpty()) {
-            forecastSnapshotRepository.saveAll(snapshots);
+            try {
+                forecastSnapshotRepository.saveAll(snapshots);
+            } catch (DataAccessException ex) {
+                log.warn("Failed to persist forecast snapshots for run {}", run.getId(), ex);
+            }
         }
 
         List<ForecastExecutionResponse.SeriesPoint> history = limitedHistory.stream()
