@@ -95,14 +95,18 @@ class Dl4jLstmForecaster {
 
     private DataSet buildTrainingSet(double[] scaledSeries, int windowSize, int sampleCount) {
         var features = Nd4j.create(sampleCount, 1, windowSize);
-        var labels = Nd4j.create(sampleCount, 1, 1);
+        var labels = Nd4j.create(sampleCount, 1, windowSize);
+        var labelMask = Nd4j.zeros(sampleCount, windowSize);
         for (int i = 0; i < sampleCount; i++) {
             for (int j = 0; j < windowSize; j++) {
                 features.putScalar(new int[]{i, 0, j}, scaledSeries[i + j]);
             }
-            labels.putScalar(new int[]{i, 0, 0}, scaledSeries[i + windowSize]);
+            labels.putScalar(new int[]{i, 0, windowSize - 1}, scaledSeries[i + windowSize]);
+            labelMask.putScalar(new int[]{i, windowSize - 1}, 1d);
         }
-        return new DataSet(features, labels);
+        DataSet dataSet = new DataSet(features, labels);
+        dataSet.setLabelsMaskArray(labelMask);
+        return dataSet;
     }
 
     private MultiLayerNetwork buildNetwork() {
@@ -132,7 +136,8 @@ class Dl4jLstmForecaster {
         for (int i = 0; i < window.length; i++) {
             input.putScalar(new int[]{0, 0, i}, window[i]);
         }
-        return network.output(input, false).getDouble(0, 0, 0);
+        var output = network.output(input, false);
+        return output.getDouble(0, 0, window.length - 1);
     }
 
     private List<Double> repeat(double value, int periods) {
