@@ -191,9 +191,35 @@ CREATE TABLE IF NOT EXISTS forecast_run (
     CONSTRAINT fk_run_region FOREIGN KEY (region_id) REFERENCES base_region (id) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '预测执行记录';
 
-ALTER TABLE forecast_run
-    ADD COLUMN IF NOT EXISTS measurement_label VARCHAR(64) NULL AFTER r2,
-    ADD COLUMN IF NOT EXISTS measurement_unit VARCHAR(32) NULL AFTER measurement_label;
+SET @ddl := (
+    SELECT IF(
+        COUNT(*) = 0,
+        'ALTER TABLE forecast_run ADD COLUMN measurement_label VARCHAR(64) NULL AFTER r2',
+        'SELECT 1'
+    )
+    FROM information_schema.columns
+    WHERE table_schema = @current_schema
+      AND table_name = 'forecast_run'
+      AND column_name = 'measurement_label'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @ddl := (
+    SELECT IF(
+        COUNT(*) = 0,
+        'ALTER TABLE forecast_run ADD COLUMN measurement_unit VARCHAR(32) NULL AFTER measurement_label',
+        'SELECT 1'
+    )
+    FROM information_schema.columns
+    WHERE table_schema = @current_schema
+      AND table_name = 'forecast_run'
+      AND column_name = 'measurement_unit'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 CREATE TABLE IF NOT EXISTS forecast_run_series (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -228,15 +254,125 @@ CREATE TABLE IF NOT EXISTS forecast_snapshot (
     CONSTRAINT fk_snapshot_run FOREIGN KEY (run_id) REFERENCES forecast_run (id) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '预测结果快照';
 
-ALTER TABLE forecast_snapshot
-    ADD COLUMN IF NOT EXISTS measurement_value DOUBLE NULL AFTER year,
-    ADD COLUMN IF NOT EXISTS measurement_label VARCHAR(64) NULL AFTER measurement_value,
-    ADD COLUMN IF NOT EXISTS measurement_unit VARCHAR(32) NULL AFTER measurement_label,
-    ADD COLUMN IF NOT EXISTS predicted_production DOUBLE NULL AFTER measurement_unit,
-    ADD COLUMN IF NOT EXISTS predicted_yield DOUBLE NULL AFTER predicted_production,
-    ADD COLUMN IF NOT EXISTS sown_area DOUBLE NULL AFTER predicted_yield,
-    ADD COLUMN IF NOT EXISTS average_price DOUBLE NULL AFTER sown_area,
-    ADD COLUMN IF NOT EXISTS estimated_revenue DOUBLE NULL AFTER average_price;
+SET @ddl := (
+    SELECT IF(
+        COUNT(*) = 0,
+        'ALTER TABLE forecast_snapshot ADD COLUMN measurement_value DOUBLE NULL AFTER year',
+        'SELECT 1'
+    )
+    FROM information_schema.columns
+    WHERE table_schema = @current_schema
+      AND table_name = 'forecast_snapshot'
+      AND column_name = 'measurement_value'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @ddl := (
+    SELECT IF(
+        COUNT(*) = 0,
+        'ALTER TABLE forecast_snapshot ADD COLUMN measurement_label VARCHAR(64) NULL AFTER measurement_value',
+        'SELECT 1'
+    )
+    FROM information_schema.columns
+    WHERE table_schema = @current_schema
+      AND table_name = 'forecast_snapshot'
+      AND column_name = 'measurement_label'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @ddl := (
+    SELECT IF(
+        COUNT(*) = 0,
+        'ALTER TABLE forecast_snapshot ADD COLUMN measurement_unit VARCHAR(32) NULL AFTER measurement_label',
+        'SELECT 1'
+    )
+    FROM information_schema.columns
+    WHERE table_schema = @current_schema
+      AND table_name = 'forecast_snapshot'
+      AND column_name = 'measurement_unit'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @ddl := (
+    SELECT IF(
+        COUNT(*) = 0,
+        'ALTER TABLE forecast_snapshot ADD COLUMN predicted_production DOUBLE NULL AFTER measurement_unit',
+        'SELECT 1'
+    )
+    FROM information_schema.columns
+    WHERE table_schema = @current_schema
+      AND table_name = 'forecast_snapshot'
+      AND column_name = 'predicted_production'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @ddl := (
+    SELECT IF(
+        COUNT(*) = 0,
+        'ALTER TABLE forecast_snapshot ADD COLUMN predicted_yield DOUBLE NULL AFTER predicted_production',
+        'SELECT 1'
+    )
+    FROM information_schema.columns
+    WHERE table_schema = @current_schema
+      AND table_name = 'forecast_snapshot'
+      AND column_name = 'predicted_yield'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @ddl := (
+    SELECT IF(
+        COUNT(*) = 0,
+        'ALTER TABLE forecast_snapshot ADD COLUMN sown_area DOUBLE NULL AFTER predicted_yield',
+        'SELECT 1'
+    )
+    FROM information_schema.columns
+    WHERE table_schema = @current_schema
+      AND table_name = 'forecast_snapshot'
+      AND column_name = 'sown_area'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @ddl := (
+    SELECT IF(
+        COUNT(*) = 0,
+        'ALTER TABLE forecast_snapshot ADD COLUMN average_price DOUBLE NULL AFTER sown_area',
+        'SELECT 1'
+    )
+    FROM information_schema.columns
+    WHERE table_schema = @current_schema
+      AND table_name = 'forecast_snapshot'
+      AND column_name = 'average_price'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @ddl := (
+    SELECT IF(
+        COUNT(*) = 0,
+        'ALTER TABLE forecast_snapshot ADD COLUMN estimated_revenue DOUBLE NULL AFTER average_price',
+        'SELECT 1'
+    )
+    FROM information_schema.columns
+    WHERE table_schema = @current_schema
+      AND table_name = 'forecast_snapshot'
+      AND column_name = 'estimated_revenue'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 CREATE TABLE IF NOT EXISTS forecast_result (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
