@@ -28,6 +28,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
@@ -69,17 +70,23 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
 
         List<YieldRecord> historyRecords = yieldRecordRepository
             .findByRegionIdAndCropIdOrderByYearAsc(region.getId(), crop.getId());
-        List<YieldRecord> usableHistory = historyRecords.stream()
-            .filter(record -> record.getYieldPerHectare() != null)
+        List<HistoryObservation> usableHistory = historyRecords.stream()
+            .map(record -> {
+                Double value = resolveYield(record);
+                return value != null ? new HistoryObservation(record, value) : null;
+            })
+            .filter(Objects::nonNull)
             .collect(Collectors.toList());
 
         if (usableHistory.isEmpty()) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "缺少历史产量数据，无法生成预测");
         }
 
-        int historyLimit = request.historyYears() != null ? request.historyYears() : Math.min(usableHistory.size(), 10);
-        List<YieldRecord> limitedHistory = usableHistory.stream()
-            .sorted(Comparator.comparingInt(YieldRecord::getYear))
+        int historyLimit = request.historyYears() != null
+            ? request.historyYears()
+            : Math.min(usableHistory.size(), 10);
+        List<HistoryObservation> limitedHistory = usableHistory.stream()
+            .sorted(Comparator.comparingInt(obs -> obs.record().getYear()))
             .skip(Math.max(usableHistory.size() - historyLimit, 0))
             .collect(Collectors.toList());
 
@@ -109,11 +116,11 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         forecastRunRepository.save(run);
 
         List<ForecastRunSeries> series = new ArrayList<>();
-        for (YieldRecord record : limitedHistory) {
+        for (HistoryObservation observation : limitedHistory) {
             ForecastRunSeries item = new ForecastRunSeries();
             item.setRun(run);
-            item.setPeriod(String.valueOf(record.getYear()));
-            item.setValue(record.getYieldPerHectare());
+            item.setPeriod(String.valueOf(observation.record().getYear()));
+            item.setValue(observation.yieldPerHectare());
             item.setLowerBound(null);
             item.setUpperBound(null);
             item.setHistorical(Boolean.TRUE);
@@ -133,9 +140,9 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         forecastRunSeriesRepository.saveAll(series);
 
         List<ForecastExecutionResponse.SeriesPoint> history = limitedHistory.stream()
-            .map(record -> new ForecastExecutionResponse.SeriesPoint(
-                String.valueOf(record.getYear()),
-                record.getYieldPerHectare(),
+            .map(observation -> new ForecastExecutionResponse.SeriesPoint(
+                String.valueOf(observation.record().getYear()),
+                observation.yieldPerHectare(),
                 null,
                 null
             ))
@@ -168,14 +175,17 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         return new ForecastExecutionResponse(run.getId(), metadata, history, forecast, metrics);
     }
 
-    private ForecastEngineResponse invokeEngine(List<YieldRecord> history,
+    private ForecastEngineResponse invokeEngine(List<HistoryObservation> history,
                                                 ForecastRun run) {
         Map<String, Object> parameters = new HashMap<>();
         parameters.put("historyYears", run.getHistoryYears());
         parameters.put("frequency", run.getFrequency());
 
         List<ForecastEngineRequest.HistoryPoint> historyPoints = history.stream()
-            .map(item -> new ForecastEngineRequest.HistoryPoint(String.valueOf(item.getYear()), item.getYieldPerHectare()))
+            .map(item -> new ForecastEngineRequest.HistoryPoint(
+                String.valueOf(item.record().getYear()),
+                item.yieldPerHectare()
+            ))
             .toList();
 
         ForecastEngineRequest engineRequest = new ForecastEngineRequest(
@@ -194,4 +204,18 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
             throw new BusinessException(ResultCode.SERVER_ERROR, "预测引擎调用失败: " + ex.getMessage());
         }
     }
+
+    private Double resolveYield(YieldRecord record) {
+        if (record.getYieldPerHectare() != null) {
+            return record.getYieldPerHectare();
+        }
+        Double production = record.getProduction();
+        Double sownArea = record.getSownArea();
+        if (production != null && sownArea != null && sownArea != 0d) {
+            return production / sownArea;
+        }
+        return null;
+    }
+
+    private record HistoryObservation(YieldRecord record, double yieldPerHectare) { }
 }
