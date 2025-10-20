@@ -190,6 +190,56 @@
         </div>
       </div>
     </el-card>
+
+    <el-card class="panel-card" shadow="hover">
+      <template #header>
+        <div class="card-header">
+          <div>
+            <div class="card-title">预测记录</div>
+            <div class="card-subtitle">保存最近的预测结果，便于复盘与调用</div>
+          </div>
+          <el-tag v-if="hasHistoryRecords" size="large" type="success">共 {{ forecastHistory.length }} 条</el-tag>
+        </div>
+      </template>
+      <el-table
+        :data="forecastHistory"
+        :stripe="true"
+        :border="false"
+        v-loading="historyLoading"
+        empty-text="暂无预测记录，请先生成预测"
+      >
+        <el-table-column prop="period" label="预测期" width="110" />
+        <el-table-column prop="regionName" label="地区" min-width="160" />
+        <el-table-column prop="cropName" label="作物" min-width="140" />
+        <el-table-column prop="modelName" label="模型" min-width="160">
+          <template #default="{ row }">{{ row.modelName }} ({{ row.modelType }})</template>
+        </el-table-column>
+        <el-table-column label="指标预测值" min-width="160">
+          <template #default="{ row }">
+            {{ formatHistoryNumber(row.measurementValue) }}
+            <span class="history-unit" v-if="row.measurementUnit">{{ row.measurementUnit }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="推算总产量 (吨)" min-width="160">
+          <template #default="{ row }">{{ formatHistoryNumber(row.predictedProduction) }}</template>
+        </el-table-column>
+        <el-table-column label="推算单产 (吨/公顷)" min-width="170">
+          <template #default="{ row }">{{ formatHistoryNumber(row.predictedYield) }}</template>
+        </el-table-column>
+        <el-table-column label="参考播种面积 (公顷)" min-width="190">
+          <template #default="{ row }">{{ formatHistoryNumber(row.sownArea) }}</template>
+        </el-table-column>
+        <el-table-column label="参考均价 (元/公斤)" min-width="190">
+          <template #default="{ row }">{{ formatHistoryNumber(row.averagePrice) }}</template>
+        </el-table-column>
+        <el-table-column label="预计收益 (万元)" min-width="170">
+          <template #default="{ row }">{{ formatHistoryNumber(row.estimatedRevenue) }}</template>
+        </el-table-column>
+        <el-table-column label="生成时间" min-width="200">
+          <template #default="{ row }">{{ formatHistoryDateTime(row.generatedAt) }}</template>
+        </el-table-column>
+      </el-table>
+    </el-card>
   </div>
 </template>
 
@@ -197,7 +247,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import BaseChart from '@/components/charts/BaseChart.vue'
-import { executeForecast, fetchCrops, fetchModels, fetchRegions } from '@/services/forecast'
+import { executeForecast, fetchCrops, fetchForecastHistory, fetchModels, fetchRegions } from '@/services/forecast'
 
 const selectors = reactive({
   regionId: null,
@@ -232,6 +282,8 @@ const forecastSeries = ref([])
 const metrics = ref(null)
 const metadata = ref(null)
 const runId = ref(null)
+const forecastHistory = ref([])
+const historyLoading = ref(false)
 const loading = ref(false)
 const errorMessage = ref('')
 
@@ -296,6 +348,8 @@ const reminders = [
   '如需对比不同模型，可复制当前配置并切换模型',
   '关注预测误差指标，及时优化数据质量和模型配置'
 ]
+
+const hasHistoryRecords = computed(() => forecastHistory.value.length > 0)
 
 const combinedPeriods = computed(() => {
   const historyPeriods = historySeries.value.map(item => item.period)
@@ -412,6 +466,18 @@ const optionFetchers = {
   models: fetchModels,
 }
 
+const loadForecastHistory = async (limit = 6) => {
+  historyLoading.value = true
+  try {
+    const records = await fetchForecastHistory({ limit })
+    forecastHistory.value = Array.isArray(records) ? records : []
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.message || '加载预测记录失败')
+  } finally {
+    historyLoading.value = false
+  }
+}
+
 const fetchOptions = async type => {
   loadingOptions[type] = true
   try {
@@ -453,6 +519,7 @@ const runForecast = async () => {
     } else {
       ElMessage.success('预测生成成功')
     }
+    await loadForecastHistory()
   } catch (error) {
     resetResult({ keepError: true })
     errorMessage.value = error?.response?.data?.message || error.message || '预测服务调用失败'
@@ -468,6 +535,7 @@ onMounted(async () => {
     fetchOptions('crops'),
     fetchOptions('models')
   ])
+  await loadForecastHistory()
 })
 
 watch(
@@ -482,6 +550,25 @@ const formatMetric = value => {
     return '--'
   }
   return Number(value).toFixed(2)
+}
+
+const formatHistoryNumber = (value, fractionDigits = 2) => {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return '-'
+  }
+  return Number(value).toLocaleString('zh-CN', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: fractionDigits,
+  })
+}
+
+const formatHistoryDateTime = value => {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return '-'
+  }
+  return date.toLocaleString('zh-CN', { hour12: false })
 }
 </script>
 
@@ -760,6 +847,12 @@ const formatMetric = value => {
 .detail-card strong {
   font-weight: 600;
   color: #303133;
+}
+
+.history-unit {
+  margin-left: 4px;
+  color: #909399;
+  font-size: 12px;
 }
 
 @media (max-width: 992px) {

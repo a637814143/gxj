@@ -178,6 +178,8 @@ CREATE TABLE IF NOT EXISTS forecast_run (
     rmse DOUBLE,
     mape DOUBLE,
     r2 DOUBLE,
+    measurement_label VARCHAR(64),
+    measurement_unit VARCHAR(32),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_run_external_request (external_request_id),
@@ -202,6 +204,25 @@ CREATE TABLE IF NOT EXISTS forecast_run_series (
     KEY idx_run_series_run (run_id),
     CONSTRAINT fk_run_series_run FOREIGN KEY (run_id) REFERENCES forecast_run (id) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '预测结果时间序列';
+
+CREATE TABLE IF NOT EXISTS forecast_snapshot (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    run_id BIGINT UNSIGNED NOT NULL,
+    period VARCHAR(32) NOT NULL,
+    year INT,
+    measurement_value DOUBLE,
+    measurement_label VARCHAR(64),
+    measurement_unit VARCHAR(32),
+    predicted_production DOUBLE,
+    predicted_yield DOUBLE,
+    sown_area DOUBLE,
+    average_price DOUBLE,
+    estimated_revenue DOUBLE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_snapshot_run (run_id),
+    CONSTRAINT fk_snapshot_run FOREIGN KEY (run_id) REFERENCES forecast_run (id) ON DELETE CASCADE
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '预测结果快照';
 
 CREATE TABLE IF NOT EXISTS forecast_result (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
