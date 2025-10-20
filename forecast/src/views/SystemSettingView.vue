@@ -95,6 +95,23 @@
         <el-form-item label="通知邮箱">
           <el-input v-model="settings.notifyEmail" placeholder="请输入" />
         </el-form-item>
+        <el-form-item label="待审批变更">
+          <el-input-number
+            v-model="settings.pendingChangeCount"
+            :min="0"
+            :step="1"
+            :max="999999"
+            controls-position="right"
+          />
+        </el-form-item>
+        <el-form-item label="安全策略说明">
+          <el-input
+            v-model="settings.securityStrategy"
+            type="textarea"
+            :autosize="{ minRows: 2, maxRows: 4 }"
+            placeholder="请输入安全策略与合规要求"
+          />
+        </el-form-item>
         <el-form-item label="模型计算集群">
           <el-switch v-model="settings.clusterEnabled" />
         </el-form-item>

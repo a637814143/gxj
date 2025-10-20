@@ -114,8 +114,8 @@
           </el-col>
           <el-col :xs="24" :sm="12" :md="8">
             <el-form-item label="预测步数">
-              <el-input-number v-model="selectors.forecastPeriods" :min="1" :max="10" />
-              <span class="form-hint">期</span>
+              <el-input-number v-model="selectors.forecastPeriods" :min="1" :max="3" :step="1" />
+              <span class="form-hint">期 (最多 3 期)</span>
             </el-form-item>
           </el-col>
           <el-col :xs="24" :sm="12" :md="8">
@@ -156,12 +156,6 @@
       </div>
     </el-card>
 
-    <MachineLearningYieldCard
-      :prefill="mlPrefill"
-      :disable-predict="disableSubmit"
-      @prediction-success="handleMlPrediction"
-    />
-
     <el-card v-if="metadata || metrics" class="panel-card" shadow="hover">
       <template #header>
         <div class="card-header">
@@ -175,12 +169,14 @@
         <div class="detail-card" v-if="metadata">
           <h3>运行参数</h3>
           <ul>
+            <li v-if="runId"><span>运行编号</span><strong>#{{ runId }}</strong></li>
             <li><span>地区</span><strong>{{ metadata.regionName }}</strong></li>
             <li><span>作物</span><strong>{{ metadata.cropName }}</strong></li>
             <li><span>模型</span><strong>{{ metadata.modelName }} ({{ metadata.modelType }})</strong></li>
             <li><span>历史窗口</span><strong>{{ selectors.historyYears }} 年</strong></li>
             <li><span>预测步数</span><strong>{{ metadata.forecastPeriods }} 期</strong></li>
             <li><span>时间粒度</span><strong>{{ metadata.frequency === 'YEARLY' ? '年度' : '季度' }}</strong></li>
+            <li><span>指标</span><strong>{{ metricLabel }}（{{ metricUnit }}）</strong></li>
           </ul>
         </div>
         <div class="detail-card" v-if="metrics">
@@ -192,17 +188,57 @@
             <li><span>R²</span><strong>{{ formatMetric(metrics.r2) }}</strong></li>
           </ul>
         </div>
-        <div class="detail-card" v-if="mlPrediction">
-          <h3>机器学习预测</h3>
-          <ul>
-            <li><span>预测产量 (万吨)</span><strong>{{ formatNumber(mlPrediction.predicted_yield_10kt, 2) }}</strong></li>
-            <li><span>预测产量 (吨)</span><strong>{{ formatNumber(mlPrediction.predicted_yield_tonnes, 0) }}</strong></li>
-            <li><span>年份</span><strong>{{ mlPrediction.inputs?.year ?? '--' }}</strong></li>
-            <li><span>地区</span><strong>{{ mlPrediction.inputs?.region ?? '--' }}</strong></li>
-            <li><span>作物</span><strong>{{ mlPrediction.inputs?.crop ?? '--' }}</strong></li>
-          </ul>
-        </div>
       </div>
+    </el-card>
+
+    <el-card class="panel-card" shadow="hover">
+      <template #header>
+        <div class="card-header">
+          <div>
+            <div class="card-title">预测记录</div>
+            <div class="card-subtitle">保存最近的预测结果，便于复盘与调用</div>
+          </div>
+          <el-tag v-if="hasHistoryRecords" size="large" type="success">共 {{ forecastHistory.length }} 条</el-tag>
+        </div>
+      </template>
+      <el-table
+        :data="forecastHistory"
+        :stripe="true"
+        :border="false"
+        v-loading="historyLoading"
+        empty-text="暂无预测记录，请先生成预测"
+      >
+        <el-table-column prop="period" label="预测期" width="110" />
+        <el-table-column prop="regionName" label="地区" min-width="160" />
+        <el-table-column prop="cropName" label="作物" min-width="140" />
+        <el-table-column prop="modelName" label="模型" min-width="160">
+          <template #default="{ row }">{{ row.modelName }} ({{ row.modelType }})</template>
+        </el-table-column>
+        <el-table-column label="指标预测值" min-width="160">
+          <template #default="{ row }">
+            {{ formatHistoryNumber(row.measurementValue) }}
+            <span class="history-unit" v-if="row.measurementUnit">{{ row.measurementUnit }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="推算总产量 (吨)" min-width="160">
+          <template #default="{ row }">{{ formatHistoryNumber(row.predictedProduction) }}</template>
+        </el-table-column>
+        <el-table-column label="推算单产 (吨/公顷)" min-width="170">
+          <template #default="{ row }">{{ formatHistoryNumber(row.predictedYield) }}</template>
+        </el-table-column>
+        <el-table-column label="参考播种面积 (公顷)" min-width="190">
+          <template #default="{ row }">{{ formatHistoryNumber(row.sownArea) }}</template>
+        </el-table-column>
+        <el-table-column label="参考均价 (元/公斤)" min-width="190">
+          <template #default="{ row }">{{ formatHistoryNumber(row.averagePrice) }}</template>
+        </el-table-column>
+        <el-table-column label="预计收益 (万元)" min-width="170">
+          <template #default="{ row }">{{ formatHistoryNumber(row.estimatedRevenue) }}</template>
+        </el-table-column>
+        <el-table-column label="生成时间" min-width="200">
+          <template #default="{ row }">{{ formatHistoryDateTime(row.generatedAt) }}</template>
+        </el-table-column>
+      </el-table>
     </el-card>
   </div>
 </template>
@@ -211,8 +247,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import BaseChart from '@/components/charts/BaseChart.vue'
-import MachineLearningYieldCard from '@/components/MachineLearningYieldCard.vue'
-import apiClient from '../services/http'
+import { executeForecast, fetchCrops, fetchForecastHistory, fetchModels, fetchRegions } from '@/services/forecast'
 
 const selectors = reactive({
   regionId: null,
@@ -246,13 +281,20 @@ const historySeries = ref([])
 const forecastSeries = ref([])
 const metrics = ref(null)
 const metadata = ref(null)
-const mlPrediction = ref(null)
+const runId = ref(null)
+const forecastHistory = ref([])
+const historyLoading = ref(false)
 const loading = ref(false)
 const errorMessage = ref('')
 
 const disableSubmit = computed(() => !selectors.regionId || !selectors.cropId || !selectors.modelId)
 
 const hasResult = computed(() => historySeries.value.length > 0 || forecastSeries.value.length > 0)
+
+const metricLabel = computed(() => metadata.value?.valueLabel || '产量')
+const metricUnit = computed(() => metadata.value?.valueUnit || '吨 / 公顷')
+const historyLegendLabel = computed(() => `历史${metricLabel.value}`)
+const forecastLegendLabel = computed(() => `预测${metricLabel.value}`)
 
 function formatTrend(value) {
   if (value > 0) return `较昨日 +${value}`
@@ -307,32 +349,7 @@ const reminders = [
   '关注预测误差指标，及时优化数据质量和模型配置'
 ]
 
-const mlPrefill = computed(() => {
-  const regionName = selectedRegion.value?.name || ''
-  const cropName = selectedCrop.value?.name || ''
-  const fallbackYear = new Date().getFullYear()
-  const metadataYear =
-    metadata.value?.targetYear ??
-    metadata.value?.latestYear ??
-    metadata.value?.year ??
-    fallbackYear
-
-  return {
-    crop: cropName,
-    region: regionName,
-    year: metadataYear,
-    sown_area_kha:
-      metadata.value?.latestSownArea ??
-      metadata.value?.sownArea ??
-      metadata.value?.sown_area_kha ??
-      undefined,
-    avg_price_yuan_per_ton:
-      metadata.value?.latestAvgPrice ??
-      metadata.value?.avgPrice ??
-      metadata.value?.avg_price_yuan_per_ton ??
-      undefined,
-  }
-})
+const hasHistoryRecords = computed(() => forecastHistory.value.length > 0)
 
 const combinedPeriods = computed(() => {
   const historyPeriods = historySeries.value.map(item => item.period)
@@ -362,7 +379,7 @@ const chartOption = computed(() => {
       trigger: 'axis'
     },
     legend: {
-      data: ['历史产量', '预测产量', '预测区间'],
+      data: [historyLegendLabel.value, forecastLegendLabel.value, '预测区间'],
       top: 10
     },
     xAxis: {
@@ -372,14 +389,14 @@ const chartOption = computed(() => {
     },
     yAxis: {
       type: 'value',
-      name: '吨 / 公顷',
+      name: metricUnit.value,
       axisLabel: {
         formatter: value => (value == null ? '' : Number(value).toFixed(2))
       }
     },
     series: [
       {
-        name: '历史产量',
+        name: historyLegendLabel.value,
         type: 'line',
         smooth: true,
         showSymbol: true,
@@ -387,7 +404,7 @@ const chartOption = computed(() => {
         lineStyle: { color: '#409EFF' }
       },
       {
-        name: '预测产量',
+        name: forecastLegendLabel.value,
         type: 'line',
         smooth: true,
         showSymbol: true,
@@ -432,24 +449,42 @@ const generatedAtLabel = computed(() => {
   return time.toLocaleString('zh-CN', { hour12: false })
 })
 
-const resetResult = () => {
+const resetResult = (options = { keepError: false }) => {
   historySeries.value = []
   forecastSeries.value = []
   metrics.value = null
   metadata.value = null
-  errorMessage.value = ''
-  mlPrediction.value = null
+  runId.value = null
+  if (!options.keepError) {
+    errorMessage.value = ''
+  }
 }
 
-const handleMlPrediction = result => {
-  mlPrediction.value = result
+const optionFetchers = {
+  regions: fetchRegions,
+  crops: fetchCrops,
+  models: fetchModels,
 }
 
-const fetchOptions = async (type, url) => {
+const loadForecastHistory = async (limit = 6) => {
+  historyLoading.value = true
+  try {
+    const records = await fetchForecastHistory({ limit })
+    forecastHistory.value = Array.isArray(records) ? records : []
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.message || '加载预测记录失败')
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+const fetchOptions = async type => {
   loadingOptions[type] = true
   try {
-    const { data } = await apiClient.get(url)
-    optionLists[type] = data?.data ?? []
+    const fetcher = optionFetchers[type]
+    if (!fetcher) return
+    const list = await fetcher()
+    optionLists[type] = Array.isArray(list) ? list : []
   } catch (error) {
     ElMessage.error(`加载${type === 'regions' ? '地区' : type === 'crops' ? '作物' : '模型'}列表失败`)
   } finally {
@@ -473,16 +508,22 @@ const runForecast = async () => {
       forecastPeriods: selectors.forecastPeriods,
       frequency: selectors.frequency
     }
-    const { data } = await apiClient.post('/api/forecast/predict', payload)
-    const result = data?.data
-    historySeries.value = result?.history ?? []
-    forecastSeries.value = result?.forecast ?? []
-    metrics.value = result?.metrics ?? null
-    metadata.value = result?.metadata ?? null
+    const result = await executeForecast(payload)
+    historySeries.value = result.history
+    forecastSeries.value = result.forecast
+    metrics.value = result.metrics
+    metadata.value = result.metadata
+    runId.value = result.runId
+    if (!historySeries.value.length && !forecastSeries.value.length) {
+      ElMessage.warning('预测服务返回了空结果，请检查历史数据是否充足')
+    } else {
+      ElMessage.success('预测生成成功')
+    }
+    await loadForecastHistory()
   } catch (error) {
+    resetResult({ keepError: true })
     errorMessage.value = error?.response?.data?.message || error.message || '预测服务调用失败'
     ElMessage.error(errorMessage.value)
-    resetResult()
   } finally {
     loading.value = false
   }
@@ -490,10 +531,11 @@ const runForecast = async () => {
 
 onMounted(async () => {
   await Promise.all([
-    fetchOptions('regions', '/api/base/regions'),
-    fetchOptions('crops', '/api/base/crops'),
-    fetchOptions('models', '/api/forecast/models')
+    fetchOptions('regions'),
+    fetchOptions('crops'),
+    fetchOptions('models')
   ])
+  await loadForecastHistory()
 })
 
 watch(
@@ -510,14 +552,23 @@ const formatMetric = value => {
   return Number(value).toFixed(2)
 }
 
-const formatNumber = (value, fractionDigits = 2) => {
+const formatHistoryNumber = (value, fractionDigits = 2) => {
   if (value === null || value === undefined || Number.isNaN(Number(value))) {
-    return '--'
+    return '-'
   }
-  return new Intl.NumberFormat('zh-CN', {
-    minimumFractionDigits: fractionDigits,
+  return Number(value).toLocaleString('zh-CN', {
+    minimumFractionDigits: 0,
     maximumFractionDigits: fractionDigits,
-  }).format(Number(value))
+  })
+}
+
+const formatHistoryDateTime = value => {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return '-'
+  }
+  return date.toLocaleString('zh-CN', { hour12: false })
 }
 </script>
 
@@ -796,6 +847,12 @@ const formatNumber = (value, fractionDigits = 2) => {
 .detail-card strong {
   font-weight: 600;
   color: #303133;
+}
+
+.history-unit {
+  margin-left: 4px;
+  color: #909399;
+  font-size: 12px;
 }
 
 @media (max-width: 992px) {

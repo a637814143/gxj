@@ -66,6 +66,12 @@ public class ForecastRun extends BaseEntity {
     @Column
     private Double r2;
 
+    @Column(length = 64)
+    private String measurementLabel;
+
+    @Column(length = 32)
+    private String measurementUnit;
+
     public ForecastModel getModel() {
         return model;
     }
@@ -168,5 +174,21 @@ public class ForecastRun extends BaseEntity {
 
     public void setR2(Double r2) {
         this.r2 = r2;
+    }
+
+    public String getMeasurementLabel() {
+        return measurementLabel;
+    }
+
+    public void setMeasurementLabel(String measurementLabel) {
+        this.measurementLabel = measurementLabel;
+    }
+
+    public String getMeasurementUnit() {
+        return measurementUnit;
+    }
+
+    public void setMeasurementUnit(String measurementUnit) {
+        this.measurementUnit = measurementUnit;
     }
 }
