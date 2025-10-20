@@ -10,6 +10,9 @@ import com.gxj.cropyield.modules.dataset.entity.YieldRecord;
 import com.gxj.cropyield.modules.dataset.repository.YieldRecordRepository;
 import com.gxj.cropyield.modules.forecast.entity.ForecastSnapshot;
 import com.gxj.cropyield.modules.forecast.repository.ForecastSnapshotRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import java.time.LocalDate;
@@ -22,6 +25,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class DashboardService {
+
+    private static final Logger log = LoggerFactory.getLogger(DashboardService.class);
 
     private final YieldRecordRepository yieldRecordRepository;
     private final ForecastSnapshotRepository forecastSnapshotRepository;
@@ -133,9 +138,12 @@ public class DashboardService {
     }
 
     private List<RecentYieldRecord> buildRecentRecords() {
-        List<ForecastSnapshot> snapshots = forecastSnapshotRepository
-                .findByOrderByCreatedAtDesc(PageRequest.of(0, 5));
-        if (!snapshots.isEmpty()) {
+        try {
+            List<ForecastSnapshot> snapshots = forecastSnapshotRepository
+                    .findByOrderByCreatedAtDesc(PageRequest.of(0, 5));
+            if (snapshots.isEmpty()) {
+                return List.of();
+            }
             return snapshots.stream()
                     .map(snapshot -> {
                         var run = snapshot.getRun();
@@ -162,8 +170,10 @@ public class DashboardService {
                         );
                     })
                     .toList();
+        } catch (DataAccessException ex) {
+            log.warn("Failed to load forecast snapshots for dashboard recent records, returning empty list", ex);
+            return List.of();
         }
-        return List.of();
     }
 
     private List<ForecastPoint> buildForecast(List<YieldRecord> records) {
