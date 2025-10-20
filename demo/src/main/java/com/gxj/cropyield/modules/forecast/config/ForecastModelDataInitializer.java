@@ -25,20 +25,24 @@ public class ForecastModelDataInitializer implements ApplicationRunner {
     @Transactional
     public void run(ApplicationArguments args) {
         ensureDefaultModel(
-                "LSTM作物产量模型",
+                "DeepLearning4j LSTM 产量模型",
                 ForecastModel.ModelType.LSTM,
-                "基于 10 年历史数据训练的 LSTM 年度产量预测模型。"
+                "使用 DeepLearning4j 训练的 LSTM 神经网络，根据历史时间序列生成逐期产量预测。"
         );
         ensureDefaultModel(
-                "Prophet季节性模型",
+                "Smile Holt-Winters 季节模型",
                 ForecastModel.ModelType.PROPHET,
-                "捕捉季节波动的 Prophet 模型，适用于价格预测。"
+                "基于 Smile 库 Holt-Winters 平滑算法的季节性模型，支持趋势与季节性叠加预测。"
         );
     }
 
     private void ensureDefaultModel(String name, ForecastModel.ModelType type, String description) {
-        forecastModelRepository.findByName(name).ifPresentOrElse(existing -> {
+        forecastModelRepository.findByType(type).or(() -> forecastModelRepository.findByName(name)).ifPresentOrElse(existing -> {
             boolean updated = false;
+            if (!Objects.equals(existing.getName(), name)) {
+                existing.setName(name);
+                updated = true;
+            }
             if (existing.getType() != type) {
                 existing.setType(type);
                 updated = true;

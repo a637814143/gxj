@@ -24,12 +24,20 @@ public class LocalForecastEngine {
     }
 
     private final Map<ForecastModel.ModelType, ForecastComputation> computations = new EnumMap<>(ForecastModel.ModelType.class);
+    private final Dl4jLstmForecaster lstmForecaster = new Dl4jLstmForecaster();
+    private final SmileHoltWintersForecaster holtWintersForecaster = new SmileHoltWintersForecaster();
 
     public LocalForecastEngine() {
         computations.put(ForecastModel.ModelType.ARIMA, this::linearTrendForecast);
-        computations.put(ForecastModel.ModelType.LSTM, this::exponentialSmoothingForecast);
+        computations.put(ForecastModel.ModelType.LSTM, (historyValues, periods) ->
+            lstmForecaster.forecast(historyValues, periods)
+                .orElseGet(() -> exponentialSmoothingForecast(historyValues, periods))
+        );
         computations.put(ForecastModel.ModelType.RANDOM_FOREST, this::rollingWindowForecast);
-        computations.put(ForecastModel.ModelType.PROPHET, this::seasonalProjectionForecast);
+        computations.put(ForecastModel.ModelType.PROPHET, (historyValues, periods) ->
+            holtWintersForecaster.forecast(historyValues, periods)
+                .orElseGet(() -> seasonalProjectionForecast(historyValues, periods))
+        );
     }
 
     public ForecastEngineResponse forecast(ForecastEngineRequest request) {
