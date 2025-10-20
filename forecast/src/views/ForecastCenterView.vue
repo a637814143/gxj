@@ -114,8 +114,8 @@
           </el-col>
           <el-col :xs="24" :sm="12" :md="8">
             <el-form-item label="预测步数">
-              <el-input-number v-model="selectors.forecastPeriods" :min="1" :max="10" />
-              <span class="form-hint">期</span>
+              <el-input-number v-model="selectors.forecastPeriods" :min="1" :max="3" :step="1" />
+              <span class="form-hint">期 (最多 3 期)</span>
             </el-form-item>
           </el-col>
           <el-col :xs="24" :sm="12" :md="8">
@@ -175,6 +175,7 @@
         <div class="detail-card" v-if="metadata">
           <h3>运行参数</h3>
           <ul>
+            <li v-if="runId"><span>运行编号</span><strong>#{{ runId }}</strong></li>
             <li><span>地区</span><strong>{{ metadata.regionName }}</strong></li>
             <li><span>作物</span><strong>{{ metadata.cropName }}</strong></li>
             <li><span>模型</span><strong>{{ metadata.modelName }} ({{ metadata.modelType }})</strong></li>
@@ -212,7 +213,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import BaseChart from '@/components/charts/BaseChart.vue'
 import MachineLearningYieldCard from '@/components/MachineLearningYieldCard.vue'
-import apiClient from '../services/http'
+import { executeForecast, fetchCrops, fetchModels, fetchRegions } from '@/services/forecast'
 
 const selectors = reactive({
   regionId: null,
@@ -246,6 +247,7 @@ const historySeries = ref([])
 const forecastSeries = ref([])
 const metrics = ref(null)
 const metadata = ref(null)
+const runId = ref(null)
 const mlPrediction = ref(null)
 const loading = ref(false)
 const errorMessage = ref('')
@@ -432,24 +434,35 @@ const generatedAtLabel = computed(() => {
   return time.toLocaleString('zh-CN', { hour12: false })
 })
 
-const resetResult = () => {
+const resetResult = (options = { keepError: false }) => {
   historySeries.value = []
   forecastSeries.value = []
   metrics.value = null
   metadata.value = null
-  errorMessage.value = ''
+  runId.value = null
   mlPrediction.value = null
+  if (!options.keepError) {
+    errorMessage.value = ''
+  }
 }
 
 const handleMlPrediction = result => {
   mlPrediction.value = result
 }
 
-const fetchOptions = async (type, url) => {
+const optionFetchers = {
+  regions: fetchRegions,
+  crops: fetchCrops,
+  models: fetchModels,
+}
+
+const fetchOptions = async type => {
   loadingOptions[type] = true
   try {
-    const { data } = await apiClient.get(url)
-    optionLists[type] = data?.data ?? []
+    const fetcher = optionFetchers[type]
+    if (!fetcher) return
+    const list = await fetcher()
+    optionLists[type] = Array.isArray(list) ? list : []
   } catch (error) {
     ElMessage.error(`加载${type === 'regions' ? '地区' : type === 'crops' ? '作物' : '模型'}列表失败`)
   } finally {
@@ -473,16 +486,21 @@ const runForecast = async () => {
       forecastPeriods: selectors.forecastPeriods,
       frequency: selectors.frequency
     }
-    const { data } = await apiClient.post('/api/forecast/predict', payload)
-    const result = data?.data
-    historySeries.value = result?.history ?? []
-    forecastSeries.value = result?.forecast ?? []
-    metrics.value = result?.metrics ?? null
-    metadata.value = result?.metadata ?? null
+    const result = await executeForecast(payload)
+    historySeries.value = result.history
+    forecastSeries.value = result.forecast
+    metrics.value = result.metrics
+    metadata.value = result.metadata
+    runId.value = result.runId
+    if (!historySeries.value.length && !forecastSeries.value.length) {
+      ElMessage.warning('预测服务返回了空结果，请检查历史数据是否充足')
+    } else {
+      ElMessage.success('预测生成成功')
+    }
   } catch (error) {
+    resetResult({ keepError: true })
     errorMessage.value = error?.response?.data?.message || error.message || '预测服务调用失败'
     ElMessage.error(errorMessage.value)
-    resetResult()
   } finally {
     loading.value = false
   }
@@ -490,9 +508,9 @@ const runForecast = async () => {
 
 onMounted(async () => {
   await Promise.all([
-    fetchOptions('regions', '/api/base/regions'),
-    fetchOptions('crops', '/api/base/crops'),
-    fetchOptions('models', '/api/forecast/models')
+    fetchOptions('regions'),
+    fetchOptions('crops'),
+    fetchOptions('models')
   ])
 })
 
