@@ -182,6 +182,7 @@
             <li><span>历史窗口</span><strong>{{ selectors.historyYears }} 年</strong></li>
             <li><span>预测步数</span><strong>{{ metadata.forecastPeriods }} 期</strong></li>
             <li><span>时间粒度</span><strong>{{ metadata.frequency === 'YEARLY' ? '年度' : '季度' }}</strong></li>
+            <li><span>指标</span><strong>{{ metricLabel }}（{{ metricUnit }}）</strong></li>
           </ul>
         </div>
         <div class="detail-card" v-if="metrics">
@@ -255,6 +256,11 @@ const errorMessage = ref('')
 const disableSubmit = computed(() => !selectors.regionId || !selectors.cropId || !selectors.modelId)
 
 const hasResult = computed(() => historySeries.value.length > 0 || forecastSeries.value.length > 0)
+
+const metricLabel = computed(() => metadata.value?.valueLabel || '产量')
+const metricUnit = computed(() => metadata.value?.valueUnit || '吨 / 公顷')
+const historyLegendLabel = computed(() => `历史${metricLabel.value}`)
+const forecastLegendLabel = computed(() => `预测${metricLabel.value}`)
 
 function formatTrend(value) {
   if (value > 0) return `较昨日 +${value}`
@@ -364,7 +370,7 @@ const chartOption = computed(() => {
       trigger: 'axis'
     },
     legend: {
-      data: ['历史产量', '预测产量', '预测区间'],
+      data: [historyLegendLabel.value, forecastLegendLabel.value, '预测区间'],
       top: 10
     },
     xAxis: {
@@ -374,14 +380,14 @@ const chartOption = computed(() => {
     },
     yAxis: {
       type: 'value',
-      name: '吨 / 公顷',
+      name: metricUnit.value,
       axisLabel: {
         formatter: value => (value == null ? '' : Number(value).toFixed(2))
       }
     },
     series: [
       {
-        name: '历史产量',
+        name: historyLegendLabel.value,
         type: 'line',
         smooth: true,
         showSymbol: true,
@@ -389,7 +395,7 @@ const chartOption = computed(() => {
         lineStyle: { color: '#409EFF' }
       },
       {
-        name: '预测产量',
+        name: forecastLegendLabel.value,
         type: 'line',
         smooth: true,
         showSymbol: true,

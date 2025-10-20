@@ -70,11 +70,9 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
 
         List<YieldRecord> historyRecords = yieldRecordRepository
             .findByRegionIdAndCropIdOrderByYearAsc(region.getId(), crop.getId());
+        MeasurementType measurementType = resolveMeasurementType(historyRecords);
         List<HistoryObservation> usableHistory = historyRecords.stream()
-            .map(record -> {
-                Double value = resolveYield(record);
-                return value != null ? new HistoryObservation(record, value) : null;
-            })
+            .map(record -> mapObservation(record, measurementType))
             .filter(Objects::nonNull)
             .collect(Collectors.toList());
 
@@ -120,7 +118,7 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
             ForecastRunSeries item = new ForecastRunSeries();
             item.setRun(run);
             item.setPeriod(String.valueOf(observation.record().getYear()));
-            item.setValue(observation.yieldPerHectare());
+            item.setValue(observation.value());
             item.setLowerBound(null);
             item.setUpperBound(null);
             item.setHistorical(Boolean.TRUE);
@@ -142,7 +140,7 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         List<ForecastExecutionResponse.SeriesPoint> history = limitedHistory.stream()
             .map(observation -> new ForecastExecutionResponse.SeriesPoint(
                 String.valueOf(observation.record().getYear()),
-                observation.yieldPerHectare(),
+                observation.value(),
                 null,
                 null
             ))
@@ -163,7 +161,9 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
             model.getType().name(),
             run.getFrequency(),
             run.getForecastPeriods(),
-            run.getUpdatedAt()
+            run.getUpdatedAt(),
+            measurementType.valueLabel(),
+            measurementType.valueUnit()
         );
         ForecastExecutionResponse.EvaluationMetrics metrics = new ForecastExecutionResponse.EvaluationMetrics(
             run.getMae(),
@@ -184,7 +184,7 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         List<ForecastEngineRequest.HistoryPoint> historyPoints = history.stream()
             .map(item -> new ForecastEngineRequest.HistoryPoint(
                 String.valueOf(item.record().getYear()),
-                item.yieldPerHectare()
+                item.value()
             ))
             .toList();
 
@@ -205,6 +205,40 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         }
     }
 
+    private MeasurementType resolveMeasurementType(List<YieldRecord> records) {
+        boolean yieldAvailable = records.stream().anyMatch(this::hasYieldMeasurement);
+        if (yieldAvailable) {
+            return MeasurementType.YIELD_PER_HECTARE;
+        }
+        boolean productionAvailable = records.stream().anyMatch(record -> record.getProduction() != null);
+        if (productionAvailable) {
+            return MeasurementType.PRODUCTION;
+        }
+        return MeasurementType.YIELD_PER_HECTARE;
+    }
+
+    private HistoryObservation mapObservation(YieldRecord record, MeasurementType measurementType) {
+        return switch (measurementType) {
+            case YIELD_PER_HECTARE -> {
+                Double value = resolveYield(record);
+                yield value != null ? new HistoryObservation(record, value) : null;
+            }
+            case PRODUCTION -> {
+                Double production = record.getProduction();
+                yield production != null ? new HistoryObservation(record, production) : null;
+            }
+        };
+    }
+
+    private boolean hasYieldMeasurement(YieldRecord record) {
+        if (record.getYieldPerHectare() != null) {
+            return true;
+        }
+        Double production = record.getProduction();
+        Double sownArea = record.getSownArea();
+        return production != null && sownArea != null && sownArea != 0d;
+    }
+
     private Double resolveYield(YieldRecord record) {
         if (record.getYieldPerHectare() != null) {
             return record.getYieldPerHectare();
@@ -217,5 +251,26 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         return null;
     }
 
-    private record HistoryObservation(YieldRecord record, double yieldPerHectare) { }
+    private enum MeasurementType {
+        YIELD_PER_HECTARE("单位面积产量", "吨 / 公顷"),
+        PRODUCTION("总产量", "吨");
+
+        private final String valueLabel;
+        private final String valueUnit;
+
+        MeasurementType(String valueLabel, String valueUnit) {
+            this.valueLabel = valueLabel;
+            this.valueUnit = valueUnit;
+        }
+
+        public String valueLabel() {
+            return valueLabel;
+        }
+
+        public String valueUnit() {
+            return valueUnit;
+        }
+    }
+
+    private record HistoryObservation(YieldRecord record, double value) { }
 }

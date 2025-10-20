@@ -18,7 +18,9 @@ public record ForecastExecutionResponse(
         String modelType,
         String frequency,
         Integer forecastPeriods,
-        LocalDateTime generatedAt
+        LocalDateTime generatedAt,
+        String valueLabel,
+        String valueUnit
     ) {
     }
 
