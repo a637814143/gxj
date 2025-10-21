@@ -1,4 +1,14 @@
 -- 初始化基础农作物信息
+INSERT INTO base_region (id, code, name, level, parent_code, parent_name, description)
+VALUES
+    (1, 'YUNNAN', '云南省', 'PROVINCE', NULL, NULL, '云南省省级行政区。'),
+    (2, 'KUNMING', '昆明市', 'PREFECTURE', 'YUNNAN', '云南省', '云南省省会城市。')
+    ON DUPLICATE KEY UPDATE
+                         name = VALUES(name),
+                         level = VALUES(level),
+                         parent_code = VALUES(parent_code),
+                         parent_name = VALUES(parent_name),
+                         description = VALUES(description);
 INSERT INTO base_crop (id, code, name, category, description)
 VALUES
     (1, 'WHEAT', '小麦', '粮食作物', '冬小麦是预测模型的主要示例作物。'),
