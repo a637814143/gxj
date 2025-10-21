@@ -67,6 +67,7 @@ export const executeForecast = async payload => {
 
   return {
     runId: response.runId ?? null,
+    forecastResultId: response.forecastResultId ?? null,
     metadata: response.metadata && typeof response.metadata === 'object' ? response.metadata : null,
     history: normalizeSeries(response.history),
     forecast: normalizeSeries(response.forecast),
