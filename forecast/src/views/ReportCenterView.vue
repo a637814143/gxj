@@ -64,24 +64,38 @@
               <span>作者：{{ report.author }}</span>
               <span>覆盖周期：{{ report.coveragePeriod || '未填写' }}</span>
             </div>
-            <el-link type="primary">查看详情</el-link>
+            <p v-if="report.insights" class="report-insight">洞察：{{ report.insights }}</p>
+            <el-link type="primary" @click="viewReport(report)">查看详情</el-link>
           </el-card>
         </el-timeline-item>
       </el-timeline>
       <template v-else />
     </el-card>
+
+    <report-generate-dialog v-model="showGenerateDialog" @success="handleGenerateSuccess" />
+    <report-detail-drawer
+      v-model="showDetailDrawer"
+      :report-id="activeReportId"
+      :summary="activeReportSummary"
+    />
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import apiClient from '../services/http'
+import { fetchReportOverview } from '../services/report'
 import { useAuthorization } from '../composables/useAuthorization'
+import ReportGenerateDialog from '../components/report/ReportGenerateDialog.vue'
+import ReportDetailDrawer from '../components/report/ReportDetailDrawer.vue'
 
 const reports = ref([])
 const metrics = ref({ totalReports: 0, publishedThisMonth: 0, pendingApproval: 0, autoGenerationEnabled: false })
 const loading = ref(false)
+const showGenerateDialog = ref(false)
+const showDetailDrawer = ref(false)
+const activeReportId = ref(null)
+const activeReportSummary = ref(null)
 
 const { hasRole } = useAuthorization()
 const canGenerateReport = computed(() => hasRole(['ADMIN', 'AGRICULTURE_DEPT']))
@@ -117,7 +131,7 @@ const quickOverview = computed(() => [
 const reminders = computed(() => {
   const items = []
   if (metrics.value.pendingApproval > 0) {
-    items.push(`存在 ${metrics.value.pendingApproval} 份待审核报告，请尽快处理以便发布`) 
+    items.push(`存在 ${metrics.value.pendingApproval} 份待审核报告，请尽快处理以便发布`)
   } else {
     items.push('暂无待审核报告，可根据计划安排新的分析任务')
   }
@@ -156,13 +170,9 @@ function formatDate(value) {
 const fetchReports = async () => {
   loading.value = true
   try {
-    const { data } = await apiClient.get('/api/report')
+    const { data } = await fetchReportOverview()
     const payload = data?.data ?? data ?? {}
-    if (Array.isArray(payload.reports)) {
-      reports.value = payload.reports
-    } else {
-      reports.value = []
-    }
+    reports.value = Array.isArray(payload.reports) ? payload.reports : []
     metrics.value = {
       totalReports: payload.metrics?.totalReports ?? reports.value.length,
       publishedThisMonth: payload.metrics?.publishedThisMonth ?? 0,
@@ -187,7 +197,28 @@ const createReport = () => {
     ElMessage.warning('当前账号没有生成报告的权限')
     return
   }
-  ElMessage.info('后续将接入报告生成流程')
+  showGenerateDialog.value = true
+}
+
+const handleGenerateSuccess = detail => {
+  fetchReports().finally(() => {
+    const summary = detail?.summary ?? null
+    if (summary?.id) {
+      activeReportSummary.value = summary
+      activeReportId.value = summary.id
+      showDetailDrawer.value = true
+    }
+  })
+}
+
+const viewReport = report => {
+  if (!report?.id) {
+    ElMessage.warning('无法打开报告详情')
+    return
+  }
+  activeReportSummary.value = report
+  activeReportId.value = report.id
+  showDetailDrawer.value = true
 }
 </script>
 
@@ -398,69 +429,71 @@ const createReport = () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
 }
 
 .card-title {
   font-size: 18px;
   font-weight: 600;
-  color: #1a2a4a;
+  margin-bottom: 4px;
 }
 
 .card-subtitle {
   font-size: 13px;
-  color: #6c7d9c;
-  margin-top: 4px;
+  color: #6f7f9f;
 }
 
 .report-timeline {
-  margin-top: 12px;
+  padding: 12px 0 24px 0;
+}
+
+.report-item {
+  border-radius: 14px;
+  border: 1px solid #eef2ff;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(244, 249, 255, 0.92) 100%);
 }
 
 .report-item h3 {
-  margin: 0;
+  margin: 0 0 12px;
   font-size: 18px;
-  color: #1a2a4a;
+  font-weight: 600;
+  color: #1a2858;
 }
 
 .report-item .desc {
-  color: #6c7d9c;
-  margin: 12px 0;
+  margin: 0 0 12px;
+  font-size: 14px;
+  color: #4a5a78;
 }
 
 .report-meta {
   display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  font-size: 12px;
-  color: #909399;
-  margin-bottom: 8px;
+  gap: 16px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: #6b7a99;
 }
 
-@media (max-width: 992px) {
+.report-insight {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: #3b4a6b;
+}
+
+@media (max-width: 768px) {
   .hero-card {
     padding: 24px;
   }
 
-  .card-header {
-    flex-direction: column;
-    align-items: flex-start;
+  .hero-title {
+    font-size: 24px;
   }
 
-  .card-header > :last-child {
-    width: 100%;
-    display: flex;
-    justify-content: flex-end;
+  .hero-desc {
+    font-size: 13px;
   }
-}
 
-@media (max-width: 768px) {
   .hero-stats {
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  }
-
-  .card-header > :last-child {
-    justify-content: flex-start;
+    grid-template-columns: 1fr;
   }
 }
 </style>

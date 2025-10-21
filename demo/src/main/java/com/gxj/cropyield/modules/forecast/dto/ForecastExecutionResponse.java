@@ -8,7 +8,8 @@ public record ForecastExecutionResponse(
     Metadata metadata,
     List<SeriesPoint> history,
     List<SeriesPoint> forecast,
-    EvaluationMetrics metrics
+    EvaluationMetrics metrics,
+    Long forecastResultId
 ) {
 
     public record Metadata(

@@ -1,3 +1,15 @@
+-- 初始化基础行政区域信息
+INSERT INTO base_region (id, code, name, level, parent_code, parent_name, description)
+VALUES
+    (1, 'YUNNAN', '云南省', 'PROVINCE', NULL, NULL, '云南省省级行政区。'),
+    (2, 'KUNMING', '昆明市', 'PREFECTURE', 'YUNNAN', '云南省', '云南省省会城市。')
+ON DUPLICATE KEY UPDATE
+    name = VALUES(name),
+    level = VALUES(level),
+    parent_code = VALUES(parent_code),
+    parent_name = VALUES(parent_name),
+    description = VALUES(description);
+
 -- 初始化基础农作物信息
 INSERT INTO base_crop (id, code, name, category, description)
 VALUES
@@ -70,4 +82,39 @@ JOIN sys_role r ON r.code = 'ADMIN'
 WHERE u.username = 'admin'
 ON DUPLICATE KEY UPDATE
     created_at = VALUES(created_at);
+
+-- 报告中心示例数据：初始化数据集及历史记录
+INSERT INTO dataset_file (id, name, type, storage_path, description)
+VALUES
+    (1, '云南小麦历年产量', 'YIELD', '/data/demo/yield-yunnan-wheat.csv', '报告中心示例数据：2019-2023 年云南小麦产量'),
+    (2, '云南小麦月度价格', 'PRICE', '/data/demo/price-yunnan-wheat.csv', '报告中心示例数据：近两年市场价格')
+ON DUPLICATE KEY UPDATE
+    storage_path = VALUES(storage_path),
+    description = VALUES(description);
+
+INSERT INTO dataset_yield_record (id, crop_id, region_id, dataset_file_id, year, sown_area, production, yield_per_hectare, average_price, data_source, collected_at)
+VALUES
+    (1, 1, 2, 1, 2019, 118.2, 410.5, 3.47, 2280, '云南省统计局', '2020-01-15'),
+    (2, 1, 2, 1, 2020, 119.6, 415.8, 3.48, 2310, '云南省统计局', '2021-01-16'),
+    (3, 1, 2, 1, 2021, 120.1, 420.3, 3.50, 2355, '云南省统计局', '2022-01-18'),
+    (4, 1, 2, 1, 2022, 121.0, 428.9, 3.55, 2390, '云南省统计局', '2023-01-20'),
+    (5, 1, 2, 1, 2023, 122.4, 439.6, 3.59, 2425, '云南省统计局', '2024-01-19')
+ON DUPLICATE KEY UPDATE
+    sown_area = VALUES(sown_area),
+    production = VALUES(production),
+    yield_per_hectare = VALUES(yield_per_hectare),
+    average_price = VALUES(average_price),
+    data_source = VALUES(data_source),
+    collected_at = VALUES(collected_at);
+
+INSERT INTO dataset_price_record (id, crop_id, region_id, dataset_file_id, record_date, price)
+VALUES
+    (1, 1, 2, 2, '2023-01-01', 2360),
+    (2, 1, 2, 2, '2023-04-01', 2395),
+    (3, 1, 2, 2, '2023-07-01', 2420),
+    (4, 1, 2, 2, '2023-10-01', 2455),
+    (5, 1, 2, 2, '2024-01-01', 2480),
+    (6, 1, 2, 2, '2024-04-01', 2525)
+ON DUPLICATE KEY UPDATE
+    price = VALUES(price);
 

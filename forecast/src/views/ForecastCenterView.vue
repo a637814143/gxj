@@ -170,6 +170,20 @@
           <h3>运行参数</h3>
           <ul>
             <li v-if="runId"><span>运行编号</span><strong>#{{ runId }}</strong></li>
+            <li v-if="forecastResultId">
+              <span>结果 ID</span>
+              <strong>
+                #{{ forecastResultId }}
+                <el-button
+                  type="primary"
+                  link
+                  size="small"
+                  @click="copyForecastResultId(forecastResultId)"
+                >
+                  复制
+                </el-button>
+              </strong>
+            </li>
             <li><span>地区</span><strong>{{ metadata.regionName }}</strong></li>
             <li><span>作物</span><strong>{{ metadata.cropName }}</strong></li>
             <li><span>模型</span><strong>{{ metadata.modelName }} ({{ metadata.modelType }})</strong></li>
@@ -209,6 +223,23 @@
         empty-text="暂无预测记录，请先生成预测"
       >
         <el-table-column prop="period" label="预测期" width="110" />
+        <el-table-column label="结果ID" width="150">
+          <template #default="{ row }">
+            <div class="history-id">
+              <span v-if="row.forecastResultId">#{{ row.forecastResultId }}</span>
+              <span v-else>-</span>
+              <el-button
+                v-if="row.forecastResultId"
+                type="primary"
+                link
+                size="small"
+                @click="copyForecastResultId(row.forecastResultId)"
+              >
+                复制
+              </el-button>
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column prop="regionName" label="地区" min-width="160" />
         <el-table-column prop="cropName" label="作物" min-width="140" />
         <el-table-column prop="modelName" label="模型" min-width="160">
@@ -282,6 +313,7 @@ const forecastSeries = ref([])
 const metrics = ref(null)
 const metadata = ref(null)
 const runId = ref(null)
+const forecastResultId = ref(null)
 const forecastHistory = ref([])
 const historyLoading = ref(false)
 const loading = ref(false)
@@ -455,6 +487,7 @@ const resetResult = (options = { keepError: false }) => {
   metrics.value = null
   metadata.value = null
   runId.value = null
+  forecastResultId.value = null
   if (!options.keepError) {
     errorMessage.value = ''
   }
@@ -471,6 +504,12 @@ const loadForecastHistory = async (limit = 6) => {
   try {
     const records = await fetchForecastHistory({ limit })
     forecastHistory.value = Array.isArray(records) ? records : []
+    if (runId.value && !forecastResultId.value) {
+      const match = forecastHistory.value.find(item => item && item.runId === runId.value && item.forecastResultId)
+      if (match) {
+        forecastResultId.value = match.forecastResultId
+      }
+    }
   } catch (error) {
     ElMessage.error(error?.response?.data?.message || '加载预测记录失败')
   } finally {
@@ -514,6 +553,7 @@ const runForecast = async () => {
     metrics.value = result.metrics
     metadata.value = result.metadata
     runId.value = result.runId
+    forecastResultId.value = result.forecastResultId ?? null
     if (!historySeries.value.length && !forecastSeries.value.length) {
       ElMessage.warning('预测服务返回了空结果，请检查历史数据是否充足')
     } else {
@@ -550,6 +590,43 @@ const formatMetric = value => {
     return '--'
   }
   return Number(value).toFixed(2)
+}
+
+const copyForecastResultId = async id => {
+  if (!id) {
+    ElMessage.warning('暂无可复制的结果 ID')
+    return
+  }
+  const text = String(id)
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+    } else {
+      throw new Error('clipboard api unavailable')
+    }
+    ElMessage.success('结果 ID 已复制')
+  } catch (error) {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.setAttribute('readonly', '')
+    textarea.style.position = 'absolute'
+    textarea.style.left = '-9999px'
+    document.body.appendChild(textarea)
+    textarea.select()
+    try {
+      const succeeded = document.execCommand('copy')
+      if (succeeded) {
+        ElMessage.success('结果 ID 已复制')
+      } else {
+        throw new Error('execCommand failed')
+      }
+    } catch (fallbackError) {
+      ElMessage.error('复制失败，请手动复制结果 ID')
+      console.error('Failed to copy forecastResultId', fallbackError)
+    } finally {
+      document.body.removeChild(textarea)
+    }
+  }
 }
 
 const formatHistoryNumber = (value, fractionDigits = 2) => {
@@ -845,6 +922,10 @@ const formatHistoryDateTime = value => {
 }
 
 .detail-card strong {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
   font-weight: 600;
   color: #303133;
 }
@@ -853,6 +934,12 @@ const formatHistoryDateTime = value => {
   margin-left: 4px;
   color: #909399;
   font-size: 12px;
+}
+
+.history-id {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 @media (max-width: 992px) {

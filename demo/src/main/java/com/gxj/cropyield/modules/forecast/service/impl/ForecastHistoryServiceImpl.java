@@ -1,9 +1,12 @@
 package com.gxj.cropyield.modules.forecast.service.impl;
 
 import com.gxj.cropyield.modules.forecast.dto.ForecastHistoryResponse;
+import com.gxj.cropyield.modules.forecast.entity.ForecastResult;
 import com.gxj.cropyield.modules.forecast.entity.ForecastRun;
 import com.gxj.cropyield.modules.forecast.entity.ForecastSnapshot;
+import com.gxj.cropyield.modules.forecast.repository.ForecastResultRepository;
 import com.gxj.cropyield.modules.forecast.repository.ForecastSnapshotRepository;
+import com.gxj.cropyield.modules.forecast.repository.ForecastTaskRepository;
 import com.gxj.cropyield.modules.forecast.service.ForecastHistoryService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,9 +24,15 @@ public class ForecastHistoryServiceImpl implements ForecastHistoryService {
     private static final Logger log = LoggerFactory.getLogger(ForecastHistoryServiceImpl.class);
 
     private final ForecastSnapshotRepository forecastSnapshotRepository;
+    private final ForecastTaskRepository forecastTaskRepository;
+    private final ForecastResultRepository forecastResultRepository;
 
-    public ForecastHistoryServiceImpl(ForecastSnapshotRepository forecastSnapshotRepository) {
+    public ForecastHistoryServiceImpl(ForecastSnapshotRepository forecastSnapshotRepository,
+                                      ForecastTaskRepository forecastTaskRepository,
+                                      ForecastResultRepository forecastResultRepository) {
         this.forecastSnapshotRepository = forecastSnapshotRepository;
+        this.forecastTaskRepository = forecastTaskRepository;
+        this.forecastResultRepository = forecastResultRepository;
     }
 
     @Override
@@ -44,8 +53,10 @@ public class ForecastHistoryServiceImpl implements ForecastHistoryService {
     private ForecastHistoryResponse mapSnapshot(ForecastSnapshot snapshot) {
         ForecastRun run = snapshot.getRun();
         LocalDateTime generatedAt = run.getUpdatedAt();
+        Long forecastResultId = resolveForecastResultId(run, snapshot);
         return new ForecastHistoryResponse(
             run.getId(),
+            forecastResultId,
             snapshot.getPeriod(),
             snapshot.getYear(),
             run.getRegion().getName(),
@@ -62,5 +73,20 @@ public class ForecastHistoryServiceImpl implements ForecastHistoryService {
             snapshot.getEstimatedRevenue(),
             generatedAt
         );
+    }
+
+    private Long resolveForecastResultId(ForecastRun run, ForecastSnapshot snapshot) {
+        Integer targetYear = snapshot.getYear();
+        if (targetYear == null) {
+            return null;
+        }
+        return forecastTaskRepository.findByModelIdAndCropIdAndRegionId(
+                run.getModel().getId(),
+                run.getCrop().getId(),
+                run.getRegion().getId()
+            )
+            .flatMap(task -> forecastResultRepository.findByTaskIdAndTargetYear(task.getId(), targetYear))
+            .map(ForecastResult::getId)
+            .orElse(null);
     }
 }
