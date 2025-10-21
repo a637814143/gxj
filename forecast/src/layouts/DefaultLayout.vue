@@ -291,7 +291,7 @@ const handleUserCommand = command => {
     return
   }
   if (command === 'profile') {
-    ElMessage.info('个人资料功能即将上线')
+    router.push({ name: 'profile' }).catch(() => {})
     return
   }
   if (command === 'preferences') {

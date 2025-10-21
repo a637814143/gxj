@@ -107,6 +107,17 @@ const routes = [
         }
       },
       {
+        path: 'profile',
+        name: 'profile',
+        component: () => import('../views/ProfileView.vue'),
+        meta: {
+          requiresAuth: true,
+          title: '个人资料中心',
+          subtitle: '维护账户安全、业务信息与偏好设置',
+          breadcrumb: [{ label: '首页', to: '/dashboard' }]
+        }
+      },
+      {
         path: 'settings',
         name: 'settings',
         component: () => import('../views/SystemSettingView.vue'),
