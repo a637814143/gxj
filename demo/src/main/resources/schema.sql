@@ -404,6 +404,20 @@ CREATE TABLE IF NOT EXISTS report_summary (
     CONSTRAINT fk_report_result FOREIGN KEY (forecast_result_id) REFERENCES forecast_result (id) ON DELETE SET NULL
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '预测报告摘要';
 
+CREATE TABLE IF NOT EXISTS report_section (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    report_id BIGINT UNSIGNED NOT NULL,
+    type VARCHAR(64) NOT NULL,
+    title VARCHAR(128) NOT NULL,
+    description VARCHAR(512),
+    data TEXT,
+    sort_order INT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_section_report (report_id),
+    CONSTRAINT fk_section_report FOREIGN KEY (report_id) REFERENCES report_summary (id) ON DELETE CASCADE
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '预测报告章节';
+
 SET @ddl := (
     SELECT IF(
         COUNT(*) = 0,
