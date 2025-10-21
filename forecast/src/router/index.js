@@ -112,8 +112,8 @@ const routes = [
         component: () => import('../views/ProfileView.vue'),
         meta: {
           requiresAuth: true,
-          title: '个人资料中心',
-          subtitle: '维护账户安全、业务信息与偏好设置',
+          title: '个人中心',
+          subtitle: '修改登录密码，保障账户安全',
           breadcrumb: [{ label: '首页', to: '/dashboard' }]
         }
       },

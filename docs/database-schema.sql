@@ -19,7 +19,6 @@ DROP TABLE IF EXISTS sys_role_permission;
 DROP TABLE IF EXISTS sys_user_role;
 DROP TABLE IF EXISTS sys_refresh_token;
 DROP TABLE IF EXISTS sys_login_log;
-DROP TABLE IF EXISTS sys_user_profile;
 DROP TABLE IF EXISTS sys_user;
 DROP TABLE IF EXISTS sys_role;
 DROP TABLE IF EXISTS sys_permission;
@@ -259,19 +258,6 @@ CREATE TABLE sys_user (
     UNIQUE KEY uq_user_username (username),
     UNIQUE KEY uq_user_email (email)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '系统用户';
-
-CREATE TABLE sys_user_profile (
-    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    user_id BIGINT UNSIGNED NOT NULL,
-    security_settings TEXT,
-    business_info TEXT,
-    personalization_settings TEXT,
-    data_operations TEXT,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_user_profile_user (user_id),
-    CONSTRAINT fk_user_profile_user FOREIGN KEY (user_id) REFERENCES sys_user (id) ON DELETE CASCADE
-) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '用户个人资料';
 
 CREATE TABLE sys_login_log (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

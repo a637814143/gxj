@@ -11,6 +11,4 @@ public interface LoginLogRepository extends JpaRepository<LoginLog, Long>, JpaSp
     long countBySuccess(boolean success);
 
     Optional<LoginLog> findFirstBySuccessOrderByCreatedAtDesc(boolean success);
-
-    Optional<LoginLog> findFirstByUsernameAndSuccessOrderByCreatedAtDesc(String username, boolean success);
 }
