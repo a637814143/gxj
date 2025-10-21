@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 
 public record ForecastHistoryResponse(
     Long runId,
+    Long forecastResultId,
     String period,
     Integer year,
     String regionName,
