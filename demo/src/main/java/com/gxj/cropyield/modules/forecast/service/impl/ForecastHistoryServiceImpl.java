@@ -1,5 +1,6 @@
 package com.gxj.cropyield.modules.forecast.service.impl;
 
+import com.gxj.cropyield.modules.forecast.dto.ForecastHistoryPageResponse;
 import com.gxj.cropyield.modules.forecast.dto.ForecastHistoryResponse;
 import com.gxj.cropyield.modules.forecast.entity.ForecastResult;
 import com.gxj.cropyield.modules.forecast.entity.ForecastRun;
@@ -11,11 +12,12 @@ import com.gxj.cropyield.modules.forecast.service.ForecastHistoryService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.Collections;
 import java.util.List;
 
 @Service
@@ -36,17 +38,38 @@ public class ForecastHistoryServiceImpl implements ForecastHistoryService {
     }
 
     @Override
-    public List<ForecastHistoryResponse> getRecentHistory(int limit) {
-        int effectiveLimit = Math.min(Math.max(limit, 1), 20);
+    public ForecastHistoryPageResponse getHistory(int page, int size) {
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.min(Math.max(size, 1), 50);
+        Sort sort = Sort.by(Sort.Direction.DESC, "createdAt");
+        PageRequest pageRequest = PageRequest.of(safePage - 1, safeSize, sort);
         try {
-            return forecastSnapshotRepository
-                .findByOrderByCreatedAtDesc(PageRequest.of(0, effectiveLimit))
+            Page<ForecastSnapshot> snapshotPage = forecastSnapshotRepository
+                .findAllByOrderByCreatedAtDesc(pageRequest);
+
+            if (snapshotPage.getTotalPages() > 0 && pageRequest.getPageNumber() >= snapshotPage.getTotalPages()) {
+                pageRequest = PageRequest.of(snapshotPage.getTotalPages() - 1, pageRequest.getPageSize(), sort);
+                snapshotPage = forecastSnapshotRepository.findAllByOrderByCreatedAtDesc(pageRequest);
+            }
+
+            List<ForecastHistoryResponse> items = snapshotPage
                 .stream()
                 .map(this::mapSnapshot)
                 .toList();
+
+            int currentPage = snapshotPage.getTotalPages() == 0
+                ? 1
+                : pageRequest.getPageNumber() + 1;
+
+            return new ForecastHistoryPageResponse(
+                items,
+                snapshotPage.getTotalElements(),
+                currentPage,
+                pageRequest.getPageSize()
+            );
         } catch (DataAccessException ex) {
             log.warn("Failed to load forecast history snapshots, returning empty list", ex);
-            return Collections.emptyList();
+            return new ForecastHistoryPageResponse(List.of(), 0L, 1, safeSize);
         }
     }
 

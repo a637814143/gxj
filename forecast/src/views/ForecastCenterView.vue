@@ -212,7 +212,9 @@
             <div class="card-title">预测记录</div>
             <div class="card-subtitle">保存最近的预测结果，便于复盘与调用</div>
           </div>
-          <el-tag v-if="hasHistoryRecords" size="large" type="success">共 {{ forecastHistory.length }} 条</el-tag>
+          <el-tag v-if="hasHistoryRecords" size="large" type="success">
+            共 {{ historyPagination.total }} 条
+          </el-tag>
         </div>
       </template>
       <el-table
@@ -270,6 +272,19 @@
           <template #default="{ row }">{{ formatHistoryDateTime(row.generatedAt) }}</template>
         </el-table-column>
       </el-table>
+      <div
+        v-if="historyPagination.total > historyPagination.pageSize"
+        class="table-pagination"
+      >
+        <el-pagination
+          background
+          layout="prev, pager, next"
+          :total="historyPagination.total"
+          :page-size="historyPagination.pageSize"
+          :current-page="historyPagination.currentPage"
+          @current-change="handleHistoryPageChange"
+        />
+      </div>
     </el-card>
   </div>
 </template>
@@ -315,7 +330,13 @@ const metadata = ref(null)
 const runId = ref(null)
 const forecastResultId = ref(null)
 const forecastHistory = ref([])
+const historyPagination = reactive({
+  currentPage: 1,
+  pageSize: 5,
+  total: 0,
+})
 const historyLoading = ref(false)
+let historyRequestId = 0
 const loading = ref(false)
 const errorMessage = ref('')
 
@@ -381,7 +402,7 @@ const reminders = [
   '关注预测误差指标，及时优化数据质量和模型配置'
 ]
 
-const hasHistoryRecords = computed(() => forecastHistory.value.length > 0)
+const hasHistoryRecords = computed(() => historyPagination.total > 0)
 
 const combinedPeriods = computed(() => {
   const historyPeriods = historySeries.value.map(item => item.period)
@@ -499,11 +520,19 @@ const optionFetchers = {
   models: fetchModels,
 }
 
-const loadForecastHistory = async (limit = 6) => {
+const loadForecastHistory = async (page = historyPagination.currentPage) => {
+  const requestId = ++historyRequestId
   historyLoading.value = true
   try {
-    const records = await fetchForecastHistory({ limit })
-    forecastHistory.value = Array.isArray(records) ? records : []
+    const params = { page, size: historyPagination.pageSize }
+    const response = await fetchForecastHistory(params)
+    if (requestId !== historyRequestId) {
+      return
+    }
+    forecastHistory.value = Array.isArray(response.items) ? response.items : []
+    historyPagination.total = Number.isFinite(response.total) ? response.total : 0
+    historyPagination.currentPage = Number.isFinite(response.page) ? response.page : page
+    historyPagination.pageSize = Number.isFinite(response.size) ? response.size : historyPagination.pageSize
     if (runId.value && !forecastResultId.value) {
       const match = forecastHistory.value.find(item => item && item.runId === runId.value && item.forecastResultId)
       if (match) {
@@ -511,10 +540,19 @@ const loadForecastHistory = async (limit = 6) => {
       }
     }
   } catch (error) {
-    ElMessage.error(error?.response?.data?.message || '加载预测记录失败')
+    if (requestId === historyRequestId) {
+      ElMessage.error(error?.response?.data?.message || '加载预测记录失败')
+    }
   } finally {
-    historyLoading.value = false
+    if (requestId === historyRequestId) {
+      historyLoading.value = false
+    }
   }
+}
+
+const handleHistoryPageChange = page => {
+  historyPagination.currentPage = page
+  loadForecastHistory(page)
 }
 
 const fetchOptions = async type => {
@@ -559,7 +597,8 @@ const runForecast = async () => {
     } else {
       ElMessage.success('预测生成成功')
     }
-    await loadForecastHistory()
+    historyPagination.currentPage = 1
+    await loadForecastHistory(1)
   } catch (error) {
     resetResult({ keepError: true })
     errorMessage.value = error?.response?.data?.message || error.message || '预测服务调用失败'
@@ -575,7 +614,8 @@ onMounted(async () => {
     fetchOptions('crops'),
     fetchOptions('models')
   ])
-  await loadForecastHistory()
+  historyPagination.currentPage = 1
+  await loadForecastHistory(1)
 })
 
 watch(
@@ -940,6 +980,12 @@ const formatHistoryDateTime = value => {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.table-pagination {
+  display: flex;
+  justify-content: flex-end;
+  padding: 16px 0 4px;
 }
 
 @media (max-width: 992px) {

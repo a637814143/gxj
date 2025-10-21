@@ -52,7 +52,7 @@
       <el-empty v-if="!loading && !reports.length" description="暂未生成报告" />
       <el-timeline v-else-if="reports.length" class="report-timeline">
         <el-timeline-item
-          v-for="report in reports"
+          v-for="report in paginatedReports"
           :key="report.id"
           :timestamp="formatDate(report.publishedAt)"
           type="success"
@@ -69,6 +69,19 @@
           </el-card>
         </el-timeline-item>
       </el-timeline>
+      <div
+        v-if="reports.length > reportPagination.pageSize"
+        class="timeline-pagination"
+      >
+        <el-pagination
+          background
+          layout="prev, pager, next"
+          :total="reports.length"
+          :page-size="reportPagination.pageSize"
+          :current-page="reportPagination.currentPage"
+          @current-change="handleReportPageChange"
+        />
+      </div>
       <template v-else />
     </el-card>
 
@@ -82,7 +95,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { fetchReportOverview } from '../services/report'
 import { useAuthorization } from '../composables/useAuthorization'
@@ -96,9 +109,21 @@ const showGenerateDialog = ref(false)
 const showDetailDrawer = ref(false)
 const activeReportId = ref(null)
 const activeReportSummary = ref(null)
+const reportPagination = reactive({
+  currentPage: 1,
+  pageSize: 5,
+})
 
 const { hasRole } = useAuthorization()
 const canGenerateReport = computed(() => hasRole(['ADMIN', 'AGRICULTURE_DEPT']))
+
+const paginatedReports = computed(() => {
+  if (!reports.value.length) {
+    return []
+  }
+  const start = (reportPagination.currentPage - 1) * reportPagination.pageSize
+  return reports.value.slice(start, start + reportPagination.pageSize)
+})
 
 const highlightStats = computed(() => {
   const total = metrics.value.totalReports || reports.value.length
@@ -173,6 +198,15 @@ const fetchReports = async () => {
     const { data } = await fetchReportOverview()
     const payload = data?.data ?? data ?? {}
     reports.value = Array.isArray(payload.reports) ? payload.reports : []
+    if (reportPagination.currentPage < 1) {
+      reportPagination.currentPage = 1
+    }
+    const totalPages = reports.value.length
+      ? Math.ceil(reports.value.length / reportPagination.pageSize)
+      : 1
+    if (reportPagination.currentPage > totalPages) {
+      reportPagination.currentPage = totalPages
+    }
     metrics.value = {
       totalReports: payload.metrics?.totalReports ?? reports.value.length,
       publishedThisMonth: payload.metrics?.publishedThisMonth ?? 0,
@@ -201,6 +235,7 @@ const createReport = () => {
 }
 
 const handleGenerateSuccess = detail => {
+  reportPagination.currentPage = 1
   fetchReports().finally(() => {
     const summary = detail?.summary ?? null
     if (summary?.id) {
@@ -209,6 +244,10 @@ const handleGenerateSuccess = detail => {
       showDetailDrawer.value = true
     }
   })
+}
+
+const handleReportPageChange = page => {
+  reportPagination.currentPage = page
 }
 
 const viewReport = report => {
@@ -444,6 +483,12 @@ const viewReport = report => {
 
 .report-timeline {
   padding: 12px 0 24px 0;
+}
+
+.timeline-pagination {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 0 12px;
 }
 
 .report-item {
