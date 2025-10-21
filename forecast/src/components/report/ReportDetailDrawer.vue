@@ -110,14 +110,20 @@
             <template v-else-if="section.type === 'FORECAST_COMPARISON'">
               <el-descriptions :column="2" border>
                 <el-descriptions-item label="预测年份">{{ section.data?.forecastYear || '--' }}</el-descriptions-item>
-                <el-descriptions-item label="预测单产">
-                  {{ formatNumber(section.data?.predictedYield, { maximumFractionDigits: 2 }) }} 吨/公顷
+                <el-descriptions-item :label="forecastMeasurementLabel(section.data)">
+                  {{ formatForecastMeasurement(section.data) }}
                 </el-descriptions-item>
-                <el-descriptions-item label="实际单产">
-                  {{ section.data?.actualYield != null ? formatNumber(section.data.actualYield, { maximumFractionDigits: 2 }) + ' 吨/公顷' : '待更新' }}
+                <el-descriptions-item
+                  v-if="section.data?.predictedProduction != null && isYieldMeasurement(section.data)"
+                  label="预测总产量"
+                >
+                  {{ formatWithUnit(section.data.predictedProduction, '吨') }}
                 </el-descriptions-item>
-                <el-descriptions-item label="偏差">
-                  {{ section.data?.difference != null ? formatNumber(section.data.difference, { maximumFractionDigits: 2 }) + ' 吨/公顷' : '--' }}
+                <el-descriptions-item :label="actualMeasurementLabel(section.data)">
+                  {{ formatActualMeasurement(section.data) }}
+                </el-descriptions-item>
+                <el-descriptions-item v-if="section.data?.difference != null" label="偏差">
+                  {{ formatDifference(section.data) }}
                 </el-descriptions-item>
                 <el-descriptions-item label="模型">{{ section.data?.task?.model || '--' }}</el-descriptions-item>
                 <el-descriptions-item label="模型类型">{{ section.data?.task?.modelType || '--' }}</el-descriptions-item>
@@ -182,6 +188,57 @@ const formatMetric = (value, unit) => {
   }
   const formatted = formatNumber(numeric, { maximumFractionDigits: 2 })
   return formatted === '--' ? '--' : unit ? `${formatted} ${unit}` : formatted
+}
+
+const formatWithUnit = (value, unit, options = { maximumFractionDigits: 2 }) => {
+  const formatted = formatNumber(value, options)
+  if (formatted === '--') {
+    return '--'
+  }
+  return unit ? `${formatted} ${unit}` : formatted
+}
+
+const isYieldMeasurement = data => {
+  if (!data) return false
+  if (data.predictedYield != null) return true
+  const unit = data.measurementUnit
+  const label = data.measurementLabel
+  return (
+    (typeof unit === 'string' && unit.includes('公顷')) ||
+    (typeof label === 'string' && label.includes('单产'))
+  )
+}
+
+const forecastMeasurementLabel = data => {
+  if (!data) return '预测值'
+  return data.measurementLabel || (isYieldMeasurement(data) ? '预测单产' : '预测值')
+}
+
+const formatForecastMeasurement = data => {
+  if (!data) return '--'
+  const value = data.measurementValue ?? data.predictedYield ?? null
+  const unit = data.measurementUnit || (isYieldMeasurement(data) ? '吨/公顷' : '')
+  return formatWithUnit(value, unit)
+}
+
+const actualMeasurementLabel = data => (isYieldMeasurement(data) ? '实际单产' : '实际值')
+
+const formatActualMeasurement = data => {
+  if (!isYieldMeasurement(data)) {
+    return '--'
+  }
+  if (data?.actualYield != null) {
+    return formatWithUnit(data.actualYield, '吨/公顷')
+  }
+  return '待更新'
+}
+
+const formatDifference = data => {
+  if (data?.difference == null) {
+    return '--'
+  }
+  const unit = isYieldMeasurement(data) ? '吨/公顷' : data?.measurementUnit || ''
+  return formatWithUnit(data.difference, unit)
 }
 
 const formatSectionType = type => {

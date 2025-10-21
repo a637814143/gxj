@@ -19,8 +19,20 @@ public class ForecastResult extends BaseEntity {
     @Column(nullable = false)
     private Integer targetYear;
 
-    @Column(nullable = false)
+    @Column
     private Double predictedYield;
+
+    @Column
+    private Double measurementValue;
+
+    @Column(length = 64)
+    private String measurementLabel;
+
+    @Column(length = 32)
+    private String measurementUnit;
+
+    @Column
+    private Double predictedProduction;
 
     @Column(length = 1024)
     private String evaluation;
@@ -47,6 +59,38 @@ public class ForecastResult extends BaseEntity {
 
     public void setPredictedYield(Double predictedYield) {
         this.predictedYield = predictedYield;
+    }
+
+    public Double getMeasurementValue() {
+        return measurementValue;
+    }
+
+    public void setMeasurementValue(Double measurementValue) {
+        this.measurementValue = measurementValue;
+    }
+
+    public String getMeasurementLabel() {
+        return measurementLabel;
+    }
+
+    public void setMeasurementLabel(String measurementLabel) {
+        this.measurementLabel = measurementLabel;
+    }
+
+    public String getMeasurementUnit() {
+        return measurementUnit;
+    }
+
+    public void setMeasurementUnit(String measurementUnit) {
+        this.measurementUnit = measurementUnit;
+    }
+
+    public Double getPredictedProduction() {
+        return predictedProduction;
+    }
+
+    public void setPredictedProduction(Double predictedProduction) {
+        this.predictedProduction = predictedProduction;
     }
 
     public String getEvaluation() {

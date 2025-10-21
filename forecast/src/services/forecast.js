@@ -30,7 +30,12 @@ export const fetchModels = async () => {
 
 export const fetchForecastHistory = async params => {
   const { data } = await apiClient.get('/api/forecast/history', { params })
-  return extractData(data)
+  const payload = data?.data ?? data ?? {}
+  const items = Array.isArray(payload.items) ? payload.items : []
+  const total = typeof payload.total === 'number' ? payload.total : 0
+  const page = typeof payload.page === 'number' ? payload.page : 1
+  const size = typeof payload.size === 'number' ? payload.size : params?.size ?? 5
+  return { items, total, page, size }
 }
 
 const parseNumber = value => {
@@ -67,6 +72,7 @@ export const executeForecast = async payload => {
 
   return {
     runId: response.runId ?? null,
+    forecastResultId: response.forecastResultId ?? null,
     metadata: response.metadata && typeof response.metadata === 'object' ? response.metadata : null,
     history: normalizeSeries(response.history),
     forecast: normalizeSeries(response.forecast),

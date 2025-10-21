@@ -1,10 +1,8 @@
 package com.gxj.cropyield.modules.forecast.service;
 
-import com.gxj.cropyield.modules.forecast.dto.ForecastHistoryResponse;
-
-import java.util.List;
+import com.gxj.cropyield.modules.forecast.dto.ForecastHistoryPageResponse;
 
 public interface ForecastHistoryService {
 
-    List<ForecastHistoryResponse> getRecentHistory(int limit);
+    ForecastHistoryPageResponse getHistory(int page, int size);
 }

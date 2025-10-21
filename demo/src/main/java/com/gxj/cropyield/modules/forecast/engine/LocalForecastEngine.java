@@ -19,6 +19,38 @@ public class LocalForecastEngine {
 
     private static final Pattern QUARTER_PATTERN = Pattern.compile("^(\\d{4})[-_/]?Q([1-4])$");
 
+    private static final class DoubleExponentialModel {
+        private final double alpha;
+        private final double beta;
+        private final double level;
+        private final double trend;
+        private final double mae;
+        private final double rmse;
+        private final double mape;
+        private final Double r2;
+        private final int comparisons;
+
+        private DoubleExponentialModel(double alpha,
+                                       double beta,
+                                       double level,
+                                       double trend,
+                                       double mae,
+                                       double rmse,
+                                       double mape,
+                                       Double r2,
+                                       int comparisons) {
+            this.alpha = alpha;
+            this.beta = beta;
+            this.level = level;
+            this.trend = trend;
+            this.mae = mae;
+            this.rmse = rmse;
+            this.mape = mape;
+            this.r2 = r2;
+            this.comparisons = comparisons;
+        }
+    }
+
     private interface ForecastComputation {
         List<Double> forecast(List<Double> historyValues, int periods);
     }
@@ -58,10 +90,21 @@ public class LocalForecastEngine {
             .toList();
 
         ForecastModel.ModelType modelType = resolveModelType(request.modelCode());
-        ForecastComputation computation = computations.getOrDefault(modelType, this::linearTrendForecast);
         int forecastPeriods = Math.max(1, Math.min(request.forecastPeriods(), 3));
 
-        List<Double> rawForecast = computation.forecast(historyValues, forecastPeriods);
+        DoubleExponentialModel optimizedModel = null;
+        List<Double> rawForecast;
+        if (modelType == ForecastModel.ModelType.ARIMA) {
+            optimizedModel = fitDoubleExponentialModel(historyValues);
+            if (optimizedModel != null) {
+                rawForecast = projectDoubleExponential(optimizedModel, forecastPeriods);
+            } else {
+                rawForecast = linearTrendForecast(historyValues, forecastPeriods);
+            }
+        } else {
+            ForecastComputation computation = computations.getOrDefault(modelType, this::linearTrendForecast);
+            rawForecast = computation.forecast(historyValues, forecastPeriods);
+        }
         List<String> nextPeriods = buildNextPeriods(sanitizedHistory, request.frequency(), rawForecast.size());
 
         double confidenceBand = computeConfidenceBand(historyValues);
@@ -78,7 +121,7 @@ public class LocalForecastEngine {
             ));
         }
 
-        ForecastEngineResponse.EvaluationMetrics metrics = buildMetrics(historyValues);
+        ForecastEngineResponse.EvaluationMetrics metrics = buildMetrics(historyValues, optimizedModel);
         return new ForecastEngineResponse(generateRequestId(), points, metrics);
     }
 
@@ -273,7 +316,20 @@ public class LocalForecastEngine {
         return Math.sqrt(variance);
     }
 
-    private ForecastEngineResponse.EvaluationMetrics buildMetrics(List<Double> historyValues) {
+    private ForecastEngineResponse.EvaluationMetrics buildMetrics(List<Double> historyValues,
+                                                                  DoubleExponentialModel optimizedModel) {
+        if (optimizedModel != null && optimizedModel.comparisons > 0) {
+            return new ForecastEngineResponse.EvaluationMetrics(
+                round(optimizedModel.mae),
+                round(optimizedModel.rmse),
+                round(optimizedModel.mape),
+                optimizedModel.r2 != null ? round(optimizedModel.r2) : null
+            );
+        }
+        return buildBaselineMetrics(historyValues);
+    }
+
+    private ForecastEngineResponse.EvaluationMetrics buildBaselineMetrics(List<Double> historyValues) {
         if (historyValues.size() < 2) {
             return new ForecastEngineResponse.EvaluationMetrics(null, null, null, null);
         }
@@ -313,6 +369,82 @@ public class LocalForecastEngine {
             round(mape),
             r2 != null ? round(r2) : null
         );
+    }
+
+    private DoubleExponentialModel fitDoubleExponentialModel(List<Double> historyValues) {
+        if (historyValues.size() < 3) {
+            return null;
+        }
+        DoubleExponentialModel bestModel = null;
+        double bestScore = Double.POSITIVE_INFINITY;
+        for (double alpha = 0.2; alpha <= 0.95; alpha += 0.05) {
+            for (double beta = 0.05; beta <= 0.5; beta += 0.05) {
+                DoubleExponentialModel candidate = simulateDoubleExponential(historyValues, alpha, beta);
+                if (candidate == null) {
+                    continue;
+                }
+                if (candidate.mape < bestScore - 1e-6
+                    || (Math.abs(candidate.mape - bestScore) < 1e-6
+                        && (bestModel == null || candidate.rmse < bestModel.rmse))) {
+                    bestScore = candidate.mape;
+                    bestModel = candidate;
+                }
+            }
+        }
+        return bestModel;
+    }
+
+    private DoubleExponentialModel simulateDoubleExponential(List<Double> historyValues,
+                                                              double alpha,
+                                                              double beta) {
+        double level = historyValues.get(0);
+        double trend = historyValues.get(1) - historyValues.get(0);
+        double sumAbs = 0;
+        double sumSq = 0;
+        double sumPct = 0;
+        int comparisons = 0;
+        for (int i = 1; i < historyValues.size(); i++) {
+            double forecast = level + trend;
+            double actual = historyValues.get(i);
+            double error = actual - forecast;
+            sumAbs += Math.abs(error);
+            sumSq += error * error;
+            double denominator = Math.abs(actual) < 1e-6 ? 1e-6 : Math.abs(actual);
+            sumPct += Math.abs(error) / denominator;
+            comparisons++;
+            double nextLevel = alpha * actual + (1 - alpha) * (level + trend);
+            double nextTrend = beta * (nextLevel - level) + (1 - beta) * trend;
+            level = nextLevel;
+            trend = nextTrend;
+        }
+        if (comparisons == 0) {
+            return null;
+        }
+        double mae = sumAbs / comparisons;
+        double rmse = Math.sqrt(sumSq / comparisons);
+        double mape = (sumPct / comparisons) * 100;
+        double mean = historyValues.stream().skip(1).mapToDouble(Double::doubleValue).average().orElse(0d);
+        double sst = 0d;
+        for (int i = 1; i < historyValues.size(); i++) {
+            double actual = historyValues.get(i);
+            sst += Math.pow(actual - mean, 2);
+        }
+        Double r2 = sst == 0 ? null : 1 - (sumSq / Math.max(sst, 1e-9));
+        return new DoubleExponentialModel(alpha, beta, level, trend, mae, rmse, mape, r2, comparisons);
+    }
+
+    private List<Double> projectDoubleExponential(DoubleExponentialModel model, int periods) {
+        List<Double> results = new ArrayList<>();
+        double baseLevel = model.level;
+        double trend = model.trend;
+        for (int i = 1; i <= periods; i++) {
+            double forecast = baseLevel + trend * i;
+            if (forecast < 0) {
+                forecast = 0;
+            }
+            results.add(forecast);
+        }
+        return results;
     }
 
     private String generateRequestId() {

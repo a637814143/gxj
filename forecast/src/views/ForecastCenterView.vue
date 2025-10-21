@@ -170,6 +170,20 @@
           <h3>运行参数</h3>
           <ul>
             <li v-if="runId"><span>运行编号</span><strong>#{{ runId }}</strong></li>
+            <li v-if="forecastResultId">
+              <span>结果 ID</span>
+              <strong>
+                #{{ forecastResultId }}
+                <el-button
+                  type="primary"
+                  link
+                  size="small"
+                  @click="copyForecastResultId(forecastResultId)"
+                >
+                  复制
+                </el-button>
+              </strong>
+            </li>
             <li><span>地区</span><strong>{{ metadata.regionName }}</strong></li>
             <li><span>作物</span><strong>{{ metadata.cropName }}</strong></li>
             <li><span>模型</span><strong>{{ metadata.modelName }} ({{ metadata.modelType }})</strong></li>
@@ -198,7 +212,9 @@
             <div class="card-title">预测记录</div>
             <div class="card-subtitle">保存最近的预测结果，便于复盘与调用</div>
           </div>
-          <el-tag v-if="hasHistoryRecords" size="large" type="success">共 {{ forecastHistory.length }} 条</el-tag>
+          <el-tag v-if="hasHistoryRecords" size="large" type="success">
+            共 {{ historyPagination.total }} 条
+          </el-tag>
         </div>
       </template>
       <el-table
@@ -209,6 +225,23 @@
         empty-text="暂无预测记录，请先生成预测"
       >
         <el-table-column prop="period" label="预测期" width="110" />
+        <el-table-column label="结果ID" width="150">
+          <template #default="{ row }">
+            <div class="history-id">
+              <span v-if="row.forecastResultId">#{{ row.forecastResultId }}</span>
+              <span v-else>-</span>
+              <el-button
+                v-if="row.forecastResultId"
+                type="primary"
+                link
+                size="small"
+                @click="copyForecastResultId(row.forecastResultId)"
+              >
+                复制
+              </el-button>
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column prop="regionName" label="地区" min-width="160" />
         <el-table-column prop="cropName" label="作物" min-width="140" />
         <el-table-column prop="modelName" label="模型" min-width="160">
@@ -239,6 +272,19 @@
           <template #default="{ row }">{{ formatHistoryDateTime(row.generatedAt) }}</template>
         </el-table-column>
       </el-table>
+      <div
+        v-if="historyPagination.total > historyPagination.pageSize"
+        class="table-pagination"
+      >
+        <el-pagination
+          background
+          layout="prev, pager, next"
+          :total="historyPagination.total"
+          :page-size="historyPagination.pageSize"
+          :current-page="historyPagination.currentPage"
+          @current-change="handleHistoryPageChange"
+        />
+      </div>
     </el-card>
   </div>
 </template>
@@ -282,8 +328,15 @@ const forecastSeries = ref([])
 const metrics = ref(null)
 const metadata = ref(null)
 const runId = ref(null)
+const forecastResultId = ref(null)
 const forecastHistory = ref([])
+const historyPagination = reactive({
+  currentPage: 1,
+  pageSize: 5,
+  total: 0,
+})
 const historyLoading = ref(false)
+let historyRequestId = 0
 const loading = ref(false)
 const errorMessage = ref('')
 
@@ -349,7 +402,7 @@ const reminders = [
   '关注预测误差指标，及时优化数据质量和模型配置'
 ]
 
-const hasHistoryRecords = computed(() => forecastHistory.value.length > 0)
+const hasHistoryRecords = computed(() => historyPagination.total > 0)
 
 const combinedPeriods = computed(() => {
   const historyPeriods = historySeries.value.map(item => item.period)
@@ -455,6 +508,7 @@ const resetResult = (options = { keepError: false }) => {
   metrics.value = null
   metadata.value = null
   runId.value = null
+  forecastResultId.value = null
   if (!options.keepError) {
     errorMessage.value = ''
   }
@@ -466,16 +520,39 @@ const optionFetchers = {
   models: fetchModels,
 }
 
-const loadForecastHistory = async (limit = 6) => {
+const loadForecastHistory = async (page = historyPagination.currentPage) => {
+  const requestId = ++historyRequestId
   historyLoading.value = true
   try {
-    const records = await fetchForecastHistory({ limit })
-    forecastHistory.value = Array.isArray(records) ? records : []
+    const params = { page, size: historyPagination.pageSize }
+    const response = await fetchForecastHistory(params)
+    if (requestId !== historyRequestId) {
+      return
+    }
+    forecastHistory.value = Array.isArray(response.items) ? response.items : []
+    historyPagination.total = Number.isFinite(response.total) ? response.total : 0
+    historyPagination.currentPage = Number.isFinite(response.page) ? response.page : page
+    historyPagination.pageSize = Number.isFinite(response.size) ? response.size : historyPagination.pageSize
+    if (runId.value && !forecastResultId.value) {
+      const match = forecastHistory.value.find(item => item && item.runId === runId.value && item.forecastResultId)
+      if (match) {
+        forecastResultId.value = match.forecastResultId
+      }
+    }
   } catch (error) {
-    ElMessage.error(error?.response?.data?.message || '加载预测记录失败')
+    if (requestId === historyRequestId) {
+      ElMessage.error(error?.response?.data?.message || '加载预测记录失败')
+    }
   } finally {
-    historyLoading.value = false
+    if (requestId === historyRequestId) {
+      historyLoading.value = false
+    }
   }
+}
+
+const handleHistoryPageChange = page => {
+  historyPagination.currentPage = page
+  loadForecastHistory(page)
 }
 
 const fetchOptions = async type => {
@@ -514,12 +591,14 @@ const runForecast = async () => {
     metrics.value = result.metrics
     metadata.value = result.metadata
     runId.value = result.runId
+    forecastResultId.value = result.forecastResultId ?? null
     if (!historySeries.value.length && !forecastSeries.value.length) {
       ElMessage.warning('预测服务返回了空结果，请检查历史数据是否充足')
     } else {
       ElMessage.success('预测生成成功')
     }
-    await loadForecastHistory()
+    historyPagination.currentPage = 1
+    await loadForecastHistory(1)
   } catch (error) {
     resetResult({ keepError: true })
     errorMessage.value = error?.response?.data?.message || error.message || '预测服务调用失败'
@@ -535,7 +614,8 @@ onMounted(async () => {
     fetchOptions('crops'),
     fetchOptions('models')
   ])
-  await loadForecastHistory()
+  historyPagination.currentPage = 1
+  await loadForecastHistory(1)
 })
 
 watch(
@@ -550,6 +630,43 @@ const formatMetric = value => {
     return '--'
   }
   return Number(value).toFixed(2)
+}
+
+const copyForecastResultId = async id => {
+  if (!id) {
+    ElMessage.warning('暂无可复制的结果 ID')
+    return
+  }
+  const text = String(id)
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+    } else {
+      throw new Error('clipboard api unavailable')
+    }
+    ElMessage.success('结果 ID 已复制')
+  } catch (error) {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.setAttribute('readonly', '')
+    textarea.style.position = 'absolute'
+    textarea.style.left = '-9999px'
+    document.body.appendChild(textarea)
+    textarea.select()
+    try {
+      const succeeded = document.execCommand('copy')
+      if (succeeded) {
+        ElMessage.success('结果 ID 已复制')
+      } else {
+        throw new Error('execCommand failed')
+      }
+    } catch (fallbackError) {
+      ElMessage.error('复制失败，请手动复制结果 ID')
+      console.error('Failed to copy forecastResultId', fallbackError)
+    } finally {
+      document.body.removeChild(textarea)
+    }
+  }
 }
 
 const formatHistoryNumber = (value, fractionDigits = 2) => {
@@ -845,6 +962,10 @@ const formatHistoryDateTime = value => {
 }
 
 .detail-card strong {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
   font-weight: 600;
   color: #303133;
 }
@@ -853,6 +974,18 @@ const formatHistoryDateTime = value => {
   margin-left: 4px;
   color: #909399;
   font-size: 12px;
+}
+
+.history-id {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.table-pagination {
+  display: flex;
+  justify-content: flex-end;
+  padding: 16px 0 4px;
 }
 
 @media (max-width: 992px) {
