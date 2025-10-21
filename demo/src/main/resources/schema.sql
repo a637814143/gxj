@@ -378,7 +378,11 @@ CREATE TABLE IF NOT EXISTS forecast_result (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     task_id BIGINT UNSIGNED NOT NULL,
     target_year INT NOT NULL,
-    predicted_yield DOUBLE NOT NULL,
+    predicted_yield DOUBLE,
+    measurement_value DOUBLE,
+    measurement_label VARCHAR(64),
+    measurement_unit VARCHAR(32),
+    predicted_production DOUBLE,
     evaluation VARCHAR(1024),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -386,6 +390,84 @@ CREATE TABLE IF NOT EXISTS forecast_result (
     KEY idx_result_task (task_id),
     CONSTRAINT fk_result_task FOREIGN KEY (task_id) REFERENCES forecast_task (id) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '预测结果摘要';
+
+SET @ddl := (
+    SELECT IF(
+        EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = 'forecast_result'
+              AND column_name = 'predicted_yield'
+              AND is_nullable = 'NO'
+        ),
+        'ALTER TABLE forecast_result MODIFY COLUMN predicted_yield DOUBLE NULL',
+        'SELECT 1'
+    )
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @ddl := (
+    SELECT IF(
+        COUNT(*) = 0,
+        'ALTER TABLE forecast_result ADD COLUMN measurement_value DOUBLE NULL AFTER predicted_yield',
+        'SELECT 1'
+    )
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'forecast_result'
+      AND column_name = 'measurement_value'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @ddl := (
+    SELECT IF(
+        COUNT(*) = 0,
+        'ALTER TABLE forecast_result ADD COLUMN measurement_label VARCHAR(64) NULL AFTER measurement_value',
+        'SELECT 1'
+    )
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'forecast_result'
+      AND column_name = 'measurement_label'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @ddl := (
+    SELECT IF(
+        COUNT(*) = 0,
+        'ALTER TABLE forecast_result ADD COLUMN measurement_unit VARCHAR(32) NULL AFTER measurement_label',
+        'SELECT 1'
+    )
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'forecast_result'
+      AND column_name = 'measurement_unit'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @ddl := (
+    SELECT IF(
+        COUNT(*) = 0,
+        'ALTER TABLE forecast_result ADD COLUMN predicted_production DOUBLE NULL AFTER measurement_unit',
+        'SELECT 1'
+    )
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'forecast_result'
+      AND column_name = 'predicted_production'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 CREATE TABLE IF NOT EXISTS report_summary (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

@@ -444,13 +444,17 @@ public class ReportServiceImpl implements ReportService {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("forecastYear", forecastResult.getTargetYear());
         data.put("predictedYield", forecastResult.getPredictedYield());
+        data.put("predictedProduction", forecastResult.getPredictedProduction());
+        data.put("measurementValue", forecastResult.getMeasurementValue());
+        data.put("measurementLabel", forecastResult.getMeasurementLabel());
+        data.put("measurementUnit", forecastResult.getMeasurementUnit());
         data.put("evaluation", forecastResult.getEvaluation());
         data.put("actualYield", actualYield);
+        Double difference = null;
         if (actualYield != null && forecastResult.getPredictedYield() != null) {
-            data.put("difference", round(forecastResult.getPredictedYield() - actualYield, 2));
-        } else {
-            data.put("difference", null);
+            difference = round(forecastResult.getPredictedYield() - actualYield, 2);
         }
+        data.put("difference", difference);
         Map<String, Object> taskInfo = new LinkedHashMap<>();
         taskInfo.put("taskId", forecastResult.getTask().getId());
         taskInfo.put("model", forecastResult.getTask().getModel().getName());
@@ -488,14 +492,26 @@ public class ReportServiceImpl implements ReportService {
         if (averagePrice != null) {
             highlights.add(String.format(Locale.CHINA, "同期平均价格约 %.2f 元/吨", averagePrice));
         }
-        if (forecastResult != null && forecastResult.getPredictedYield() != null) {
-            if (actualYieldForForecastYear != null) {
-                double diff = forecastResult.getPredictedYield() - actualYieldForForecastYear;
-                highlights.add(String.format(Locale.CHINA, "预测 %d 年单产 %.2f 吨/公顷，较实际偏差 %.2f 吨/公顷",
-                    forecastResult.getTargetYear(), forecastResult.getPredictedYield(), diff));
-            } else {
-                highlights.add(String.format(Locale.CHINA, "预测 %d 年单产 %.2f 吨/公顷，建议关注后续实际表现",
-                    forecastResult.getTargetYear(), forecastResult.getPredictedYield()));
+        if (forecastResult != null) {
+            Double predictedYield = forecastResult.getPredictedYield();
+            if (predictedYield != null) {
+                if (actualYieldForForecastYear != null) {
+                    double diff = predictedYield - actualYieldForForecastYear;
+                    highlights.add(String.format(Locale.CHINA, "预测 %d 年单产 %.2f 吨/公顷，较实际偏差 %.2f 吨/公顷",
+                        forecastResult.getTargetYear(), predictedYield, diff));
+                } else {
+                    highlights.add(String.format(Locale.CHINA, "预测 %d 年单产 %.2f 吨/公顷，建议关注后续实际表现",
+                        forecastResult.getTargetYear(), predictedYield));
+                }
+            } else if (forecastResult.getMeasurementValue() != null) {
+                String label = StringUtils.hasText(forecastResult.getMeasurementLabel())
+                    ? forecastResult.getMeasurementLabel()
+                    : "预测值";
+                String unit = StringUtils.hasText(forecastResult.getMeasurementUnit())
+                    ? " " + forecastResult.getMeasurementUnit()
+                    : "";
+                highlights.add(String.format(Locale.CHINA, "预测 %d 年%s %.2f%s，建议关注后续实际表现",
+                    forecastResult.getTargetYear(), label, forecastResult.getMeasurementValue(), unit));
             }
         }
         return highlights;

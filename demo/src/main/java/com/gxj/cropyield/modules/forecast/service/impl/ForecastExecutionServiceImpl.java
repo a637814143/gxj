@@ -225,11 +225,13 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
             if (targetYear == null) {
                 continue;
             }
+            Double measurementValue = snapshot.getMeasurementValue();
             Double predictedYield = snapshot.getPredictedYield();
             if (predictedYield == null) {
                 predictedYield = deriveYieldFromSnapshot(snapshot);
             }
-            if (predictedYield == null) {
+            Double predictedProduction = snapshot.getPredictedProduction();
+            if (measurementValue == null && predictedYield == null && predictedProduction == null) {
                 continue;
             }
             ForecastResult result = forecastResultRepository
@@ -238,6 +240,10 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
             result.setTask(task);
             result.setTargetYear(targetYear);
             result.setPredictedYield(predictedYield);
+            result.setPredictedProduction(predictedProduction);
+            result.setMeasurementValue(measurementValue != null ? measurementValue : predictedYield);
+            result.setMeasurementLabel(snapshot.getMeasurementLabel());
+            result.setMeasurementUnit(snapshot.getMeasurementUnit());
             result.setEvaluation(evaluation);
             ForecastResult saved = forecastResultRepository.save(result);
             if (primaryResultId == null) {
