@@ -46,6 +46,7 @@
               <div>
                 <div class="section-title">密码修改</div>
                 <div class="section-description">建议定期更换密码，并确保至少包含 8 位字符（含数字与符号）。</div>
+                <div class="section-meta">上次修改：{{ lastPasswordChangeDisplay }}</div>
               </div>
               <el-button type="primary" :loading="savingPassword" @click="submitPasswordForm">保存密码</el-button>
             </div>
@@ -146,26 +147,31 @@
             </div>
           </template>
 
-          <div
-            v-for="group in businessFieldGroups"
-            :key="group.id"
-            class="card-section"
+          <el-form
+            ref="businessFormRef"
+            :model="businessForm"
+            label-position="top"
+            class="section-form business-form"
           >
-            <div class="section-header compact">
-              <div>
-                <div class="section-title">{{ group.title }}</div>
-                <div class="section-description">{{ group.description }}</div>
+            <div
+              v-for="group in businessFieldGroups"
+              :key="group.id"
+              class="card-section"
+            >
+              <div class="section-header compact">
+                <div>
+                  <div class="section-title">{{ group.title }}</div>
+                  <div class="section-description">{{ group.description }}</div>
+                </div>
               </div>
-            </div>
-            <el-row :gutter="16">
-              <el-col
-                v-for="field in group.fields"
-                :key="field.key"
-                :xs="24"
-                :sm="field.fullWidth ? 24 : 12"
-              >
-                <el-form :model="businessForm" label-position="top" class="section-form">
-                  <el-form-item :label="field.label">
+              <el-row :gutter="16" class="business-field-grid">
+                <el-col
+                  v-for="field in group.fields"
+                  :key="field.key"
+                  :xs="24"
+                  :sm="field.fullWidth ? 24 : 12"
+                >
+                  <el-form-item :label="field.label" :prop="field.key" :rules="field.rules">
                     <component
                       :is="resolveFieldComponent(field)"
                       v-model="businessForm[field.key]"
@@ -180,11 +186,12 @@
                         />
                       </template>
                     </component>
+                    <div v-if="field.hint" class="field-hint">{{ field.hint }}</div>
                   </el-form-item>
-                </el-form>
-              </el-col>
-            </el-row>
-          </div>
+                </el-col>
+              </el-row>
+            </div>
+          </el-form>
 
           <el-divider />
 
@@ -405,13 +412,13 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import PageHeader from '../components/PageHeader.vue'
 import { Delete, Plus } from '@element-plus/icons-vue'
+import PageHeader from '../components/PageHeader.vue'
+import { useAuthStore } from '../stores/auth'
 
-const lastLoginDisplay = computed(() => '2024-03-20 09:26')
-const completionRate = computed(() => 82)
+const authStore = useAuthStore()
 
 const savingAll = ref(false)
 const savingPassword = ref(false)
@@ -422,13 +429,15 @@ const cleaningData = ref(false)
 const lastExportTime = ref('')
 
 const passwordFormRef = ref()
+const businessFormRef = ref()
+
 const passwordForm = reactive({
   currentPassword: '',
   newPassword: '',
   confirmPassword: ''
 })
 
-const validateConfirmPassword = (rule, value, callback) => {
+const validateConfirmPassword = (_rule, value, callback) => {
   if (!value) {
     callback(new Error('请再次输入新密码'))
     return
@@ -452,7 +461,36 @@ const passwordRules = {
   ]
 }
 
-const devices = ref([
+const resetPasswordForm = () => {
+  passwordForm.currentPassword = ''
+  passwordForm.newPassword = ''
+  passwordForm.confirmPassword = ''
+}
+
+let customFieldIdSeed = 1
+const nextCustomFieldId = () => customFieldIdSeed++
+
+let cleanupHistoryIdSeed = 1
+const nextCleanupHistoryId = () => cleanupHistoryIdSeed++
+
+const createDefaultBusinessForm = () => ({
+  organization: '',
+  position: '',
+  phone: '',
+  wechat: '',
+  mainCrops: [],
+  managedArea: '',
+  focusRegions: '',
+  partners: '',
+  reportFrequency: '',
+  preferredContact: ''
+})
+
+const createDefaultCustomFields = () => [
+  { id: nextCustomFieldId(), label: '对接领导', value: '张主任' }
+]
+
+const createDefaultDevices = () => [
   {
     id: 1,
     name: '台式机',
@@ -480,54 +518,45 @@ const devices = ref([
     lastActive: '2024-03-17 07:58',
     trusted: true
   }
-])
+]
 
-const toggleTrust = device => {
-  device.trusted = !device.trusted
-  ElMessage.success(`已${device.trusted ? '信任' : '取消信任'} ${device.name}`)
-}
-
-const markDevicesTrusted = () => {
-  if (!devices.value.length) {
-    return
+const createDefaultPersonalization = () => ({
+  theme: 'system',
+  accentColor: '#2563eb',
+  density: 'comfortable',
+  digestFrequency: 'daily',
+  quietMode: true,
+  notifications: {
+    email: true,
+    sms: false,
+    inApp: true,
+    security: true
   }
-  devices.value.forEach(device => {
-    device.trusted = true
-  })
-  ElMessage.success('已将当前设备全部标记为信任')
-}
+})
 
-const revokeDevice = device => {
-  ElMessageBox.confirm(`确认要注销 ${device.name} 的登录状态吗？`, '安全确认', {
-    confirmButtonText: '确认注销',
-    cancelButtonText: '取消',
-    type: 'warning'
-  })
-    .then(() => {
-      devices.value = devices.value.filter(item => item.id !== device.id)
-      ElMessage.success('设备已注销')
-    })
-    .catch(() => {})
-}
+const createDefaultCleanupSelection = () => ['sessions']
 
-const submitPasswordForm = () => {
-  if (!passwordFormRef.value) {
-    return
+const createDefaultCleanupHistory = () => [
+  {
+    id: nextCleanupHistoryId(),
+    time: '2024-03-15 10:30',
+    description: '清理历史会话 4 条',
+    type: 'primary'
+  },
+  {
+    id: nextCleanupHistoryId(),
+    time: '2024-03-08 09:12',
+    description: '删除导出文件 2 个',
+    type: 'success'
   }
-  passwordFormRef.value.validate(valid => {
-    if (!valid) {
-      return
-    }
-    savingPassword.value = true
-    setTimeout(() => {
-      savingPassword.value = false
-      passwordForm.currentPassword = ''
-      passwordForm.newPassword = ''
-      passwordForm.confirmPassword = ''
-      ElMessage.success('密码修改成功')
-    }, 800)
-  })
-}
+]
+
+const createDefaultExportForm = () => ({
+  scope: 'profile',
+  format: 'xlsx',
+  range: '',
+  includeAudit: true
+})
 
 const businessFieldGroups = [
   {
@@ -539,27 +568,32 @@ const businessFieldGroups = [
         key: 'organization',
         label: '所属部门/单位',
         type: 'select',
+        props: { placeholder: '请选择所属部门/单位' },
         options: [
           { label: '农业农村局耕保科', value: 'agri-protection' },
           { label: '农业农村局种植业管理科', value: 'planting' },
           { label: '农业农村局执法大队', value: 'law-enforcement' }
-        ]
+        ],
+        rules: [{ required: true, message: '请选择所属部门/单位', trigger: 'change' }]
       },
       {
         key: 'position',
         label: '岗位职能',
         type: 'select',
+        props: { placeholder: '请选择岗位职能' },
         options: [
           { label: '业务负责人', value: 'owner' },
           { label: '数据专员', value: 'data-analyst' },
           { label: '技术联络人', value: 'it-contact' }
-        ]
+        ],
+        rules: [{ required: true, message: '请选择岗位职能', trigger: 'change' }]
       },
       {
         key: 'phone',
         label: '联系电话',
         type: 'input',
-        props: { placeholder: '请输入办公电话', maxlength: 20 }
+        props: { placeholder: '请输入办公电话', maxlength: 20 },
+        rules: [{ required: true, message: '请输入联系电话', trigger: 'blur' }]
       },
       {
         key: 'wechat',
@@ -584,13 +618,16 @@ const businessFieldGroups = [
           { label: '小麦', value: 'wheat' },
           { label: '油菜', value: 'rapeseed' },
           { label: '茶叶', value: 'tea' }
-        ]
+        ],
+        rules: [{ required: true, message: '请选择至少一种主要作物', trigger: 'change' }]
       },
       {
         key: 'managedArea',
         label: '覆盖面积（万亩）',
         type: 'input',
-        props: { placeholder: '请输入负责区域面积', type: 'number', min: 0 }
+        props: { placeholder: '请输入负责区域面积', type: 'number', min: 0 },
+        rules: [{ required: true, message: '请输入覆盖面积', trigger: 'blur' }],
+        hint: '请填写数字，可保留 1 位小数'
       },
       {
         key: 'focusRegions',
@@ -625,88 +662,60 @@ const businessFieldGroups = [
         key: 'reportFrequency',
         label: '汇报频率',
         type: 'select',
+        props: { placeholder: '请选择汇报频率' },
         options: [
           { label: '每周一次', value: 'weekly' },
           { label: '每月两次', value: 'biweekly' },
           { label: '按需汇报', value: 'on-demand' }
-        ]
+        ],
+        rules: [{ required: true, message: '请选择汇报频率', trigger: 'change' }]
       },
       {
         key: 'preferredContact',
         label: '首选联系方式',
         type: 'select',
+        props: { placeholder: '请选择联系方式' },
         options: [
           { label: '电话', value: 'phone' },
           { label: '微信', value: 'wechat' },
           { label: '邮件', value: 'email' }
-        ]
+        ],
+        rules: [{ required: true, message: '请选择首选联系方式', trigger: 'change' }]
       }
     ]
   }
 ]
 
-const businessForm = reactive({
-  organization: 'agri-protection',
-  position: 'owner',
-  phone: '',
-  wechat: '',
-  mainCrops: ['rice'],
-  managedArea: '',
-  focusRegions: '',
-  partners: '',
-  reportFrequency: 'weekly',
-  preferredContact: 'wechat'
-})
-
-const customFields = ref([
-  { id: 1, label: '对接领导', value: '张主任' }
-])
-
-const resolveFieldComponent = field => {
-  if (field.type === 'textarea') {
-    return 'el-input'
+const businessForm = reactive(createDefaultBusinessForm())
+const customFields = ref(createDefaultCustomFields())
+const devices = ref(createDefaultDevices())
+const personalizationForm = reactive(createDefaultPersonalization())
+const cleanupSelection = ref(createDefaultCleanupSelection())
+const cleanupHistory = ref(createDefaultCleanupHistory())
+const cleanupOptions = [
+  {
+    value: 'sessions',
+    title: '历史会话',
+    description: '清理已失效的会话与登录令牌'
+  },
+  {
+    value: 'notifications',
+    title: '通知消息',
+    description: '删除超过 90 天的站内通知记录'
+  },
+  {
+    value: 'exports',
+    title: '导出文件',
+    description: '移除已下载的历史导出文件'
+  },
+  {
+    value: 'cache',
+    title: '临时缓存',
+    description: '释放本地缓存与离线数据'
   }
-  if (field.type === 'select') {
-    return 'el-select'
-  }
-  return 'el-input'
-}
-
-const addCustomField = () => {
-  const nextId = customFields.value.length
-    ? Math.max(...customFields.value.map(field => field.id)) + 1
-    : 1
-  customFields.value.push({ id: nextId, label: '', value: '' })
-}
-
-const removeCustomField = id => {
-  if (customFields.value.length === 1) {
-    return
-  }
-  customFields.value = customFields.value.filter(field => field.id !== id)
-}
-
-const saveBusinessInfo = () => {
-  savingBusiness.value = true
-  setTimeout(() => {
-    savingBusiness.value = false
-    ElMessage.success('业务资料已更新')
-  }, 800)
-}
-
-const personalizationForm = reactive({
-  theme: 'system',
-  accentColor: '#2563eb',
-  density: 'comfortable',
-  digestFrequency: 'daily',
-  quietMode: true,
-  notifications: {
-    email: true,
-    sms: false,
-    inApp: true,
-    security: true
-  }
-})
+]
+const exportForm = reactive(createDefaultExportForm())
+const lastPasswordChange = ref('')
 
 const densityOptions = [
   { label: '宽松', value: 'comfortable' },
@@ -737,142 +746,406 @@ const notificationChannels = [
   }
 ]
 
-const savePersonalization = () => {
-  savingPersonalization.value = true
-  setTimeout(() => {
-    savingPersonalization.value = false
-    ElMessage.success('个性化设置已保存')
-  }, 600)
+const toLocaleStringSafe = value => {
+  if (!value) {
+    return ''
+  }
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+  return date.toLocaleString()
 }
 
-const exportForm = reactive({
-  scope: 'profile',
-  format: 'xlsx',
-  range: '',
-  includeAudit: true
+const lastLoginDisplay = computed(() => {
+  const candidate =
+    authStore.user?.lastLoginAt ||
+    authStore.user?.lastLoginTime ||
+    authStore.user?.lastLogin ||
+    authStore.user?.profile?.security?.lastLoginAt
+  return candidate ? toLocaleStringSafe(candidate) : '暂无记录'
 })
+
+const lastPasswordChangeDisplay = computed(() =>
+  lastPasswordChange.value ? toLocaleStringSafe(lastPasswordChange.value) : '尚未修改'
+)
+
+const completionRate = computed(() => {
+  const entries = []
+  businessFieldGroups.forEach(group => {
+    group.fields.forEach(field => {
+      entries.push(businessForm[field.key])
+    })
+  })
+  customFields.value.forEach(field => {
+    entries.push(field.label && field.value ? field.value : '')
+  })
+  ;['theme', 'accentColor', 'density', 'digestFrequency'].forEach(key => {
+    entries.push(personalizationForm[key])
+  })
+  if (!entries.length) {
+    return 0
+  }
+  const filled = entries.filter(value => {
+    if (Array.isArray(value)) {
+      return value.length > 0
+    }
+    if (typeof value === 'number') {
+      return !Number.isNaN(value)
+    }
+    if (typeof value === 'string') {
+      return value.trim().length > 0
+    }
+    if (value && typeof value === 'object') {
+      return Object.keys(value).length > 0
+    }
+    return Boolean(value)
+  }).length
+  return Math.min(100, Math.round((filled / entries.length) * 100))
+})
+
+const resolveFieldComponent = field => {
+  if (field.component) {
+    return field.component
+  }
+  if (field.type === 'select') {
+    return 'el-select'
+  }
+  if (field.type === 'textarea') {
+    return 'el-input'
+  }
+  if (field.type === 'date' || field.type === 'daterange') {
+    return 'el-date-picker'
+  }
+  return 'el-input'
+}
+
+const hydrateCustomFields = stored => {
+  if (!Array.isArray(stored) || !stored.length) {
+    customFieldIdSeed = 1
+    customFields.value = createDefaultCustomFields()
+    return
+  }
+  const normalized = stored.map((field, index) => ({
+    id: field.id ?? index + 1,
+    label: field.label || '',
+    value: field.value || ''
+  }))
+  customFieldIdSeed = normalized.reduce((max, field) => Math.max(max, field.id), 0) + 1
+  customFields.value = normalized
+}
+
+const hydrateCleanupHistory = stored => {
+  if (!Array.isArray(stored) || !stored.length) {
+    cleanupHistoryIdSeed = 1
+    cleanupHistory.value = createDefaultCleanupHistory()
+    return
+  }
+  const normalized = stored.map((record, index) => ({
+    id: record.id ?? index + 1,
+    time: record.time || '',
+    description: record.description || '',
+    type: record.type || 'primary'
+  }))
+  cleanupHistoryIdSeed = normalized.reduce((max, record) => Math.max(max, record.id), 0) + 1
+  cleanupHistory.value = normalized
+}
+
+const resetStateToDefault = () => {
+  devices.value = createDefaultDevices()
+  Object.assign(businessForm, createDefaultBusinessForm())
+  customFieldIdSeed = 1
+  customFields.value = createDefaultCustomFields()
+  Object.assign(personalizationForm, createDefaultPersonalization())
+  cleanupSelection.value = createDefaultCleanupSelection()
+  cleanupHistoryIdSeed = 1
+  cleanupHistory.value = createDefaultCleanupHistory()
+  Object.assign(exportForm, createDefaultExportForm())
+  lastExportTime.value = ''
+  lastPasswordChange.value = ''
+}
+
+const loadProfileFromStore = () => {
+  if (!authStore.user?.profile) {
+    resetStateToDefault()
+    return
+  }
+  const profile = authStore.user.profile
+  const security = profile.security || {}
+  const business = profile.business || {}
+  const personalization = profile.personalization || {}
+  const dataOperations = profile.dataOperations || {}
+
+  const storedDevices = Array.isArray(security.devices) ? security.devices : []
+  devices.value = storedDevices.length
+    ? storedDevices.map((device, index) => ({
+        id: device.id ?? index + 1,
+        name: device.name || '未命名设备',
+        browser: device.browser || '',
+        system: device.system || '',
+        location: device.location || '',
+        lastActive: device.lastActive ? toLocaleStringSafe(device.lastActive) : '',
+        trusted: device.trusted !== undefined ? Boolean(device.trusted) : true
+      }))
+    : createDefaultDevices()
+
+  Object.assign(businessForm, { ...createDefaultBusinessForm(), ...(business.form || {}) })
+  hydrateCustomFields(business.customFields)
+  Object.assign(personalizationForm, { ...createDefaultPersonalization(), ...personalization })
+
+  cleanupSelection.value =
+    Array.isArray(dataOperations.lastSelection) && dataOperations.lastSelection.length
+      ? [...dataOperations.lastSelection]
+      : createDefaultCleanupSelection()
+
+  hydrateCleanupHistory(dataOperations.history)
+
+  lastPasswordChange.value = security.lastPasswordChange || ''
+  lastExportTime.value = dataOperations.lastExportTime || ''
+
+  const storedExportForm = dataOperations.exportForm || {}
+  const storedRange = Array.isArray(storedExportForm.range)
+    ? storedExportForm.range.map(value => {
+        const date = new Date(value)
+        return Number.isNaN(date.getTime()) ? value : date
+      })
+    : ''
+  Object.assign(exportForm, { ...createDefaultExportForm(), ...storedExportForm, range: storedRange })
+}
+
+const persistProfile = () => {
+  if (!authStore.user) {
+    return
+  }
+  const exportRangePayload = Array.isArray(exportForm.range)
+    ? exportForm.range.map(value => (value instanceof Date ? value.toISOString() : value))
+    : ''
+  const profilePayload = {
+    security: {
+      devices: devices.value.map(device => ({ ...device })),
+      lastPasswordChange: lastPasswordChange.value
+    },
+    business: {
+      form: { ...businessForm },
+      customFields: customFields.value.map(field => ({
+        id: field.id,
+        label: field.label,
+        value: field.value
+      }))
+    },
+    personalization: JSON.parse(JSON.stringify(personalizationForm)),
+    dataOperations: {
+      lastSelection: [...cleanupSelection.value],
+      history: cleanupHistory.value.map(record => ({ ...record })),
+      lastExportTime: lastExportTime.value,
+      exportForm: {
+        scope: exportForm.scope,
+        format: exportForm.format,
+        includeAudit: exportForm.includeAudit,
+        range: exportRangePayload
+      }
+    }
+  }
+  authStore.user = {
+    ...authStore.user,
+    profile: profilePayload
+  }
+  if (typeof authStore.persistState === 'function') {
+    authStore.persistState()
+  }
+}
+
+watch(
+  () => authStore.user?.profile,
+  () => {
+    loadProfileFromStore()
+  },
+  { immediate: true }
+)
+
+const toggleTrust = device => {
+  device.trusted = !device.trusted
+  persistProfile()
+  ElMessage.success(`已${device.trusted ? '信任' : '取消信任'} ${device.name}`)
+}
+
+const markDevicesTrusted = () => {
+  if (!devices.value.length) {
+    ElMessage.info('暂无设备需要标记')
+    return
+  }
+  let updated = 0
+  devices.value.forEach(device => {
+    if (!device.trusted) {
+      device.trusted = true
+      updated += 1
+    }
+  })
+  persistProfile()
+  ElMessage.success(updated ? '已将当前设备全部标记为信任' : '所有设备均已信任')
+}
+
+const revokeDevice = async device => {
+  try {
+    await ElMessageBox.confirm(`确认要注销 ${device.name} 的登录状态吗？`, '安全确认', {
+      confirmButtonText: '确认注销',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    devices.value = devices.value.filter(item => item.id !== device.id)
+    persistProfile()
+    ElMessage.success('设备已注销')
+  } catch (error) {
+    // 用户取消操作，无需处理
+  }
+}
+
+const addCustomField = () => {
+  customFields.value.push({ id: nextCustomFieldId(), label: '', value: '' })
+}
+
+const removeCustomField = id => {
+  if (customFields.value.length === 1) {
+    return
+  }
+  customFields.value = customFields.value.filter(field => field.id !== id)
+}
+
+const saveBusinessInfo = async ({ silent = false } = {}) => {
+  if (businessFormRef.value) {
+    try {
+      await businessFormRef.value.validate()
+    } catch (error) {
+      return false
+    }
+  }
+  savingBusiness.value = true
+  return new Promise(resolve => {
+    setTimeout(() => {
+      savingBusiness.value = false
+      persistProfile()
+      if (!silent) {
+        ElMessage.success('业务资料已更新')
+      }
+      resolve(true)
+    }, 600)
+  })
+}
+
+const savePersonalization = async ({ silent = false } = {}) => {
+  savingPersonalization.value = true
+  return new Promise(resolve => {
+    setTimeout(() => {
+      savingPersonalization.value = false
+      persistProfile()
+      if (!silent) {
+        ElMessage.success('个性化设置已保存')
+      }
+      resolve(true)
+    }, 600)
+  })
+}
+
+const submitPasswordForm = async ({ silent = false } = {}) => {
+  if (!passwordFormRef.value) {
+    return false
+  }
+  try {
+    await passwordFormRef.value.validate()
+  } catch (error) {
+    return false
+  }
+  savingPassword.value = true
+  return new Promise(resolve => {
+    setTimeout(() => {
+      savingPassword.value = false
+      lastPasswordChange.value = new Date().toISOString()
+      resetPasswordForm()
+      persistProfile()
+      if (!silent) {
+        ElMessage.success('密码修改成功')
+      }
+      resolve(true)
+    }, 800)
+  })
+}
 
 const handleExportData = () => {
   exportingData.value = true
   setTimeout(() => {
     exportingData.value = false
     lastExportTime.value = new Date().toLocaleString()
+    persistProfile()
     ElMessage.success('数据导出任务已创建，稍后将在通知中心推送下载链接')
   }, 800)
 }
 
-const cleanupOptions = [
-  {
-    value: 'sessions',
-    title: '历史会话',
-    description: '清理已失效的会话与登录令牌'
-  },
-  {
-    value: 'notifications',
-    title: '通知消息',
-    description: '删除超过 90 天的站内通知记录'
-  },
-  {
-    value: 'exports',
-    title: '导出文件',
-    description: '移除已下载的历史导出文件'
-  },
-  {
-    value: 'cache',
-    title: '临时缓存',
-    description: '释放本地缓存与离线数据'
+const handleCleanup = async () => {
+  if (!cleanupSelection.value.length) {
+    ElMessage.warning('请选择需要清理的数据类型')
+    return
   }
-]
-
-const cleanupSelection = ref(['sessions'])
-
-const cleanupHistory = ref([
-  {
-    id: 1,
-    time: '2024-03-15 10:30',
-    description: '清理历史会话 4 条',
-    type: 'primary'
-  },
-  {
-    id: 2,
-    time: '2024-03-08 09:12',
-    description: '删除导出文件 2 个',
-    type: 'success'
-  }
-])
-
-const handleCleanup = () => {
-  ElMessageBox.confirm('确认立即清理所选数据吗？该操作不可撤销。', '数据清理确认', {
-    confirmButtonText: '确认清理',
-    cancelButtonText: '取消',
-    type: 'warning'
-  })
-    .then(() => {
-      cleaningData.value = true
-      setTimeout(() => {
-        cleaningData.value = false
-        const description = `已清理 ${cleanupSelection.value.length} 类数据`
-        cleanupHistory.value.unshift({
-          id: Date.now(),
-          time: new Date().toLocaleString(),
-          description,
-          type: 'warning'
-        })
-        cleanupSelection.value = []
-        ElMessage.success('所选数据已清理')
-      }, 700)
+  try {
+    await ElMessageBox.confirm('确认立即清理所选数据吗？该操作不可撤销。', '数据清理确认', {
+      confirmButtonText: '确认清理',
+      cancelButtonText: '取消',
+      type: 'warning'
     })
-    .catch(() => {})
+    cleaningData.value = true
+    setTimeout(() => {
+      cleaningData.value = false
+      const description = `已清理 ${cleanupSelection.value.length} 类数据`
+      cleanupHistory.value.unshift({
+        id: nextCleanupHistoryId(),
+        time: new Date().toLocaleString(),
+        description,
+        type: 'warning'
+      })
+      cleanupSelection.value = []
+      persistProfile()
+      ElMessage.success('所选数据已清理')
+    }, 700)
+  } catch (error) {
+    // 用户取消操作，无需处理
+  }
 }
 
 const resetAll = () => {
-  passwordForm.currentPassword = ''
-  passwordForm.newPassword = ''
-  passwordForm.confirmPassword = ''
-  Object.assign(businessForm, {
-    organization: 'agri-protection',
-    position: 'owner',
-    phone: '',
-    wechat: '',
-    mainCrops: ['rice'],
-    managedArea: '',
-    focusRegions: '',
-    partners: '',
-    reportFrequency: 'weekly',
-    preferredContact: 'wechat'
-  })
-  customFields.value = [{ id: 1, label: '对接领导', value: '张主任' }]
-  Object.assign(personalizationForm, {
-    theme: 'system',
-    accentColor: '#2563eb',
-    density: 'comfortable',
-    digestFrequency: 'daily',
-    quietMode: true,
-    notifications: {
-      email: true,
-      sms: false,
-      inApp: true,
-      security: true
-    }
-  })
-  Object.assign(exportForm, {
-    scope: 'profile',
-    format: 'xlsx',
-    range: '',
-    includeAudit: true
-  })
-  cleanupSelection.value = ['sessions']
+  resetPasswordForm()
+  resetStateToDefault()
+  persistProfile()
   ElMessage.success('已恢复默认设置')
 }
 
-const saveAll = () => {
+const saveAll = async () => {
+  if (savingAll.value) {
+    return
+  }
   savingAll.value = true
-  setTimeout(() => {
-    savingAll.value = false
+  try {
+    const businessSaved = await saveBusinessInfo({ silent: true })
+    if (!businessSaved) {
+      savingAll.value = false
+      return
+    }
+    const passwordFilled =
+      passwordForm.currentPassword || passwordForm.newPassword || passwordForm.confirmPassword
+    if (passwordFilled) {
+      const passwordSaved = await submitPasswordForm({ silent: true })
+      if (!passwordSaved) {
+        savingAll.value = false
+        return
+      }
+    }
+    await savePersonalization({ silent: true })
+    persistProfile()
     ElMessage.success('个人资料已全部保存')
-  }, 900)
+  } finally {
+    savingAll.value = false
+  }
 }
 </script>
+
 
 <style scoped>
 .profile-page {
@@ -950,7 +1223,9 @@ const saveAll = () => {
 }
 
 .section-header.compact {
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
 }
 
 .section-title {
@@ -965,8 +1240,30 @@ const saveAll = () => {
   color: var(--text-secondary, #667085);
 }
 
+.section-meta {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text-tertiary, #98a2b3);
+}
+
 .section-form {
   width: 100%;
+}
+
+.business-form {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.business-field-grid {
+  margin-top: 8px;
+}
+
+.field-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-tertiary, #98a2b3);
 }
 
 .device-table {
