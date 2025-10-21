@@ -14,13 +14,17 @@ import com.gxj.cropyield.modules.forecast.engine.ForecastEngineClient;
 import com.gxj.cropyield.modules.forecast.engine.ForecastEngineRequest;
 import com.gxj.cropyield.modules.forecast.engine.ForecastEngineResponse;
 import com.gxj.cropyield.modules.forecast.entity.ForecastModel;
+import com.gxj.cropyield.modules.forecast.entity.ForecastResult;
 import com.gxj.cropyield.modules.forecast.entity.ForecastRun;
 import com.gxj.cropyield.modules.forecast.entity.ForecastRunSeries;
 import com.gxj.cropyield.modules.forecast.entity.ForecastSnapshot;
+import com.gxj.cropyield.modules.forecast.entity.ForecastTask;
 import com.gxj.cropyield.modules.forecast.repository.ForecastModelRepository;
 import com.gxj.cropyield.modules.forecast.repository.ForecastRunRepository;
 import com.gxj.cropyield.modules.forecast.repository.ForecastRunSeriesRepository;
 import com.gxj.cropyield.modules.forecast.repository.ForecastSnapshotRepository;
+import com.gxj.cropyield.modules.forecast.repository.ForecastTaskRepository;
+import com.gxj.cropyield.modules.forecast.repository.ForecastResultRepository;
 import com.gxj.cropyield.modules.forecast.service.ForecastExecutionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,6 +36,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -48,6 +53,8 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
     private final ForecastRunRepository forecastRunRepository;
     private final ForecastRunSeriesRepository forecastRunSeriesRepository;
     private final ForecastSnapshotRepository forecastSnapshotRepository;
+    private final ForecastTaskRepository forecastTaskRepository;
+    private final ForecastResultRepository forecastResultRepository;
     private final ForecastEngineClient forecastEngineClient;
 
     public ForecastExecutionServiceImpl(RegionRepository regionRepository,
@@ -57,6 +64,8 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
                                         ForecastRunRepository forecastRunRepository,
                                         ForecastRunSeriesRepository forecastRunSeriesRepository,
                                         ForecastSnapshotRepository forecastSnapshotRepository,
+                                        ForecastTaskRepository forecastTaskRepository,
+                                        ForecastResultRepository forecastResultRepository,
                                         ForecastEngineClient forecastEngineClient) {
         this.regionRepository = regionRepository;
         this.cropRepository = cropRepository;
@@ -65,6 +74,8 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         this.forecastRunRepository = forecastRunRepository;
         this.forecastRunSeriesRepository = forecastRunSeriesRepository;
         this.forecastSnapshotRepository = forecastSnapshotRepository;
+        this.forecastTaskRepository = forecastTaskRepository;
+        this.forecastResultRepository = forecastResultRepository;
         this.forecastEngineClient = forecastEngineClient;
     }
 
@@ -153,12 +164,14 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         List<ForecastSnapshot> snapshots = response.forecast().stream()
             .map(point -> buildSnapshot(run, point, measurementType, referenceRecord))
             .toList();
+        Long primaryResultId = null;
         if (!snapshots.isEmpty()) {
             try {
                 forecastSnapshotRepository.saveAll(snapshots);
             } catch (DataAccessException ex) {
                 log.warn("Failed to persist forecast snapshots for run {}", run.getId(), ex);
             }
+            primaryResultId = persistForecastResults(run, snapshots);
         }
 
         List<ForecastExecutionResponse.SeriesPoint> history = limitedHistory.stream()
@@ -196,7 +209,115 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
             run.getR2()
         );
 
-        return new ForecastExecutionResponse(run.getId(), metadata, history, forecast, metrics);
+        return new ForecastExecutionResponse(run.getId(), metadata, history, forecast, metrics, primaryResultId);
+    }
+
+    private Long persistForecastResults(ForecastRun run,
+                                        List<ForecastSnapshot> snapshots) {
+        ForecastTask task = resolveForecastTask(run);
+        if (task == null) {
+            return null;
+        }
+        String evaluation = buildEvaluationSummary(run);
+        Long primaryResultId = null;
+        for (ForecastSnapshot snapshot : snapshots) {
+            Integer targetYear = snapshot.getYear();
+            if (targetYear == null) {
+                continue;
+            }
+            Double predictedYield = snapshot.getPredictedYield();
+            if (predictedYield == null) {
+                predictedYield = deriveYieldFromSnapshot(snapshot);
+            }
+            if (predictedYield == null) {
+                continue;
+            }
+            ForecastResult result = forecastResultRepository
+                .findByTaskIdAndTargetYear(task.getId(), targetYear)
+                .orElseGet(ForecastResult::new);
+            result.setTask(task);
+            result.setTargetYear(targetYear);
+            result.setPredictedYield(predictedYield);
+            result.setEvaluation(evaluation);
+            ForecastResult saved = forecastResultRepository.save(result);
+            if (primaryResultId == null) {
+                primaryResultId = saved.getId();
+            }
+        }
+        return primaryResultId;
+    }
+
+    private ForecastTask resolveForecastTask(ForecastRun run) {
+        return forecastTaskRepository.findByModelIdAndCropIdAndRegionId(
+                run.getModel().getId(),
+                run.getCrop().getId(),
+                run.getRegion().getId()
+            )
+            .map(existing -> updateTaskFromRun(existing, run))
+            .orElseGet(() -> createTaskFromRun(run));
+    }
+
+    private ForecastTask updateTaskFromRun(ForecastTask task, ForecastRun run) {
+        task.setStatus(ForecastTask.TaskStatus.SUCCESS);
+        task.setParameters(buildTaskParameters(run));
+        return forecastTaskRepository.save(task);
+    }
+
+    private ForecastTask createTaskFromRun(ForecastRun run) {
+        ForecastTask task = new ForecastTask();
+        task.setModel(run.getModel());
+        task.setCrop(run.getCrop());
+        task.setRegion(run.getRegion());
+        task.setStatus(ForecastTask.TaskStatus.SUCCESS);
+        task.setParameters(buildTaskParameters(run));
+        return forecastTaskRepository.save(task);
+    }
+
+    private String buildTaskParameters(ForecastRun run) {
+        List<String> parameters = new ArrayList<>();
+        if (run.getHistoryYears() != null) {
+            parameters.add("historyYears=" + run.getHistoryYears());
+        }
+        if (run.getForecastPeriods() != null) {
+            parameters.add("forecastPeriods=" + run.getForecastPeriods());
+        }
+        if (run.getFrequency() != null) {
+            parameters.add("frequency=" + run.getFrequency());
+        }
+        return parameters.isEmpty() ? null : String.join("; ", parameters);
+    }
+
+    private String buildEvaluationSummary(ForecastRun run) {
+        List<String> parts = new ArrayList<>();
+        if (run.getMae() != null) {
+            parts.add("MAE=" + formatMetricValue(run.getMae()));
+        }
+        if (run.getRmse() != null) {
+            parts.add("RMSE=" + formatMetricValue(run.getRmse()));
+        }
+        if (run.getMape() != null) {
+            parts.add("MAPE=" + formatMetricValue(run.getMape()) + "%");
+        }
+        if (run.getR2() != null) {
+            parts.add("R²=" + formatMetricValue(run.getR2()));
+        }
+        return parts.isEmpty() ? null : String.join(" | ", parts);
+    }
+
+    private String formatMetricValue(Double value) {
+        if (value == null) {
+            return "-";
+        }
+        return String.format(Locale.ROOT, "%.3f", value);
+    }
+
+    private Double deriveYieldFromSnapshot(ForecastSnapshot snapshot) {
+        Double predictedProduction = snapshot.getPredictedProduction();
+        Double sownArea = snapshot.getSownArea();
+        if (predictedProduction != null && sownArea != null && sownArea != 0d) {
+            return predictedProduction / sownArea;
+        }
+        return null;
     }
 
     private ForecastSnapshot buildSnapshot(ForecastRun run,
