@@ -1,5 +1,11 @@
 <template>
-  <div class="profile-page">
+  <el-skeleton
+    v-if="!initialLoadCompleted && loadingProfile"
+    animated
+    :rows="6"
+    class="profile-skeleton"
+  />
+  <div v-else class="profile-page" v-loading="loadingProfile">
     <PageHeader
       badge="账户中心"
       title="个人资料与偏好设置"
@@ -106,7 +112,11 @@
                 </template>
               </el-table-column>
               <el-table-column prop="location" label="登录地点" min-width="180" />
-              <el-table-column prop="lastActive" label="最近活跃" min-width="180" />
+              <el-table-column prop="lastActive" label="最近活跃" min-width="180">
+                <template #default="{ row }">
+                  {{ formatDateTime(row.lastActive) || '—' }}
+                </template>
+              </el-table-column>
               <el-table-column label="状态" width="120">
                 <template #default="{ row }">
                   <el-tag :type="row.trusted ? 'success' : 'warning'" effect="plain">
@@ -356,10 +366,10 @@
               </el-button>
             </el-form>
             <el-alert
-              v-if="lastExportTime"
+              v-if="formattedLastExportTime"
               class="export-tip"
               type="success"
-              :title="`上次导出：${lastExportTime}`"
+              :title="`上次导出：${formattedLastExportTime}`"
               show-icon
             />
           </div>
@@ -398,7 +408,7 @@
               <el-timeline-item
                 v-for="record in cleanupHistory"
                 :key="record.id"
-                :timestamp="record.time"
+                :timestamp="formatDateTime(record.time) || '—'"
                 :type="record.type"
               >
                 {{ record.description }}
@@ -412,13 +422,11 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Plus } from '@element-plus/icons-vue'
 import PageHeader from '../components/PageHeader.vue'
-import { useAuthStore } from '../stores/auth'
-
-const authStore = useAuthStore()
+import profileService from '../services/profile'
 
 const savingAll = ref(false)
 const savingPassword = ref(false)
@@ -426,6 +434,11 @@ const savingBusiness = ref(false)
 const savingPersonalization = ref(false)
 const exportingData = ref(false)
 const cleaningData = ref(false)
+const loadingProfile = ref(false)
+const initialLoadCompleted = ref(false)
+
+const lastLoginAt = ref('')
+const lastPasswordChange = ref('')
 const lastExportTime = ref('')
 
 const passwordFormRef = ref()
@@ -487,38 +500,10 @@ const createDefaultBusinessForm = () => ({
 })
 
 const createDefaultCustomFields = () => [
-  { id: nextCustomFieldId(), label: '对接领导', value: '张主任' }
+  { id: nextCustomFieldId(), label: '', value: '' }
 ]
 
-const createDefaultDevices = () => [
-  {
-    id: 1,
-    name: '台式机',
-    browser: 'Chrome 121',
-    system: 'Windows 11',
-    location: '浙江 杭州',
-    lastActive: '2024-03-20 09:12',
-    trusted: true
-  },
-  {
-    id: 2,
-    name: '政务工作机',
-    browser: 'Edge 119',
-    system: 'Windows 10',
-    location: '浙江 宁波',
-    lastActive: '2024-03-18 18:35',
-    trusted: false
-  },
-  {
-    id: 3,
-    name: '移动端',
-    browser: 'Safari',
-    system: 'iOS 17',
-    location: '浙江 温州',
-    lastActive: '2024-03-17 07:58',
-    trusted: true
-  }
-]
+const createDefaultDevices = () => []
 
 const createDefaultPersonalization = () => ({
   theme: 'system',
@@ -534,27 +519,14 @@ const createDefaultPersonalization = () => ({
   }
 })
 
-const createDefaultCleanupSelection = () => ['sessions']
+const createDefaultCleanupSelection = () => []
 
-const createDefaultCleanupHistory = () => [
-  {
-    id: nextCleanupHistoryId(),
-    time: '2024-03-15 10:30',
-    description: '清理历史会话 4 条',
-    type: 'primary'
-  },
-  {
-    id: nextCleanupHistoryId(),
-    time: '2024-03-08 09:12',
-    description: '删除导出文件 2 个',
-    type: 'success'
-  }
-]
+const createDefaultCleanupHistory = () => []
 
 const createDefaultExportForm = () => ({
   scope: 'profile',
   format: 'xlsx',
-  range: '',
+  range: [],
   includeAudit: true
 })
 
@@ -715,7 +687,6 @@ const cleanupOptions = [
   }
 ]
 const exportForm = reactive(createDefaultExportForm())
-const lastPasswordChange = ref('')
 
 const densityOptions = [
   { label: '宽松', value: 'comfortable' },
@@ -746,29 +717,25 @@ const notificationChannels = [
   }
 ]
 
-const toLocaleStringSafe = value => {
+const formatDateTime = value => {
   if (!value) {
     return ''
   }
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? '' : value.toLocaleString()
+  }
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) {
-    return value
+    return typeof value === 'string' ? value : ''
   }
   return date.toLocaleString()
 }
 
-const lastLoginDisplay = computed(() => {
-  const candidate =
-    authStore.user?.lastLoginAt ||
-    authStore.user?.lastLoginTime ||
-    authStore.user?.lastLogin ||
-    authStore.user?.profile?.security?.lastLoginAt
-  return candidate ? toLocaleStringSafe(candidate) : '暂无记录'
-})
-
+const lastLoginDisplay = computed(() => (lastLoginAt.value ? formatDateTime(lastLoginAt.value) : '暂无记录'))
 const lastPasswordChangeDisplay = computed(() =>
-  lastPasswordChange.value ? toLocaleStringSafe(lastPasswordChange.value) : '尚未修改'
+  lastPasswordChange.value ? formatDateTime(lastPasswordChange.value) : '尚未修改'
 )
+const formattedLastExportTime = computed(() => (lastExportTime.value ? formatDateTime(lastExportTime.value) : ''))
 
 const completionRate = computed(() => {
   const entries = []
@@ -778,7 +745,7 @@ const completionRate = computed(() => {
     })
   })
   customFields.value.forEach(field => {
-    entries.push(field.label && field.value ? field.value : '')
+    entries.push(field.label || field.value ? field.value : '')
   })
   ;['theme', 'accentColor', 'density', 'digestFrequency'].forEach(key => {
     entries.push(personalizationForm[key])
@@ -831,7 +798,7 @@ const hydrateCustomFields = stored => {
     label: field.label || '',
     value: field.value || ''
   }))
-  customFieldIdSeed = normalized.reduce((max, field) => Math.max(max, field.id), 0) + 1
+  customFieldIdSeed = normalized.reduce((max, field) => Math.max(max, field.id || 0), 0) + 1
   customFields.value = normalized
 }
 
@@ -847,7 +814,7 @@ const hydrateCleanupHistory = stored => {
     description: record.description || '',
     type: record.type || 'primary'
   }))
-  cleanupHistoryIdSeed = normalized.reduce((max, record) => Math.max(max, record.id), 0) + 1
+  cleanupHistoryIdSeed = normalized.reduce((max, record) => Math.max(max, record.id || 0), 0) + 1
   cleanupHistory.value = normalized
 }
 
@@ -863,67 +830,83 @@ const resetStateToDefault = () => {
   Object.assign(exportForm, createDefaultExportForm())
   lastExportTime.value = ''
   lastPasswordChange.value = ''
+  lastLoginAt.value = ''
+  resetPasswordForm()
 }
 
-const loadProfileFromStore = () => {
-  if (!authStore.user?.profile) {
+const applyProfileResponse = response => {
+  if (!response) {
     resetStateToDefault()
     return
   }
-  const profile = authStore.user.profile
-  const security = profile.security || {}
-  const business = profile.business || {}
-  const personalization = profile.personalization || {}
-  const dataOperations = profile.dataOperations || {}
-
-  const storedDevices = Array.isArray(security.devices) ? security.devices : []
-  devices.value = storedDevices.length
-    ? storedDevices.map((device, index) => ({
-        id: device.id ?? index + 1,
-        name: device.name || '未命名设备',
-        browser: device.browser || '',
-        system: device.system || '',
-        location: device.location || '',
-        lastActive: device.lastActive ? toLocaleStringSafe(device.lastActive) : '',
-        trusted: device.trusted !== undefined ? Boolean(device.trusted) : true
-      }))
-    : createDefaultDevices()
-
-  Object.assign(businessForm, { ...createDefaultBusinessForm(), ...(business.form || {}) })
-  hydrateCustomFields(business.customFields)
-  Object.assign(personalizationForm, { ...createDefaultPersonalization(), ...personalization })
-
-  cleanupSelection.value =
-    Array.isArray(dataOperations.lastSelection) && dataOperations.lastSelection.length
-      ? [...dataOperations.lastSelection]
-      : createDefaultCleanupSelection()
-
-  hydrateCleanupHistory(dataOperations.history)
-
+  const security = response.security || {}
+  lastLoginAt.value = security.lastLoginAt || ''
   lastPasswordChange.value = security.lastPasswordChange || ''
+  const storedDevices = Array.isArray(security.devices) ? security.devices : []
+  if (storedDevices.length) {
+    devices.value = storedDevices.map((device, index) => ({
+      id: device.id ?? index + 1,
+      name: device.name || '',
+      browser: device.browser || '',
+      system: device.system || '',
+      location: device.location || '',
+      lastActive: device.lastActive || '',
+      trusted: device.trusted !== undefined ? Boolean(device.trusted) : true
+    }))
+  } else {
+    devices.value = createDefaultDevices()
+  }
+
+  const business = response.business || {}
+  Object.assign(businessForm, createDefaultBusinessForm(), business.form || {})
+  hydrateCustomFields(business.customFields)
+
+  const personalization = response.personalization || {}
+  const personalizationDefaults = createDefaultPersonalization()
+  Object.assign(personalizationForm, personalizationDefaults, {
+    ...personalization,
+    notifications: {
+      ...personalizationDefaults.notifications,
+      ...(personalization.notifications || {})
+    }
+  })
+
+  const dataOperations = response.dataOperations || {}
+  cleanupSelection.value = Array.isArray(dataOperations.lastSelection)
+    ? [...dataOperations.lastSelection]
+    : createDefaultCleanupSelection()
+  hydrateCleanupHistory(dataOperations.history)
   lastExportTime.value = dataOperations.lastExportTime || ''
 
   const storedExportForm = dataOperations.exportForm || {}
   const storedRange = Array.isArray(storedExportForm.range)
     ? storedExportForm.range.map(value => {
+        if (value instanceof Date) {
+          return value
+        }
         const date = new Date(value)
         return Number.isNaN(date.getTime()) ? value : date
       })
-    : ''
-  Object.assign(exportForm, { ...createDefaultExportForm(), ...storedExportForm, range: storedRange })
+    : []
+  Object.assign(exportForm, createDefaultExportForm(), storedExportForm, { range: storedRange })
 }
 
-const persistProfile = () => {
-  if (!authStore.user) {
-    return
-  }
+const buildProfilePayload = () => {
   const exportRangePayload = Array.isArray(exportForm.range)
     ? exportForm.range.map(value => (value instanceof Date ? value.toISOString() : value))
-    : ''
-  const profilePayload = {
+    : []
+  return {
     security: {
-      devices: devices.value.map(device => ({ ...device })),
-      lastPasswordChange: lastPasswordChange.value
+      lastPasswordChange: lastPasswordChange.value || null,
+      devices: devices.value.map(device => ({
+        id: device.id,
+        name: device.name,
+        browser: device.browser,
+        system: device.system,
+        location: device.location,
+        lastActive: device.lastActive,
+        trusted: device.trusted
+      }))
     },
     business: {
       form: { ...businessForm },
@@ -936,8 +919,13 @@ const persistProfile = () => {
     personalization: JSON.parse(JSON.stringify(personalizationForm)),
     dataOperations: {
       lastSelection: [...cleanupSelection.value],
-      history: cleanupHistory.value.map(record => ({ ...record })),
-      lastExportTime: lastExportTime.value,
+      history: cleanupHistory.value.map(record => ({
+        id: record.id,
+        time: record.time,
+        description: record.description,
+        type: record.type
+      })),
+      lastExportTime: lastExportTime.value || null,
       exportForm: {
         scope: exportForm.scope,
         format: exportForm.format,
@@ -946,55 +934,101 @@ const persistProfile = () => {
       }
     }
   }
-  authStore.user = {
-    ...authStore.user,
-    profile: profilePayload
+}
+
+const resolveErrorMessage = (error, fallback) => {
+  if (error?.response?.data?.message) {
+    return error.response.data.message
   }
-  if (typeof authStore.persistState === 'function') {
-    authStore.persistState()
+  if (error?.message) {
+    return error.message
+  }
+  return fallback
+}
+
+const submitProfileUpdate = async ({ silent = false, successMessage } = {}) => {
+  try {
+    const { data } = await profileService.updateProfile(buildProfilePayload())
+    applyProfileResponse(data?.data)
+    if (!silent) {
+      ElMessage.success(successMessage || '个人资料已保存')
+    }
+    return true
+  } catch (error) {
+    if (!silent) {
+      ElMessage.error(resolveErrorMessage(error, '保存个人资料失败'))
+    }
+    return false
   }
 }
 
-watch(
-  () => authStore.user?.profile,
-  () => {
-    loadProfileFromStore()
-  },
-  { immediate: true }
-)
+const loadProfile = async () => {
+  loadingProfile.value = true
+  try {
+    const { data } = await profileService.fetchProfile()
+    applyProfileResponse(data?.data)
+    initialLoadCompleted.value = true
+  } catch (error) {
+    ElMessage.error(resolveErrorMessage(error, '加载个人资料失败，请稍后重试'))
+    resetStateToDefault()
+    initialLoadCompleted.value = true
+  } finally {
+    loadingProfile.value = false
+  }
+}
 
-const toggleTrust = device => {
+onMounted(() => {
+  loadProfile()
+})
+
+const toggleTrust = async device => {
+  const previous = device.trusted
   device.trusted = !device.trusted
-  persistProfile()
-  ElMessage.success(`已${device.trusted ? '信任' : '取消信任'} ${device.name}`)
+  const success = await submitProfileUpdate({ silent: true })
+  if (success) {
+    ElMessage.success(`已${device.trusted ? '信任' : '取消信任'} ${device.name || '设备'}`)
+  } else {
+    device.trusted = previous
+  }
 }
 
-const markDevicesTrusted = () => {
+const markDevicesTrusted = async () => {
   if (!devices.value.length) {
     ElMessage.info('暂无设备需要标记')
     return
   }
+  const previousDevices = devices.value.map(device => ({ ...device }))
   let updated = 0
-  devices.value.forEach(device => {
+  devices.value = devices.value.map(device => {
     if (!device.trusted) {
-      device.trusted = true
       updated += 1
+      return { ...device, trusted: true }
     }
+    return device
   })
-  persistProfile()
-  ElMessage.success(updated ? '已将当前设备全部标记为信任' : '所有设备均已信任')
+  const success = await submitProfileUpdate({ silent: true })
+  if (success) {
+    ElMessage.success(updated ? '已将当前设备全部标记为信任' : '所有设备均已信任')
+  } else {
+    devices.value = previousDevices
+  }
 }
 
 const revokeDevice = async device => {
   try {
-    await ElMessageBox.confirm(`确认要注销 ${device.name} 的登录状态吗？`, '安全确认', {
+    await ElMessageBox.confirm(`确认要注销 ${device.name || '设备'} 的登录状态吗？`, '安全确认', {
       confirmButtonText: '确认注销',
       cancelButtonText: '取消',
       type: 'warning'
     })
+    const previousDevices = devices.value.map(item => ({ ...item }))
     devices.value = devices.value.filter(item => item.id !== device.id)
-    persistProfile()
-    ElMessage.success('设备已注销')
+    const success = await submitProfileUpdate({ silent: true })
+    if (success) {
+      ElMessage.success('设备已注销')
+    } else {
+      devices.value = previousDevices
+    }
   } catch (error) {
     // 用户取消操作，无需处理
   }
@@ -1011,7 +1045,7 @@ const removeCustomField = id => {
   customFields.value = customFields.value.filter(field => field.id !== id)
 }
 
-const saveBusinessInfo = async ({ silent = false } = {}) => {
+const saveBusinessInfo = async ({ silent = false, persist = true } = {}) => {
   if (businessFormRef.value) {
     try {
       await businessFormRef.value.validate()
@@ -1019,31 +1053,27 @@ const saveBusinessInfo = async ({ silent = false } = {}) => {
       return false
     }
   }
+  if (!persist) {
+    return true
+  }
   savingBusiness.value = true
-  return new Promise(resolve => {
-    setTimeout(() => {
-      savingBusiness.value = false
-      persistProfile()
-      if (!silent) {
-        ElMessage.success('业务资料已更新')
-      }
-      resolve(true)
-    }, 600)
-  })
+  try {
+    return await submitProfileUpdate({ silent, successMessage: '业务资料已更新' })
+  } finally {
+    savingBusiness.value = false
+  }
 }
 
-const savePersonalization = async ({ silent = false } = {}) => {
+const savePersonalization = async ({ silent = false, persist = true } = {}) => {
+  if (!persist) {
+    return true
+  }
   savingPersonalization.value = true
-  return new Promise(resolve => {
-    setTimeout(() => {
-      savingPersonalization.value = false
-      persistProfile()
-      if (!silent) {
-        ElMessage.success('个性化设置已保存')
-      }
-      resolve(true)
-    }, 600)
-  })
+  try {
+    return await submitProfileUpdate({ silent, successMessage: '个性化设置已保存' })
+  } finally {
+    savingPersonalization.value = false
+  }
 }
 
 const submitPasswordForm = async ({ silent = false } = {}) => {
@@ -1056,28 +1086,38 @@ const submitPasswordForm = async ({ silent = false } = {}) => {
     return false
   }
   savingPassword.value = true
-  return new Promise(resolve => {
-    setTimeout(() => {
-      savingPassword.value = false
-      lastPasswordChange.value = new Date().toISOString()
-      resetPasswordForm()
-      persistProfile()
-      if (!silent) {
-        ElMessage.success('密码修改成功')
-      }
-      resolve(true)
-    }, 800)
-  })
+  try {
+    await profileService.updatePassword({
+      currentPassword: passwordForm.currentPassword,
+      newPassword: passwordForm.newPassword
+    })
+    lastPasswordChange.value = new Date().toISOString()
+    resetPasswordForm()
+    if (!silent) {
+      ElMessage.success('密码修改成功')
+    }
+    return true
+  } catch (error) {
+    if (!silent) {
+      ElMessage.error(resolveErrorMessage(error, '密码修改失败'))
+    }
+    return false
+  } finally {
+    savingPassword.value = false
+  }
 }
 
-const handleExportData = () => {
+const handleExportData = async () => {
   exportingData.value = true
-  setTimeout(() => {
-    exportingData.value = false
-    lastExportTime.value = new Date().toLocaleString()
-    persistProfile()
+  const previous = lastExportTime.value
+  lastExportTime.value = new Date().toISOString()
+  const success = await submitProfileUpdate({ silent: true })
+  if (success) {
     ElMessage.success('数据导出任务已创建，稍后将在通知中心推送下载链接')
-  }, 800)
+  } else {
+    lastExportTime.value = previous
+  }
+  exportingData.value = false
 }
 
 const handleCleanup = async () => {
@@ -1092,29 +1132,62 @@ const handleCleanup = async () => {
       type: 'warning'
     })
     cleaningData.value = true
-    setTimeout(() => {
-      cleaningData.value = false
-      const description = `已清理 ${cleanupSelection.value.length} 类数据`
-      cleanupHistory.value.unshift({
-        id: nextCleanupHistoryId(),
-        time: new Date().toLocaleString(),
-        description,
-        type: 'warning'
-      })
-      cleanupSelection.value = []
-      persistProfile()
+    const previousSelection = [...cleanupSelection.value]
+    const previousHistory = cleanupHistory.value.map(record => ({ ...record }))
+    const previousSeed = cleanupHistoryIdSeed
+    const description = `已清理 ${cleanupSelection.value.length} 类数据`
+    cleanupHistory.value.unshift({
+      id: nextCleanupHistoryId(),
+      time: new Date().toISOString(),
+      description,
+      type: 'warning'
+    })
+    cleanupSelection.value = []
+    const success = await submitProfileUpdate({ silent: true })
+    if (success) {
       ElMessage.success('所选数据已清理')
-    }, 700)
+    } else {
+      cleanupSelection.value = previousSelection
+      cleanupHistory.value = previousHistory
+      cleanupHistoryIdSeed = previousSeed
+    }
   } catch (error) {
     // 用户取消操作，无需处理
+  } finally {
+    cleaningData.value = false
   }
 }
 
-const resetAll = () => {
-  resetPasswordForm()
+const resetAll = async () => {
+  const previousState = {
+    devices: devices.value.map(device => ({ ...device })),
+    business: { ...businessForm },
+    customFields: customFields.value.map(field => ({ ...field })),
+    personalization: JSON.parse(JSON.stringify(personalizationForm)),
+    selection: [...cleanupSelection.value],
+    history: cleanupHistory.value.map(record => ({ ...record })),
+    exportForm: { ...exportForm, range: Array.isArray(exportForm.range) ? [...exportForm.range] : [] },
+    lastExport: lastExportTime.value,
+    lastPassword: lastPasswordChange.value,
+    lastLogin: lastLoginAt.value
+  }
   resetStateToDefault()
-  persistProfile()
-  ElMessage.success('已恢复默认设置')
+  const success = await submitProfileUpdate({ silent: true, successMessage: '已恢复默认设置' })
+  if (!success) {
+    devices.value = previousState.devices
+    Object.assign(businessForm, previousState.business)
+    customFields.value = previousState.customFields
+    Object.assign(personalizationForm, previousState.personalization)
+    cleanupSelection.value = previousState.selection
+    cleanupHistory.value = previousState.history
+    cleanupHistoryIdSeed = previousState.history.reduce((max, record) => Math.max(max, record.id || 0), 0) + 1
+    Object.assign(exportForm, previousState.exportForm)
+    lastExportTime.value = previousState.lastExport
+    lastPasswordChange.value = previousState.lastPassword
+    lastLoginAt.value = previousState.lastLogin
+  } else {
+    ElMessage.success('已恢复默认设置')
+  }
 }
 
 const saveAll = async () => {
@@ -1123,9 +1196,8 @@ const saveAll = async () => {
   }
   savingAll.value = true
   try {
-    const businessSaved = await saveBusinessInfo({ silent: true })
-    if (!businessSaved) {
-      savingAll.value = false
+    const businessValid = await saveBusinessInfo({ silent: true, persist: false })
+    if (!businessValid) {
       return
     }
     const passwordFilled =
@@ -1133,18 +1205,23 @@ const saveAll = async () => {
     if (passwordFilled) {
       const passwordSaved = await submitPasswordForm({ silent: true })
       if (!passwordSaved) {
-        savingAll.value = false
         return
       }
     }
-    await savePersonalization({ silent: true })
-    persistProfile()
-    ElMessage.success('个人资料已全部保存')
+    const personalizationValid = await savePersonalization({ silent: true, persist: false })
+    if (!personalizationValid) {
+      return
+    }
+    const success = await submitProfileUpdate({ silent: true })
+    if (success) {
+      ElMessage.success('个人资料已全部保存')
+    }
   } finally {
     savingAll.value = false
   }
 }
 </script>
+
 
 
 <style scoped>
@@ -1153,6 +1230,10 @@ const saveAll = async () => {
   flex-direction: column;
   gap: 24px;
   padding: 24px 0 48px;
+}
+
+.profile-skeleton {
+  padding: 24px 0;
 }
 
 .header-metrics {
