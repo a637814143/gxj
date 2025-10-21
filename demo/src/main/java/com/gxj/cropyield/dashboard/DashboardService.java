@@ -13,7 +13,6 @@ import com.gxj.cropyield.modules.forecast.repository.ForecastSnapshotRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -140,7 +139,7 @@ public class DashboardService {
     private List<RecentYieldRecord> buildRecentRecords() {
         try {
             List<ForecastSnapshot> snapshots = forecastSnapshotRepository
-                    .findByOrderByCreatedAtDesc(PageRequest.of(0, 5));
+                    .findByOrderByCreatedAtDesc();
             if (snapshots.isEmpty()) {
                 return List.of();
             }

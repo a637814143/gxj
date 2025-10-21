@@ -14,6 +14,9 @@ public interface ForecastSnapshotRepository extends JpaRepository<ForecastSnapsh
     List<ForecastSnapshot> findByOrderByCreatedAtDesc(Pageable pageable);
 
     @EntityGraph(attributePaths = {"run", "run.model", "run.crop", "run.region"})
+    List<ForecastSnapshot> findByOrderByCreatedAtDesc();
+
+    @EntityGraph(attributePaths = {"run", "run.model", "run.crop", "run.region"})
     Page<ForecastSnapshot> findAllByOrderByCreatedAtDesc(Pageable pageable);
 
     @EntityGraph(attributePaths = {"run", "run.model", "run.crop", "run.region"})
