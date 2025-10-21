@@ -16,10 +16,15 @@ import com.gxj.cropyield.modules.forecast.engine.ForecastEngineResponse;
 import com.gxj.cropyield.modules.forecast.entity.ForecastModel;
 import com.gxj.cropyield.modules.forecast.entity.ForecastRun;
 import com.gxj.cropyield.modules.forecast.entity.ForecastRunSeries;
+import com.gxj.cropyield.modules.forecast.entity.ForecastSnapshot;
 import com.gxj.cropyield.modules.forecast.repository.ForecastModelRepository;
 import com.gxj.cropyield.modules.forecast.repository.ForecastRunRepository;
 import com.gxj.cropyield.modules.forecast.repository.ForecastRunSeriesRepository;
+import com.gxj.cropyield.modules.forecast.repository.ForecastSnapshotRepository;
 import com.gxj.cropyield.modules.forecast.service.ForecastExecutionService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,12 +39,15 @@ import java.util.stream.Collectors;
 @Service
 public class ForecastExecutionServiceImpl implements ForecastExecutionService {
 
+    private static final Logger log = LoggerFactory.getLogger(ForecastExecutionServiceImpl.class);
+
     private final RegionRepository regionRepository;
     private final CropRepository cropRepository;
     private final ForecastModelRepository forecastModelRepository;
     private final YieldRecordRepository yieldRecordRepository;
     private final ForecastRunRepository forecastRunRepository;
     private final ForecastRunSeriesRepository forecastRunSeriesRepository;
+    private final ForecastSnapshotRepository forecastSnapshotRepository;
     private final ForecastEngineClient forecastEngineClient;
 
     public ForecastExecutionServiceImpl(RegionRepository regionRepository,
@@ -48,6 +56,7 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
                                         YieldRecordRepository yieldRecordRepository,
                                         ForecastRunRepository forecastRunRepository,
                                         ForecastRunSeriesRepository forecastRunSeriesRepository,
+                                        ForecastSnapshotRepository forecastSnapshotRepository,
                                         ForecastEngineClient forecastEngineClient) {
         this.regionRepository = regionRepository;
         this.cropRepository = cropRepository;
@@ -55,6 +64,7 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         this.yieldRecordRepository = yieldRecordRepository;
         this.forecastRunRepository = forecastRunRepository;
         this.forecastRunSeriesRepository = forecastRunSeriesRepository;
+        this.forecastSnapshotRepository = forecastSnapshotRepository;
         this.forecastEngineClient = forecastEngineClient;
     }
 
@@ -99,6 +109,8 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         run.setHistoryYears(historyLimit);
         run.setFrequency(request.frequency() != null ? request.frequency() : "YEARLY");
         run.setStatus(ForecastRun.RunStatus.RUNNING);
+        run.setMeasurementLabel(measurementType.valueLabel());
+        run.setMeasurementUnit(measurementType.valueUnit());
         forecastRunRepository.save(run);
 
         ForecastEngineResponse response = invokeEngine(limitedHistory, run);
@@ -137,6 +149,18 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         }
         forecastRunSeriesRepository.saveAll(series);
 
+        YieldRecord referenceRecord = limitedHistory.isEmpty() ? null : limitedHistory.get(limitedHistory.size() - 1).record();
+        List<ForecastSnapshot> snapshots = response.forecast().stream()
+            .map(point -> buildSnapshot(run, point, measurementType, referenceRecord))
+            .toList();
+        if (!snapshots.isEmpty()) {
+            try {
+                forecastSnapshotRepository.saveAll(snapshots);
+            } catch (DataAccessException ex) {
+                log.warn("Failed to persist forecast snapshots for run {}", run.getId(), ex);
+            }
+        }
+
         List<ForecastExecutionResponse.SeriesPoint> history = limitedHistory.stream()
             .map(observation -> new ForecastExecutionResponse.SeriesPoint(
                 String.valueOf(observation.record().getYear()),
@@ -162,8 +186,8 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
             run.getFrequency(),
             run.getForecastPeriods(),
             run.getUpdatedAt(),
-            measurementType.valueLabel(),
-            measurementType.valueUnit()
+            run.getMeasurementLabel(),
+            run.getMeasurementUnit()
         );
         ForecastExecutionResponse.EvaluationMetrics metrics = new ForecastExecutionResponse.EvaluationMetrics(
             run.getMae(),
@@ -173,6 +197,73 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         );
 
         return new ForecastExecutionResponse(run.getId(), metadata, history, forecast, metrics);
+    }
+
+    private ForecastSnapshot buildSnapshot(ForecastRun run,
+                                           ForecastEngineResponse.ForecastPoint point,
+                                           MeasurementType measurementType,
+                                           YieldRecord referenceRecord) {
+        ForecastSnapshot snapshot = new ForecastSnapshot();
+        snapshot.setRun(run);
+        snapshot.setPeriod(point.period());
+        snapshot.setYear(parseYear(point.period()));
+        snapshot.setMeasurementValue(point.value());
+        snapshot.setMeasurementLabel(measurementType.valueLabel());
+        snapshot.setMeasurementUnit(measurementType.valueUnit());
+
+        Double referenceArea = referenceRecord != null ? referenceRecord.getSownArea() : null;
+        Double referencePrice = referenceRecord != null ? referenceRecord.getAveragePrice() : null;
+
+        Double predictedProduction = null;
+        Double predictedYield = null;
+
+        if (measurementType == MeasurementType.PRODUCTION) {
+            predictedProduction = point.value();
+            if (referenceArea != null && referenceArea != 0d) {
+                predictedYield = point.value() / referenceArea;
+            }
+        } else {
+            predictedYield = point.value();
+            if (referenceArea != null) {
+                predictedProduction = point.value() * referenceArea;
+            }
+        }
+
+        snapshot.setPredictedProduction(predictedProduction);
+        snapshot.setPredictedYield(predictedYield);
+        snapshot.setSownArea(referenceArea);
+        snapshot.setAveragePrice(referencePrice);
+        snapshot.setEstimatedRevenue(calculateRevenue(predictedProduction, referencePrice));
+        return snapshot;
+    }
+
+    private Double calculateRevenue(Double production, Double averagePrice) {
+        if (production == null || averagePrice == null) {
+            return null;
+        }
+        return production * averagePrice * 0.1d;
+    }
+
+    private Integer parseYear(String period) {
+        if (period == null) {
+            return null;
+        }
+        StringBuilder digits = new StringBuilder();
+        for (char c : period.toCharArray()) {
+            if (Character.isDigit(c)) {
+                digits.append(c);
+            } else if (digits.length() > 0) {
+                break;
+            }
+        }
+        if (digits.length() == 0) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(digits.toString());
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 
     private ForecastEngineResponse invokeEngine(List<HistoryObservation> history,

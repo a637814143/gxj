@@ -56,7 +56,7 @@ public class SystemSettingServiceImpl implements SystemSettingService {
         }
         setting.setSecurityStrategy(normalizeNullable(request.securityStrategy()));
 
-        SystemSetting saved = systemSettingRepository.save(setting);
+        SystemSetting saved = systemSettingRepository.saveAndFlush(setting);
         return toResponse(saved);
     }
 

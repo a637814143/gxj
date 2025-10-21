@@ -49,7 +49,14 @@
           <el-button type="primary" :loading="saving" :disabled="loading" @click="save">保存设置</el-button>
         </div>
       </template>
-      <el-form label-width="120px" :model="settings" class="setting-form">
+      <el-form
+        ref="formRef"
+        label-width="120px"
+        :model="settings"
+        :rules="rules"
+        status-icon
+        class="setting-form"
+      >
         <el-form-item label="默认区域">
           <el-select v-model="settings.defaultRegion" placeholder="请选择" :disabled="loading || regionLoading">
             <el-option
@@ -92,8 +99,25 @@
             </el-table>
           </div>
         </el-form-item>
-        <el-form-item label="通知邮箱">
-          <el-input v-model="settings.notifyEmail" placeholder="请输入" />
+        <el-form-item label="通知邮箱" prop="notifyEmail">
+          <el-input v-model="settings.notifyEmail" placeholder="请输入" :disabled="loading" />
+        </el-form-item>
+        <el-form-item label="待审批变更">
+          <el-input-number
+            v-model="settings.pendingChangeCount"
+            :min="0"
+            :step="1"
+            :max="999999"
+            controls-position="right"
+          />
+        </el-form-item>
+        <el-form-item label="安全策略说明">
+          <el-input
+            v-model="settings.securityStrategy"
+            type="textarea"
+            :autosize="{ minRows: 2, maxRows: 4 }"
+            placeholder="请输入安全策略与合规要求"
+          />
         </el-form-item>
         <el-form-item label="模型计算集群">
           <el-switch v-model="settings.clusterEnabled" />
@@ -112,6 +136,7 @@ const regions = ref([])
 const loading = ref(false)
 const regionLoading = ref(false)
 const saving = ref(false)
+const formRef = ref()
 
 const settings = reactive({
   defaultRegion: null,
@@ -121,6 +146,25 @@ const settings = reactive({
   securityStrategy: '',
   updatedAt: null
 })
+
+const rules = {
+  notifyEmail: [
+    {
+      validator: (_, value) => {
+        const candidate = (value ?? '').toString().trim()
+        if (!candidate) {
+          return Promise.resolve()
+        }
+        const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+        if (!emailPattern.test(candidate)) {
+          return Promise.reject(new Error('请输入有效的邮箱地址'))
+        }
+        return Promise.resolve()
+      },
+      trigger: ['blur', 'change']
+    }
+  ]
+}
 
 const newRegionName = ref('')
 const editingRegionId = ref(null)
@@ -227,7 +271,8 @@ const applySettings = payload => {
   settings.clusterEnabled = Boolean(payload?.clusterEnabled)
   settings.pendingChangeCount = Number(payload?.pendingChangeCount ?? 0)
   settings.securityStrategy = payload?.securityStrategy ?? ''
-  settings.updatedAt = payload?.updatedAt ?? null
+  const updatedAtValue = payload?.updatedAt ?? payload?.updated_at ?? null
+  settings.updatedAt = updatedAtValue ?? settings.updatedAt ?? null
   ensureDefaultRegionValidity()
 }
 
@@ -382,6 +427,14 @@ const removeRegion = async region => {
 }
 
 const save = async () => {
+  const form = formRef.value
+  if (form) {
+    try {
+      await form.validate()
+    } catch (error) {
+      return
+    }
+  }
   saving.value = true
   try {
     const payload = {
@@ -392,7 +445,11 @@ const save = async () => {
       securityStrategy: settings.securityStrategy.trim() ? settings.securityStrategy.trim() : null
     }
     const { data } = await apiClient.put('/api/system/settings', payload)
-    applySettings(data?.data ?? data ?? {})
+    const applied = data?.data ?? data ?? {}
+    applySettings(applied)
+    if (!(applied?.updatedAt ?? applied?.updated_at)) {
+      settings.updatedAt = new Date().toISOString()
+    }
     ElMessage.success('设置已保存')
   } catch (error) {
     ElMessage.error(error?.response?.data?.message || '保存设置失败')

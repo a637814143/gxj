@@ -61,6 +61,12 @@ const routes = [
         meta: { requiresAuth: true, roles: ['ADMIN'] }
       },
       {
+        path: 'logs',
+        name: 'logs',
+        component: () => import('../views/LogManagementView.vue'),
+        meta: { requiresAuth: true, roles: ['ADMIN'] }
+      },
+      {
         path: 'settings',
         name: 'settings',
         component: () => import('../views/SystemSettingView.vue'),

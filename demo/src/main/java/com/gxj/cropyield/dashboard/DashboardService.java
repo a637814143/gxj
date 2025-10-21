@@ -8,11 +8,15 @@ import com.gxj.cropyield.dashboard.dto.RegionProductionSummary;
 import com.gxj.cropyield.dashboard.dto.TrendPoint;
 import com.gxj.cropyield.modules.dataset.entity.YieldRecord;
 import com.gxj.cropyield.modules.dataset.repository.YieldRecordRepository;
+import com.gxj.cropyield.modules.forecast.entity.ForecastSnapshot;
+import com.gxj.cropyield.modules.forecast.repository.ForecastSnapshotRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
-
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.DoubleSummaryStatistics;
 import java.util.List;
 import java.util.Map;
@@ -22,10 +26,15 @@ import java.util.stream.Collectors;
 @Service
 public class DashboardService {
 
-    private final YieldRecordRepository yieldRecordRepository;
+    private static final Logger log = LoggerFactory.getLogger(DashboardService.class);
 
-    public DashboardService(YieldRecordRepository yieldRecordRepository) {
+    private final YieldRecordRepository yieldRecordRepository;
+    private final ForecastSnapshotRepository forecastSnapshotRepository;
+
+    public DashboardService(YieldRecordRepository yieldRecordRepository,
+                            ForecastSnapshotRepository forecastSnapshotRepository) {
         this.yieldRecordRepository = yieldRecordRepository;
+        this.forecastSnapshotRepository = forecastSnapshotRepository;
     }
 
     public DashboardSummaryResponse getSummary() {
@@ -129,23 +138,42 @@ public class DashboardService {
     }
 
     private List<RecentYieldRecord> buildRecentRecords() {
-        return yieldRecordRepository.findTop5ByOrderByYearDesc().stream()
-                .sorted(Comparator.comparing(YieldRecord::getYear).reversed())
-                .map(record -> {
-                    double revenue = safe(record.getProduction()) * safe(record.getAveragePrice()) * 0.1;
-                    return new RecentYieldRecord(
-                            record.getCrop().getName(),
-                            record.getRegion().getName(),
-                            record.getYear(),
-                            round(safe(record.getSownArea())),
-                            round(safe(record.getProduction())),
-                            round(safe(record.getYieldPerHectare())),
-                            record.getAveragePrice(),
-                            round(revenue),
-                            record.getCollectedAt() != null ? record.getCollectedAt() : LocalDate.of(record.getYear(), 12, 31)
-                    );
-                })
-                .toList();
+        try {
+            List<ForecastSnapshot> snapshots = forecastSnapshotRepository
+                    .findByOrderByCreatedAtDesc(PageRequest.of(0, 5));
+            if (snapshots.isEmpty()) {
+                return List.of();
+            }
+            return snapshots.stream()
+                    .map(snapshot -> {
+                        var run = snapshot.getRun();
+                        LocalDate collectedAt = run.getUpdatedAt() != null
+                                ? run.getUpdatedAt().toLocalDate()
+                                : LocalDate.now();
+                        int year = snapshot.getYear() != null
+                                ? snapshot.getYear()
+                                : collectedAt.getYear();
+                        double sownArea = safe(snapshot.getSownArea());
+                        double production = safe(snapshot.getPredictedProduction());
+                        double yield = safe(snapshot.getPredictedYield());
+                        double revenue = safe(snapshot.getEstimatedRevenue());
+                        return new RecentYieldRecord(
+                                run.getCrop().getName(),
+                                run.getRegion().getName(),
+                                year,
+                                round(sownArea),
+                                round(production),
+                                round(yield),
+                                snapshot.getAveragePrice(),
+                                round(revenue),
+                                collectedAt
+                        );
+                    })
+                    .toList();
+        } catch (DataAccessException ex) {
+            log.warn("Failed to load forecast snapshots for dashboard recent records, returning empty list", ex);
+            return List.of();
+        }
     }
 
     private List<ForecastPoint> buildForecast(List<YieldRecord> records) {

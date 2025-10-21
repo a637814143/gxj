@@ -28,6 +28,11 @@ export const fetchModels = async () => {
   return extractData(data)
 }
 
+export const fetchForecastHistory = async params => {
+  const { data } = await apiClient.get('/api/forecast/history', { params })
+  return extractData(data)
+}
+
 const parseNumber = value => {
   const numeric = Number(value)
   return Number.isFinite(numeric) ? numeric : null
@@ -73,5 +78,6 @@ export default {
   fetchRegions,
   fetchCrops,
   fetchModels,
+  fetchForecastHistory,
   executeForecast,
 }

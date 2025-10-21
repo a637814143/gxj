@@ -50,6 +50,7 @@ const rawMenuItems = [
   { label: '预测中心', name: 'forecast', path: '/forecast' },
   { label: '报告中心', name: 'report', path: '/report' },
   { label: '用户管理', name: 'users', path: '/users' },
+  { label: '日志管理', name: 'logs', path: '/logs' },
   { label: '系统设置', name: 'settings', path: '/settings' }
 ]
 
@@ -62,6 +63,7 @@ const titles = {
   forecast: '预测建模与任务',
   report: '报告输出与分享',
   users: '用户与部门管理',
+  logs: '登录日志监控与审计',
   settings: '系统设置'
 }
 
