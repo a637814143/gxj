@@ -177,6 +177,7 @@ import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowDown,
+  Avatar,
   DataAnalysis,
   Document,
   Expand,
@@ -209,6 +210,7 @@ const rawMenuItems = [
   { label: '数据可视化', name: 'visualization', path: '/visualization', icon: TrendCharts },
   { label: '预测中心', name: 'forecast', path: '/forecast', icon: Timer },
   { label: '报告中心', name: 'report', path: '/report', icon: Document },
+  { label: '个人中心', name: 'profile', path: '/profile', icon: Avatar },
   { label: '用户管理', name: 'users', path: '/users', icon: UserFilled },
   { label: '日志管理', name: 'logs', path: '/logs', icon: Monitor },
   { label: '系统设置', name: 'settings', path: '/settings', icon: Setting }
