@@ -311,6 +311,8 @@ watch(
   border-bottom: 1px solid #ebeef5;
   position: relative;
   z-index: 1;
+  height: auto !important;
+  min-height: 64px;
 }
 
 .header-title {
@@ -430,6 +432,7 @@ watch(
   box-shadow: none;
   padding: 0 24px 28px;
   align-items: stretch;
+  min-height: unset;
 }
 
 .user-header-shell {
