@@ -92,6 +92,7 @@ public class ForecastHistoryServiceImpl implements ForecastHistoryService {
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "预测记录不存在"));
             List<ForecastSnapshot> snapshots = forecastSnapshotRepository.findByRunIdOrderByPeriodAsc(runId);
             removeForecastResults(run, snapshots);
+            deleteSnapshots(snapshots);
             forecastRunRepository.delete(run);
         } catch (BusinessException ex) {
             throw ex;
@@ -162,5 +163,13 @@ public class ForecastHistoryServiceImpl implements ForecastHistoryService {
                         log.warn("Failed to delete forecast result for task {} and year {}", task.getId(), year, ex);
                     }
                 }));
+    }
+
+    private void deleteSnapshots(List<ForecastSnapshot> snapshots) {
+        if (snapshots == null || snapshots.isEmpty()) {
+            return;
+        }
+        forecastSnapshotRepository.deleteAll(snapshots);
+        forecastSnapshotRepository.flush();
     }
 }
