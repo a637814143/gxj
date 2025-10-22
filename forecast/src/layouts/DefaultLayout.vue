@@ -34,6 +34,7 @@
         <router-view />
       </el-main>
     </el-container>
+    <side-quick-actions v-if="showSideActions" />
   </el-container>
 </template>
 
@@ -42,6 +43,7 @@ import { computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useAuthorization } from '../composables/useAuthorization'
+import SideQuickActions from '../components/SideQuickActions.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -103,6 +105,8 @@ const userSubtitle = computed(() => {
   }
   return `${displayName.value}，欢迎回来！祝你今日使用顺利。`
 })
+
+const showSideActions = computed(() => !isAdminExperience.value)
 
 const handleLogout = () => {
   authStore.logout()

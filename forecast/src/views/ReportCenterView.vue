@@ -15,33 +15,6 @@
           </div>
         </div>
       </div>
-      <div class="hero-actions">
-        <div class="actions-header">
-          <div class="actions-title">快捷导航</div>
-          <p class="actions-desc">按照你的工作节奏快速跳转到常用模块，提升预测与报告协同效率。</p>
-        </div>
-        <div class="actions-grid">
-          <button
-            v-for="action in reportQuickActions"
-            :key="action.key"
-            type="button"
-            class="action-card"
-            :class="`accent-${action.accent}`"
-            @click="handleAction(action)"
-          >
-            <span class="action-icon">{{ action.icon }}</span>
-            <span class="action-content">
-              <span class="action-label">{{ action.label }}</span>
-              <span class="action-desc">{{ action.description }}</span>
-            </span>
-            <span class="action-arrow">→</span>
-          </button>
-        </div>
-        <div class="actions-tip">
-          <span class="tip-icon">💡</span>
-          <span>善用快捷入口快速发起预测、查看仪表盘或管理个人资料。</span>
-        </div>
-      </div>
     </section>
 
     <el-card ref="reportListCard" class="report-card" shadow="hover" v-loading="loading">
@@ -100,15 +73,16 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { fetchReportOverview } from '../services/report'
 import { useAuthorization } from '../composables/useAuthorization'
 import ReportGenerateDialog from '../components/report/ReportGenerateDialog.vue'
 import ReportDetailDrawer from '../components/report/ReportDetailDrawer.vue'
 
 const router = useRouter()
+const route = useRoute()
 
 const reports = ref([])
 const metrics = ref({ totalReports: 0, publishedThisMonth: 0, pendingApproval: 0, autoGenerationEnabled: false })
@@ -123,7 +97,7 @@ const reportPagination = reactive({
   pageSize: 5,
 })
 
-const { hasRole, canAccessRoute } = useAuthorization()
+const { hasRole } = useAuthorization()
 const canGenerateReport = computed(() => hasRole(['ADMIN', 'AGRICULTURE_DEPT']))
 
 const paginatedReports = computed(() => {
@@ -156,64 +130,6 @@ const highlightStats = computed(() => {
   ]
 })
 
-const reportQuickActions = computed(() => {
-  const baseActions = [
-    {
-      key: 'dashboard',
-      name: 'dashboard',
-      label: '仪表盘总览',
-      description: '回到首页查看最新运行态势',
-      accent: 'sunrise',
-      icon: '📊',
-      type: 'route'
-    },
-    {
-      key: 'forecast',
-      name: 'forecast',
-      label: '预测中心',
-      description: '发起或查看预测任务',
-      accent: 'sunset',
-      icon: '🚀',
-      type: 'route'
-    },
-    {
-      key: 'report-generate',
-      label: '生成报告',
-      description: '一键生成新的分析报告',
-      accent: 'forest',
-      icon: '📝',
-      type: 'generate'
-    },
-    {
-      key: 'report-history',
-      label: '报告列表',
-      description: '跳转到下方历史记录',
-      accent: 'ocean',
-      icon: '📚',
-      type: 'scroll'
-    },
-    {
-      key: 'profile',
-      name: 'profile',
-      label: '个人中心',
-      description: '维护资料与安全信息',
-      accent: 'violet',
-      icon: '👤',
-      type: 'route'
-    }
-  ]
-
-  return baseActions.filter(action => {
-    if (action.type === 'route') {
-      return canAccessRoute(action.name)
-    }
-    if (action.type === 'generate') {
-      return canGenerateReport.value
-    }
-    return true
-  })
-})
-
 function formatDate(value) {
   if (!value) return '暂无'
   const date = new Date(value)
@@ -221,23 +137,6 @@ function formatDate(value) {
     return value
   }
   return date.toLocaleDateString('zh-CN')
-}
-
-const handleAction = action => {
-  if (!action) {
-    return
-  }
-  if (action.type === 'generate') {
-    createReport()
-    return
-  }
-  if (action.type === 'scroll') {
-    reportListCard.value?.$el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    return
-  }
-  if (action.type === 'route' && action.name) {
-    router.push({ name: action.name }).catch(() => {})
-  }
 }
 
 const fetchReports = async () => {
@@ -274,6 +173,28 @@ onMounted(() => {
   fetchReports()
 })
 
+const clearRouteQueryKeys = keys => {
+  const normalized = Array.isArray(keys) ? keys : [keys]
+  const currentQuery = { ...route.query }
+  let mutated = false
+  normalized.forEach(key => {
+    if (key in currentQuery) {
+      delete currentQuery[key]
+      mutated = true
+    }
+  })
+  if (mutated) {
+    router.replace({ query: currentQuery }).catch(() => {})
+  }
+}
+
+const scrollToReportList = () => {
+  nextTick(() => {
+    const target = reportListCard.value?.$el || reportListCard.value
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  })
+}
+
 const createReport = () => {
   if (!canGenerateReport.value) {
     ElMessage.warning('当前账号没有生成报告的权限')
@@ -307,6 +228,28 @@ const viewReport = report => {
   activeReportId.value = report.id
   showDetailDrawer.value = true
 }
+
+watch(
+  () => route.query.action,
+  action => {
+    if (action === 'generate') {
+      createReport()
+      clearRouteQueryKeys('action')
+    }
+  },
+  { immediate: true }
+)
+
+watch(
+  () => route.query.focus,
+  focus => {
+    if (focus === 'list') {
+      scrollToReportList()
+      clearRouteQueryKeys('focus')
+    }
+  },
+  { immediate: true }
+)
 </script>
 
 <style scoped>
@@ -320,8 +263,8 @@ const viewReport = report => {
 .hero-card {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(320px, 1.4fr) minmax(260px, 1fr);
-  gap: 32px;
+  grid-template-columns: 1fr;
+  gap: 24px;
   padding: 32px;
   border-radius: 24px;
   background: linear-gradient(120deg, #e8f1ff 0%, #f4f8ff 35%, #ffffff 100%);
@@ -406,140 +349,6 @@ const viewReport = report => {
   color: #6e7fa1;
 }
 
-.hero-actions {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.actions-header {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.actions-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: #1346af;
-}
-
-.actions-desc {
-  margin: 0;
-  font-size: 13px;
-  color: #3c4f79;
-  line-height: 1.6;
-}
-
-.actions-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 16px;
-}
-
-.action-card {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 18px 20px;
-  border-radius: 18px;
-  border: none;
-  cursor: pointer;
-  position: relative;
-  overflow: hidden;
-  color: #fff;
-  font: inherit;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-  text-align: left;
-}
-
-.action-card::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 60%);
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-.action-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 18px 35px rgba(34, 98, 255, 0.2);
-}
-
-.action-card:hover::after {
-  opacity: 1;
-}
-
-.action-icon {
-  font-size: 22px;
-  flex-shrink: 0;
-}
-
-.action-content {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.action-label {
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.action-desc {
-  font-size: 12px;
-  opacity: 0.9;
-}
-
-.action-arrow {
-  margin-left: auto;
-  font-size: 18px;
-  opacity: 0.85;
-}
-
-.actions-tip {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
-  border-radius: 12px;
-  background: rgba(34, 98, 255, 0.08);
-  color: #345296;
-  font-size: 12px;
-}
-
-.tip-icon {
-  font-size: 16px;
-}
-
-.action-card.accent-sunrise {
-  background: linear-gradient(135deg, #facc15 0%, #fb7185 100%);
-  box-shadow: 0 12px 28px rgba(251, 113, 133, 0.26);
-}
-
-.action-card.accent-sunset {
-  background: linear-gradient(135deg, #f97316 0%, #f43f5e 100%);
-  box-shadow: 0 12px 28px rgba(244, 63, 94, 0.26);
-}
-
-.action-card.accent-forest {
-  background: linear-gradient(135deg, #34d399 0%, #22d3ee 100%);
-  box-shadow: 0 12px 28px rgba(45, 212, 191, 0.26);
-}
-
-.action-card.accent-ocean {
-  background: linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%);
-  box-shadow: 0 12px 28px rgba(14, 165, 233, 0.26);
-}
-
-.action-card.accent-violet {
-  background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
-  box-shadow: 0 12px 28px rgba(139, 92, 246, 0.26);
-}
-
 .report-card {
   border-radius: 20px;
   overflow: hidden;
@@ -607,7 +416,6 @@ const viewReport = report => {
 
 @media (max-width: 768px) {
   .hero-card {
-    grid-template-columns: 1fr;
     padding: 24px;
   }
 
