@@ -8,6 +8,10 @@ import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+/**
+ * 基础数据模块的控制器，用于暴露基础数据相关的 REST 接口。
+ * <p>核心方法：listRegions、createRegion、updateRegion、deleteRegion。</p>
+ */
 
 @RestController
 @RequestMapping("/api/base/regions")

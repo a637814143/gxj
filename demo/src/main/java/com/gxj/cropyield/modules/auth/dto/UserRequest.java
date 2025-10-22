@@ -5,6 +5,9 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 import java.util.Set;
+/**
+ * 认证与账号模块的数据传输对象（记录类型），在认证与账号场景下承载参数与返回值。
+ */
 
 public record UserRequest(
     @NotBlank(message = "用户名不能为空")

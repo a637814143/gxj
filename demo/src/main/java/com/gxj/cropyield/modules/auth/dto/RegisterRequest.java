@@ -3,6 +3,9 @@ package com.gxj.cropyield.modules.auth.dto;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+/**
+ * 认证与账号模块的数据传输对象（记录类型），在认证与账号场景下承载参数与返回值。
+ */
 
 public record RegisterRequest(
     @NotBlank(message = "用户名不能为空")

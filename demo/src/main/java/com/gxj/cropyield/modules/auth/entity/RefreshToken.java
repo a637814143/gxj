@@ -9,6 +9,9 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
 import java.time.LocalDateTime;
+/**
+ * 认证与账号模块的实体类，映射认证与账号领域对应的数据表结构。
+ */
 
 @Entity
 @Table(name = "sys_refresh_token")

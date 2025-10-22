@@ -3,6 +3,10 @@ package com.gxj.cropyield.modules.forecast.config;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.time.Duration;
+/**
+ * 预测管理模块的配置类，配置预测管理相关的基础设施与框架行为。
+ * <p>核心方法：getBaseUrl、setBaseUrl、getConnectTimeout、setConnectTimeout、getReadTimeout、setReadTimeout。</p>
+ */
 
 @ConfigurationProperties(prefix = "forecast.engine")
 public class ForecastEngineProperties {

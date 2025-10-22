@@ -7,6 +7,10 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.filter.CorsFilter;
 
 import java.util.List;
+/**
+ * 全局配置模块的配置类，配置全局配置相关的基础设施与框架行为。
+ * <p>核心方法：corsFilter。</p>
+ */
 
 @Configuration
 public class CorsConfig {

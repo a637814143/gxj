@@ -1,6 +1,9 @@
 package com.gxj.cropyield.modules.base.dto;
 
 import jakarta.validation.constraints.Size;
+/**
+ * 基础数据模块的数据传输对象（记录类型），在基础数据场景下承载参数与返回值。
+ */
 
 public record RegionRequest(
     @Size(max = 64, message = "编码长度不能超过64位")

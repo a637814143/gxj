@@ -13,6 +13,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+/**
+ * 数据集管理模块的控制器，用于暴露数据集管理相关的 REST 接口。
+ * <p>核心方法：listFiles、createFile、deleteFiles。</p>
+ */
 
 @RestController
 @RequestMapping("/api/datasets/files")

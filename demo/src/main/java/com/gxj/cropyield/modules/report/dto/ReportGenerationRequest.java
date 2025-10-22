@@ -4,6 +4,9 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+/**
+ * 报表分析模块的数据传输对象（记录类型），在报表分析场景下承载参数与返回值。
+ */
 
 public record ReportGenerationRequest(
     @NotNull(message = "请选择分析区域")

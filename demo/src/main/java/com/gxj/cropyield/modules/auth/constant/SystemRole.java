@@ -1,4 +1,7 @@
 package com.gxj.cropyield.modules.auth.constant;
+/**
+ * 认证与账号模块的核心类（枚举），提供认证与账号相关的支撑能力。
+ */
 
 public enum SystemRole {
     ADMIN("ADMIN", "系统管理员"),

@@ -7,6 +7,10 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
+/**
+ * 数据集管理模块的配置类，配置数据集管理相关的基础设施与框架行为。
+ * <p>核心方法：run、ensureDatasetFileColumn、ensureImportJobColumn、columnExists、indexExists、foreignKeyExists、executeDdl。</p>
+ */
 
 @Component
 public class DatasetSchemaMigrator implements ApplicationRunner {

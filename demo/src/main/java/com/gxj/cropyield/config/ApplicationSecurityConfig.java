@@ -28,6 +28,10 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 import java.nio.charset.StandardCharsets;
 
+/**
+ * 全局配置模块的配置类，配置全局配置相关的基础设施与框架行为。
+ * <p>核心方法：passwordEncoder、authenticationProvider、authenticationManager、applicationSecurityFilterChain、writeErrorResponse、corsConfigurationSource。</p>
+ */
 @Configuration
 @EnableWebSecurity
 @EnableConfigurationProperties(JwtProperties.class)

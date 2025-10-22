@@ -1,4 +1,7 @@
 package com.gxj.cropyield.common.response;
+/**
+ * 通用响应模块的核心类（枚举），提供通用响应相关的支撑能力。
+ */
 
 public enum ResultCode {
     SUCCESS(0, "success"),

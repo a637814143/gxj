@@ -4,6 +4,9 @@ import com.gxj.cropyield.common.model.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
+/**
+ * 系统设置模块的实体类，映射系统设置领域对应的数据表结构。
+ */
 
 @Entity
 @Table(name = "sys_log")

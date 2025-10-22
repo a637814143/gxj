@@ -10,6 +10,10 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+/**
+ * 系统设置模块的控制器，用于暴露系统设置相关的 REST 接口。
+ * <p>核心方法：listLogs。</p>
+ */
 
 @RestController
 @RequestMapping("/api/system/logs")

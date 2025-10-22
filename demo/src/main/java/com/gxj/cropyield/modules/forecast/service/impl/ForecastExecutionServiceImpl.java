@@ -40,6 +40,10 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
+/**
+ * 预测管理模块的业务实现类，负责落实预测管理领域的业务处理逻辑。
+ * <p>核心方法：runForecast、persistForecastResults、resolveForecastTask、updateTaskFromRun、createTaskFromRun、buildTaskParameters、buildEvaluationSummary、formatMetricValue。</p>
+ */
 
 @Service
 public class ForecastExecutionServiceImpl implements ForecastExecutionService {

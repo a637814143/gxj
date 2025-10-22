@@ -14,6 +14,9 @@ import java.util.Date;
 import java.util.stream.Collectors;
 
 import javax.crypto.SecretKey;
+/**
+ * 安全认证模块的安全组件，处理安全认证的认证与授权逻辑。
+ */
 
 @Component
 public class JwtTokenProvider {

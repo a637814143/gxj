@@ -8,6 +8,9 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Lob;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+/**
+ * 报表分析模块的实体类，映射报表分析领域对应的数据表结构。
+ */
 
 @Entity
 @Table(name = "report_section")

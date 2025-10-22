@@ -22,6 +22,10 @@ import java.util.List;
         @Index(name = "idx_data_import_job_task", columnList = "task_id", unique = true),
         @Index(name = "idx_data_import_job_status", columnList = "status")
 })
+/**
+ * 数据导入模块的模型定义，描述数据导入领域的公共数据结构。
+ */
+
 public class DataImportJob extends BaseEntity {
 
     @Column(name = "task_id", nullable = false, length = 64, unique = true)

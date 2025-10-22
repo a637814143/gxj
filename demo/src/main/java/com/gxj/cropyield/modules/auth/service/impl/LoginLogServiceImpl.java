@@ -27,6 +27,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * 认证与账号模块的业务实现类，负责落实认证与账号领域的业务处理逻辑。
+ * <p>核心方法：record、search、get、create、update、delete、BusinessException、summarize。</p>
+ */
 @Service
 public class LoginLogServiceImpl implements LoginLogService {
 

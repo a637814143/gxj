@@ -13,6 +13,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Base64;
+/**
+ * 认证与账号模块的业务实现类，负责落实认证与账号领域的业务处理逻辑。
+ * <p>核心方法：create、validate、rotate、calculateExpiry、generateTokenValue。</p>
+ */
 
 @Service
 public class RefreshTokenServiceImpl implements RefreshTokenService {

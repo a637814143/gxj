@@ -7,6 +7,10 @@ import com.gxj.cropyield.modules.forecast.service.ForecastModelService;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+/**
+ * 预测管理模块的业务实现类，负责落实预测管理领域的业务处理逻辑。
+ * <p>核心方法：listAll、create。</p>
+ */
 
 @Service
 public class ForecastModelServiceImpl implements ForecastModelService {

@@ -16,6 +16,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+/**
+ * 预测管理模块的业务实现类，负责落实预测管理领域的业务处理逻辑。
+ * <p>核心方法：listAll、create。</p>
+ */
 
 @Service
 public class ForecastTaskServiceImpl implements ForecastTaskService {

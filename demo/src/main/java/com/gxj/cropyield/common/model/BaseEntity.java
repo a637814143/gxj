@@ -9,6 +9,9 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 
 import java.time.LocalDateTime;
+/**
+ * 公共模型模块的实体类，映射公共模型领域对应的数据表结构。
+ */
 
 @MappedSuperclass
 public abstract class BaseEntity {

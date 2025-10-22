@@ -1,6 +1,10 @@
 package com.gxj.cropyield.common.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+/**
+ * 全局配置模块的配置类，配置全局配置相关的基础设施与框架行为。
+ * <p>核心方法：getSecret、setSecret、getExpiration、setExpiration、getRefreshExpiration、setRefreshExpiration。</p>
+ */
 
 @ConfigurationProperties(prefix = "security.jwt")
 public class JwtProperties {

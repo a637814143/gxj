@@ -12,6 +12,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+/**
+ * 预测管理模块的控制器，用于暴露预测管理相关的 REST 接口。
+ * <p>核心方法：listModels、createModel。</p>
+ */
 
 @RestController
 @RequestMapping("/api/forecast/models")

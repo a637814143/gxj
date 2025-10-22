@@ -11,6 +11,10 @@ import org.springframework.stereotype.Service;
 
 import java.util.Set;
 import java.util.stream.Collectors;
+/**
+ * 安全认证模块的业务接口，定义安全认证相关的核心业务操作。
+ * <p>核心方法：loadUserByUsername。</p>
+ */
 
 @Service
 public class CustomUserDetailsService implements UserDetailsService {

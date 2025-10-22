@@ -4,6 +4,9 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.LocalDate;
+/**
+ * 数据集管理模块的数据传输对象（记录类型），在数据集管理场景下承载参数与返回值。
+ */
 
 public record YieldRecordRequest(
     @NotNull(message = "作物ID不能为空")

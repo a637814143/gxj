@@ -5,6 +5,9 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.time.LocalDateTime;
+/**
+ * 报表分析模块的数据传输对象（记录类型），在报表分析场景下承载参数与返回值。
+ */
 
 public record ReportRequest(
     @NotBlank(message = "报告标题不能为空")

@@ -10,6 +10,9 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.stream.Collectors;
+/**
+ * 统一异常模块的异常类，用于标识统一异常流程中的错误状态。
+ */
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {

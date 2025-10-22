@@ -2,6 +2,9 @@ package com.gxj.cropyield.modules.system.dto;
 
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
+/**
+ * 系统设置模块的数据传输对象（记录类型），在系统设置场景下承载参数与返回值。
+ */
 
 public record SystemSettingRequest(
     Long defaultRegionId,

@@ -5,6 +5,10 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+/**
+ * 全局配置模块的配置类，配置全局配置相关的基础设施与框架行为。
+ * <p>核心方法：importTaskExecutor。</p>
+ */
 
 @Configuration
 @EnableAsync

@@ -20,6 +20,10 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.regex.Pattern;
+/**
+ * 基础数据模块的业务实现类，负责落实基础数据领域的业务处理逻辑。
+ * <p>核心方法：listAll、create、update、delete、applyRequest、ensureNameUnique、resolveCode、ensureUniqueCode。</p>
+ */
 
 @Service
 public class RegionServiceImpl implements RegionService {

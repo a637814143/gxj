@@ -20,6 +20,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+/**
+ * 认证与账号模块的控制器，用于暴露认证与账号相关的 REST 接口。
+ * <p>核心方法：captcha、register、login、adminLogin、userLogin、refreshToken、currentUser、checkPermission。</p>
+ */
 
 @RestController
 @RequestMapping("/api/auth")

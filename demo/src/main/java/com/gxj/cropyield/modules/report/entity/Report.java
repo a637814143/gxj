@@ -16,6 +16,9 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+/**
+ * 报表分析模块的实体类，映射报表分析领域对应的数据表结构。
+ */
 
 @Entity
 @Table(name = "report_summary")

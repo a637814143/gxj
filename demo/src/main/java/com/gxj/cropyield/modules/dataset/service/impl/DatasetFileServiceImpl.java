@@ -24,6 +24,10 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.Objects;
 import java.util.stream.Collectors;
+/**
+ * 数据集管理模块的业务实现类，负责落实数据集管理领域的业务处理逻辑。
+ * <p>核心方法：listAll、create、deleteByIds、archiveImportJobs、cleanupDatasetRecords、recordDeletionJob、collectCleanupImpact、pruneBaseEntities。</p>
+ */
 
 @Service
 public class DatasetFileServiceImpl implements DatasetFileService {

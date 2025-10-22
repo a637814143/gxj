@@ -4,11 +4,10 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-
 /**
- * Wrapper around Smile's Holt-Winters implementation with an additive fallback
- * in case the runtime dependency is not available.
+ * 预测管理模块的业务组件，封装预测管理的算法或执行流程。
  */
+
 class SmileHoltWintersForecaster {
 
     private static final double DEFAULT_ALPHA = 0.3;

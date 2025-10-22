@@ -10,6 +10,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+/**
+ * 基础数据模块的业务实现类，负责落实基础数据领域的业务处理逻辑。
+ * <p>核心方法：listAll、create。</p>
+ */
 
 @Service
 public class CropServiceImpl implements CropService {
