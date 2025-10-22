@@ -3,6 +3,8 @@
     class="report-generate-dialog"
     :model-value="modelValue"
     width="640px"
+    top="6vh"
+    :append-to-body="true"
     :close-on-click-modal="false"
     @close="handleClose"
   >
@@ -308,6 +310,26 @@ const handleClose = () => {
 </script>
 
 <style scoped>
+.report-generate-dialog :deep(.el-dialog) {
+  margin: 6vh auto 0;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.report-generate-dialog :deep(.el-dialog__body) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0;
+}
+
+.report-generate-dialog :deep(.el-dialog__footer) {
+  padding-top: 12px;
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+
 .dialog-header {
   display: flex;
   flex-direction: column;
@@ -327,7 +349,10 @@ const handleClose = () => {
 }
 
 .dialog-body {
-  padding: 4px 4px 12px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 24px 20px;
 }
 
 .year-range {
