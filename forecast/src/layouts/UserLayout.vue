@@ -21,19 +21,6 @@
           <span class="quick-label">{{ action.label }}</span>
         </button>
       </div>
-      <div v-if="extraLinks.length" class="extra-links">
-        <div class="extra-title">更多功能</div>
-        <button
-          v-for="link in extraLinks"
-          :key="link.name"
-          type="button"
-          class="extra-button"
-          :class="{ active: route.name === link.name }"
-          @click="navigateTo(link.name)"
-        >
-          {{ link.label }}
-        </button>
-      </div>
     </aside>
 
     <div class="content-shell">
@@ -96,10 +83,11 @@ const menuItems = computed(() => rawMenuItems.filter(item => canAccessRoute(item
 
 const quickActionConfigs = computed(() => [
   { key: 'dashboard', label: '仪表盘', icon: '📊', type: 'route', name: 'dashboard', accent: 'sunrise' },
+  { key: 'data', label: '数据中心', icon: '🗄️', type: 'route', name: 'data', accent: 'coral' },
+  { key: 'visualization', label: '数据可视化', icon: '📈', type: 'route', name: 'visualization', accent: 'violet' },
   { key: 'forecast', label: '预测中心', icon: '🚀', type: 'route', name: 'forecast', accent: 'sunset' },
   { key: 'report', label: '报告中心', icon: '📄', type: 'route', name: 'report', accent: 'ocean' },
   { key: 'report-generate', label: '生成报告', icon: '📝', type: 'generate', accent: 'forest' },
-  { key: 'report-history', label: '报告列表', icon: '📚', type: 'focus', accent: 'violet' },
   { key: 'profile', label: '个人中心', icon: '👤', type: 'route', name: 'profile', accent: 'peach' }
 ])
 
@@ -111,9 +99,6 @@ const quickActions = computed(() =>
     if (action.type === 'generate') {
       return canAccessRoute('report') && hasRole(['ADMIN', 'AGRICULTURE_DEPT'])
     }
-    if (action.type === 'focus') {
-      return canAccessRoute('report')
-    }
     return true
   })
 )
@@ -123,8 +108,6 @@ const quickActionNames = computed(() => new Set(quickActions.value.filter(item =
 const navLinks = computed(() =>
   menuItems.value.filter(item => !quickActionNames.value.has(item.name))
 )
-
-const extraLinks = computed(() => navLinks.value)
 
 const titles = {
   dashboard: '概览仪表盘',
@@ -179,9 +162,6 @@ const handleAction = action => {
   if (action.type === 'generate') {
     navigateToReport({ action: 'generate' })
     return
-  }
-  if (action.type === 'focus') {
-    navigateToReport({ focus: 'list' })
   }
 }
 
@@ -308,6 +288,11 @@ watch(
   color: #f8fafc;
 }
 
+.quick-button.accent-coral {
+  background: linear-gradient(135deg, rgba(248, 113, 113, 0.92), rgba(244, 114, 182, 0.88));
+  color: #3f0a1f;
+}
+
 .quick-button.accent-forest {
   background: linear-gradient(135deg, rgba(52, 211, 153, 0.92), rgba(45, 212, 191, 0.88));
   color: #064e3b;
@@ -321,42 +306,6 @@ watch(
 .quick-button.accent-peach {
   background: linear-gradient(135deg, rgba(253, 186, 116, 0.92), rgba(244, 114, 182, 0.85));
   color: #3f0a1f;
-}
-
-.extra-links {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: auto;
-}
-
-.extra-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: #0f766e;
-  letter-spacing: 1px;
-}
-
-.extra-button {
-  border: none;
-  border-radius: 12px;
-  padding: 10px 14px;
-  background: rgba(14, 165, 233, 0.16);
-  color: #0f172a;
-  font-size: 13px;
-  cursor: pointer;
-  transition: background 0.2s ease, transform 0.2s ease;
-  text-align: left;
-}
-
-.extra-button:hover {
-  background: rgba(14, 165, 233, 0.28);
-  transform: translateX(4px);
-}
-
-.extra-button.active {
-  background: rgba(14, 165, 233, 0.45);
-  color: #083344;
 }
 
 .content-shell {
@@ -475,16 +424,6 @@ watch(
   .quick-button {
     padding: 12px 14px;
     border-radius: 14px;
-  }
-
-  .extra-links {
-    flex-direction: row;
-    align-items: center;
-    margin-top: 0;
-  }
-
-  .extra-button {
-    white-space: nowrap;
   }
 }
 
