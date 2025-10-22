@@ -260,8 +260,10 @@ watch(
 <style scoped>
 .layout {
   height: 100vh;
+  min-height: 100vh;
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .sidebar {
@@ -691,7 +693,8 @@ watch(
 .layout.user-theme .main {
   background: linear-gradient(180deg, #f4f9ff 0%, #ffffff 100%);
   padding: 24px;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .layout.user-theme .main::before {
