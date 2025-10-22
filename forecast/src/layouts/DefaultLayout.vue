@@ -448,6 +448,7 @@ watch(
     radial-gradient(circle at 85% 30%, rgba(192, 132, 252, 0.22), transparent 50%),
     radial-gradient(circle at 65% 85%, rgba(74, 222, 128, 0.2), transparent 45%);
   z-index: 0;
+  pointer-events: none;
 }
 
 .user-header-orb {
