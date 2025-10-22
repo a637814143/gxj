@@ -16,8 +16,11 @@
     </el-aside>
     <el-container>
       <el-header class="header" :class="{ 'header-user': !isAdminExperience }">
-        <template v-if="isAdminExperience">
-          <div class="header-title">{{ currentTitle }}</div>
+        <div class="header-main">
+          <div class="header-text">
+            <div class="header-title">{{ currentTitle }}</div>
+            <div v-if="!isAdminExperience && userSubtitle" class="header-subtitle">{{ userSubtitle }}</div>
+          </div>
           <div class="header-actions">
             <div class="user-info">
               <div class="user-name">{{ displayName }}</div>
@@ -25,57 +28,7 @@
             </div>
             <el-button type="primary" link @click="handleLogout">退出登录</el-button>
           </div>
-        </template>
-        <template v-else>
-          <div class="user-header-shell">
-            <span class="user-header-orb orb-1" />
-            <span class="user-header-orb orb-2" />
-            <span class="user-header-orb orb-3" />
-            <div class="user-header-content">
-              <div class="user-header-left">
-                <div class="user-greeting-title">你好，{{ displayName }}！</div>
-                <div class="user-greeting-subtitle">欢迎回来，以下工具可帮助你快速了解最新预测与报告。</div>
-                <div class="user-role-chip">{{ displayRoles }}</div>
-                <div class="user-highlight-grid">
-                  <div
-                    v-for="highlight in userHighlights"
-                    :key="highlight.name"
-                    class="user-highlight-card"
-                    :class="`accent-${highlight.name}`"
-                  >
-                    <div class="highlight-value">{{ highlight.value }}</div>
-                    <div class="highlight-label">{{ highlight.label }}</div>
-                    <div class="highlight-desc">{{ highlight.description }}</div>
-                  </div>
-                </div>
-              </div>
-              <div class="user-header-right">
-                <div class="user-quick-actions">
-                  <el-button
-                    v-for="action in userQuickActions"
-                    :key="action.name"
-                    class="user-quick-button"
-                    :class="`accent-${action.accent}`"
-                    size="large"
-                    round
-                    @click="goToRoute(action.name)"
-                  >
-                    <span class="quick-button-icon">{{ action.icon }}</span>
-                    <span class="quick-button-label">{{ action.label }}</span>
-                    <span class="quick-button-arrow">→</span>
-                  </el-button>
-                </div>
-                <div v-if="userDailyTip" class="user-tip-card">
-                  <div class="tip-title">今日提示</div>
-                  <div class="tip-content">{{ userDailyTip }}</div>
-                </div>
-                <el-button class="user-logout" type="danger" plain round @click="handleLogout">
-                  退出登录
-                </el-button>
-              </div>
-            </div>
-          </div>
-        </template>
+        </div>
       </el-header>
       <el-main class="main">
         <router-view />
@@ -144,102 +97,16 @@ const isAdminExperience = computed(() => {
 
 const layoutTheme = computed(() => (isAdminExperience.value ? 'admin-theme' : 'user-theme'))
 
-const dateFormatter = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric' })
-
-const userQuickActions = computed(() => {
-  if (isAdminExperience.value) {
-    return []
-  }
-  const available = new Set(menuItems.value.map(item => item.name))
-  const accentMap = {
-    dashboard: 'sunrise',
-    report: 'forest',
-    visualization: 'ocean',
-    forecast: 'sunset',
-    profile: 'violet'
-  }
-  const iconMap = {
-    dashboard: '📊',
-    report: '📝',
-    visualization: '📈',
-    forecast: '🚀',
-    profile: '👤'
-  }
-  const candidates = [
-    { name: 'dashboard', label: '仪表盘速览' },
-    { name: 'report', label: '报告中心' },
-    { name: 'visualization', label: '趋势图表' },
-    { name: 'forecast', label: '发起预测' },
-    { name: 'profile', label: '个人资料' }
-  ]
-  return candidates
-    .filter(action => available.has(action.name))
-    .map(action => ({
-      ...action,
-      accent: accentMap[action.name] || 'sunrise',
-      icon: iconMap[action.name] || '✨'
-    }))
-})
-
-const userHighlights = computed(() => {
-  if (isAdminExperience.value) {
-    return []
-  }
-  const accessibleCount = Array.isArray(menuItems.value) ? menuItems.value.length : 0
-  const roles = authStore.user?.roles
-  const roleCount = Array.isArray(roles) ? roles.length : roles ? 1 : 0
-  let todayLabel
-  try {
-    todayLabel = dateFormatter.format(new Date())
-  } catch (error) {
-    todayLabel = new Date().toLocaleDateString('zh-CN')
-  }
-  return [
-    {
-      name: 'modules',
-      label: '可访问模块',
-      value: accessibleCount,
-      description: '当前账号可进入的功能数量'
-    },
-    {
-      name: 'roles',
-      label: '角色权限',
-      value: roleCount,
-      description: '已分配的角色数量'
-    },
-    {
-      name: 'today',
-      label: '今日日期',
-      value: todayLabel,
-      description: '保持关注最新的预测信息'
-    }
-  ]
-})
-
-const userDailyTip = computed(() => {
+const userSubtitle = computed(() => {
   if (isAdminExperience.value) {
     return ''
   }
-  const hour = new Date().getHours()
-  if (hour < 12) {
-    return `${displayName.value}，上午好！先浏览仪表盘了解最新动态吧。`
-  }
-  if (hour < 18) {
-    return `${displayName.value}，下午好！尝试生成最新报告或继续预测任务。`
-  }
-  return `${displayName.value}，晚上好！记得回顾报告并整理预测结论。`
+  return `${displayName.value}，欢迎回来！祝你今日使用顺利。`
 })
 
 const handleLogout = () => {
   authStore.logout()
   router.push({ name: 'login', query: { redirect: route.fullPath } }).catch(() => {})
-}
-
-const goToRoute = name => {
-  if (!name) {
-    return
-  }
-  router.push({ name }).catch(() => {})
 }
 
 watch(
@@ -313,6 +180,7 @@ watch(
   z-index: 1;
   height: auto !important;
   min-height: 64px;
+  background-color: #ffffff;
 }
 
 .header-title {
@@ -426,271 +294,44 @@ watch(
   box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.32);
 }
 
-.header-user {
-  border-bottom: none;
-  background: transparent;
-  box-shadow: none;
-  padding: 0 24px 28px;
-  align-items: stretch;
-  min-height: unset;
-}
-
-.user-header-shell {
-  position: relative;
-  width: 100%;
-  background: linear-gradient(135deg, rgba(236, 253, 245, 0.95) 0%, rgba(224, 242, 254, 0.95) 50%, rgba(254, 242, 242, 0.95) 100%);
-  border-radius: 28px;
-  padding: 32px 36px;
-  overflow: hidden;
-  display: flex;
-}
-
-.user-header-shell::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at 15% 20%, rgba(56, 189, 248, 0.24), transparent 55%),
-    radial-gradient(circle at 85% 30%, rgba(192, 132, 252, 0.22), transparent 50%),
-    radial-gradient(circle at 65% 85%, rgba(74, 222, 128, 0.2), transparent 45%);
-  z-index: 0;
-  pointer-events: none;
-}
-
-.user-header-orb {
-  position: absolute;
-  width: 220px;
-  height: 220px;
-  border-radius: 50%;
-  filter: blur(0px);
-  opacity: 0.35;
-  mix-blend-mode: screen;
-  pointer-events: none;
-}
-
-.user-header-orb.orb-1 {
-  top: -60px;
-  left: -40px;
-  background: linear-gradient(135deg, rgba(45, 212, 191, 0.65), rgba(56, 189, 248, 0.5));
-}
-
-.user-header-orb.orb-2 {
-  bottom: -80px;
-  right: 80px;
-  background: linear-gradient(135deg, rgba(79, 70, 229, 0.5), rgba(147, 197, 253, 0.45));
-}
-
-.user-header-orb.orb-3 {
-  top: 20%;
-  right: -100px;
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.4), rgba(248, 113, 113, 0.45));
-}
-
-.user-header-content {
-  position: relative;
-  z-index: 1;
+.header-main {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 32px;
   width: 100%;
+  gap: 16px;
 }
 
-.user-header-left {
+.header-text {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  max-width: 520px;
+  gap: 4px;
 }
 
-.user-greeting-title {
-  font-size: 26px;
-  font-weight: 700;
+.header-subtitle {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.header-user {
+  background: linear-gradient(135deg, #f0f9ff 0%, #fef6fb 100%);
+  border-bottom: 1px solid rgba(14, 165, 233, 0.2);
+}
+
+.header-user .header-title {
   color: #0f766e;
 }
 
-.user-greeting-subtitle {
+.header-user .header-subtitle {
   color: #0e7490;
-  font-size: 14px;
-  line-height: 1.7;
 }
 
-.user-role-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(13, 148, 136, 0.16);
-  color: #0f766e;
-  padding: 4px 12px;
-  border-radius: 999px;
-  font-size: 12px;
-  letter-spacing: 0.5px;
-  width: fit-content;
-}
-
-.user-highlight-grid {
-  margin-top: 16px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 16px;
-}
-
-.user-highlight-card {
-  padding: 16px;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.85);
-  box-shadow: 0 12px 26px rgba(14, 116, 144, 0.14);
+.header-user .user-info .user-name {
   color: #0f172a;
-  backdrop-filter: blur(4px);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.user-highlight-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 18px 38px rgba(14, 116, 144, 0.2);
-}
-
-.user-highlight-card .highlight-value {
-  font-size: 26px;
-  font-weight: 700;
-  margin-bottom: 4px;
-}
-
-.user-highlight-card .highlight-label {
-  font-size: 13px;
-  letter-spacing: 0.5px;
-}
-
-.user-highlight-card .highlight-desc {
-  margin-top: 6px;
-  font-size: 12px;
-  color: #0369a1;
-}
-
-.user-highlight-card.accent-modules {
-  border: 1px solid rgba(56, 189, 248, 0.45);
-}
-
-.user-highlight-card.accent-roles {
-  border: 1px solid rgba(236, 72, 153, 0.35);
-}
-
-.user-highlight-card.accent-today {
-  border: 1px solid rgba(163, 230, 53, 0.45);
-}
-
-.user-header-right {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 16px;
-}
-
-.user-quick-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  justify-content: flex-end;
-}
-
-.user-quick-actions :deep(.el-button.user-quick-button) {
-  min-width: 148px;
-  font-weight: 600;
-  border: none;
-  color: #ffffff;
-  padding: 18px 26px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  position: relative;
-  overflow: hidden;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.user-quick-actions :deep(.el-button.user-quick-button::after) {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: rgba(255, 255, 255, 0.18);
-  mix-blend-mode: overlay;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-.user-quick-actions :deep(.el-button.user-quick-button:hover) {
-  transform: translateY(-2px);
-  box-shadow: 0 16px 35px rgba(14, 116, 144, 0.25);
-}
-
-.user-quick-actions :deep(.el-button.user-quick-button:hover::after) {
-  opacity: 1;
-}
-
-.user-quick-actions :deep(.el-button.user-quick-button .quick-button-icon) {
-  font-size: 20px;
-}
-
-.user-quick-actions :deep(.el-button.user-quick-button .quick-button-label) {
-  font-size: 14px;
-  letter-spacing: 0.5px;
-}
-
-.user-quick-actions :deep(.el-button.user-quick-button .quick-button-arrow) {
-  font-size: 18px;
-  opacity: 0.85;
-}
-
-.user-quick-actions :deep(.el-button.user-quick-button.accent-sunrise) {
-  background: linear-gradient(135deg, #facc15 0%, #fb7185 100%);
-  box-shadow: 0 12px 28px rgba(251, 113, 133, 0.28);
-}
-
-.user-quick-actions :deep(.el-button.user-quick-button.accent-forest) {
-  background: linear-gradient(135deg, #34d399 0%, #22d3ee 100%);
-  box-shadow: 0 12px 28px rgba(45, 212, 191, 0.28);
-}
-
-.user-quick-actions :deep(.el-button.user-quick-button.accent-ocean) {
-  background: linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%);
-  box-shadow: 0 12px 28px rgba(14, 165, 233, 0.28);
-}
-
-.user-quick-actions :deep(.el-button.user-quick-button.accent-sunset) {
-  background: linear-gradient(135deg, #f97316 0%, #f43f5e 100%);
-  box-shadow: 0 12px 28px rgba(244, 63, 94, 0.28);
-}
-
-.user-quick-actions :deep(.el-button.user-quick-button.accent-violet) {
-  background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
-  box-shadow: 0 12px 28px rgba(139, 92, 246, 0.28);
-}
-
-.user-tip-card {
-  background: rgba(255, 255, 255, 0.9);
-  border-radius: 16px;
-  padding: 16px 20px;
-  min-width: 220px;
-  box-shadow: 0 10px 24px rgba(59, 130, 246, 0.18);
-  border-left: 4px solid #f59e0b;
-  backdrop-filter: blur(4px);
-  text-align: left;
-}
-
-.tip-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #f97316;
-  margin-bottom: 6px;
-}
-
-.tip-content {
-  font-size: 13px;
-  color: #1e293b;
-  line-height: 1.6;
-}
-
-.user-logout {
-  font-weight: 600;
+.header-user .user-info .user-role {
+  color: #0f766e;
 }
 
 .layout.user-theme .main {
@@ -711,37 +352,20 @@ watch(
   z-index: -1;
 }
 
-@media (max-width: 1200px) {
-  .user-header-content {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .user-header-right {
-    align-items: stretch;
-    width: 100%;
-  }
-
-  .user-quick-actions {
-    justify-content: flex-start;
-  }
-}
-
 @media (max-width: 768px) {
   .header {
     padding: 0 16px;
   }
 
-  .header-user {
-    padding: 0 16px 20px;
+  .header-main {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
   }
 
-  .user-header-shell {
-    padding: 24px;
-  }
-
-  .user-quick-actions :deep(.el-button.user-quick-button) {
+  .header-actions {
     width: 100%;
+    justify-content: space-between;
   }
 }
 </style>
