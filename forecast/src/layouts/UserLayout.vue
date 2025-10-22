@@ -190,6 +190,7 @@ watch(
   display: flex;
   min-height: 100vh;
   background: linear-gradient(150deg, #f0f9ff 0%, #fdf5ff 45%, #ffffff 100%);
+  overflow-x: hidden;
 }
 
 .quick-panel {
@@ -313,6 +314,7 @@ watch(
   display: flex;
   flex-direction: column;
   backdrop-filter: blur(0px);
+  min-width: 0;
 }
 
 .user-header {
@@ -391,6 +393,7 @@ watch(
   padding: 24px 32px;
   background: transparent;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 @media (max-width: 1024px) {
@@ -400,11 +403,10 @@ watch(
 
   .quick-panel {
     width: 100%;
-    flex-direction: row;
-    align-items: center;
+    flex-direction: column;
+    align-items: stretch;
     gap: 16px;
     padding: 20px 24px;
-    overflow-x: auto;
   }
 
   .quick-brand {

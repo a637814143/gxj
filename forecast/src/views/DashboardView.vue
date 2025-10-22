@@ -15,27 +15,25 @@
           </div>
         </div>
       </div>
-      <div class="hero-side">
-        <div class="side-card">
-          <div class="side-card-title">今日运行速览</div>
-          <div class="side-items">
-            <div v-for="item in quickOverview" :key="item.label" class="side-item">
-              <div class="side-item-label">{{ item.label }}</div>
-              <div class="side-item-value">{{ item.value }}</div>
-              <div class="side-item-trend" :class="{ up: item.trend > 0, down: item.trend < 0 }">
-                {{ formatTrend(item.trend) }}
-              </div>
-            </div>
-          </div>
-          <div class="side-divider" />
-          <div class="side-footer">
-            <div class="side-footer-title">重点提醒</div>
-            <ul>
-              <li v-for="notice in reminders" :key="notice">{{ notice }}</li>
-            </ul>
+      <div class="hero-extra">
+        <div class="extra-grid">
+          <div
+            v-for="item in quickOverview"
+            :key="item.label"
+            class="extra-card"
+            :class="{ positive: item.trend > 0, negative: item.trend < 0 }"
+          >
+            <div class="extra-label">{{ item.label }}</div>
+            <div class="extra-value">{{ item.value }}</div>
+            <div class="extra-trend">{{ formatTrend(item.trend) }}</div>
           </div>
         </div>
-        <div class="hero-decor" />
+        <div class="extra-card reminder-card">
+          <div class="extra-title">重点提醒</div>
+          <ul class="extra-list">
+            <li v-for="notice in reminders" :key="notice">{{ notice }}</li>
+          </ul>
+        </div>
       </div>
     </section>
 
@@ -506,9 +504,9 @@ const tableCellStyle = () => ({
 
 .hero-card {
   position: relative;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
   padding: 32px;
   border-radius: 24px;
   background: linear-gradient(120deg, #e8f1ff 0%, #f4f8ff 35%, #ffffff 100%);
@@ -527,24 +525,14 @@ const tableCellStyle = () => ({
   position: absolute;
   top: -160px;
   right: -160px;
-  width: 400px;
-  height: 400px;
+  width: 360px;
+  height: 360px;
   background: radial-gradient(circle at center, rgba(60, 132, 255, 0.35), transparent 65%);
   transform: rotate(12deg);
 }
 
 .dashboard-page.user-friendly .hero-card::before {
   background: radial-gradient(circle at center, rgba(129, 212, 250, 0.45), transparent 65%);
-}
-
-.dashboard-page.user-friendly .hero-card::after {
-  content: '';
-  position: absolute;
-  bottom: -120px;
-  left: -120px;
-  width: 320px;
-  height: 320px;
-  background: radial-gradient(circle at center, rgba(244, 143, 177, 0.35), transparent 65%);
 }
 
 .hero-copy {
@@ -619,110 +607,107 @@ const tableCellStyle = () => ({
   color: #6e7fa1;
 }
 
-.hero-side {
+.hero-extra {
   position: relative;
   z-index: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 24px;
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 20px;
 }
 
-.side-card {
-  border-radius: 20px;
-  padding: 24px;
-  background: linear-gradient(160deg, rgba(34, 98, 255, 0.92) 0%, rgba(100, 149, 255, 0.8) 65%, rgba(255, 255, 255, 0.95) 100%);
-  color: #fff;
-  box-shadow: 0 20px 45px rgba(32, 84, 204, 0.25);
-  overflow: hidden;
-  position: relative;
+@media (max-width: 1200px) {
+  .hero-extra {
+    grid-template-columns: 1fr;
+  }
 }
 
-.dashboard-page.user-friendly .side-card {
-  background: linear-gradient(165deg, rgba(94, 123, 255, 0.92) 0%, rgba(129, 212, 250, 0.88) 68%, rgba(255, 255, 255, 0.9) 100%);
-  box-shadow: 0 22px 48px rgba(79, 70, 229, 0.22);
-}
-
-.side-card::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 65%);
-  pointer-events: none;
-}
-
-.side-card-title {
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 20px;
-}
-
-.side-items {
-  display: flex;
-  flex-direction: column;
+.extra-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 16px;
 }
 
-.side-item {
+.extra-card {
+  border-radius: 18px;
+  padding: 18px 20px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: inset 0 0 0 1px rgba(34, 98, 255, 0.08);
+  backdrop-filter: blur(4px);
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.16);
-  backdrop-filter: blur(2px);
+  flex-direction: column;
+  gap: 10px;
 }
 
-.side-item-label {
+.dashboard-page.user-friendly .extra-card {
+  background: linear-gradient(140deg, rgba(255, 255, 255, 0.92), rgba(231, 246, 255, 0.88));
+  box-shadow: 0 18px 36px rgba(148, 163, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+}
+
+.extra-card.positive {
+  border-left: 4px solid rgba(45, 212, 191, 0.9);
+}
+
+.extra-card.negative {
+  border-left: 4px solid rgba(248, 113, 113, 0.85);
+}
+
+.extra-label {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.85);
+  color: #52617f;
 }
 
-.side-item-value {
-  font-size: 18px;
+.extra-value {
+  font-size: 22px;
   font-weight: 700;
+  color: #1a2a4a;
 }
 
-.side-item-trend {
+.extra-trend {
   font-size: 12px;
-  font-weight: 500;
+  color: #64748b;
 }
 
-.side-item-trend.up {
-  color: #91ffba;
+.extra-card.positive .extra-trend {
+  color: #0f766e;
 }
 
-.side-item-trend.down {
-  color: #ffd48a;
+.extra-card.negative .extra-trend {
+  color: #be123c;
 }
 
-.side-divider {
-  height: 1px;
-  margin: 24px 0;
-  background: rgba(255, 255, 255, 0.28);
+.reminder-card {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(14, 165, 233, 0.12));
+  border: 1px solid rgba(14, 165, 233, 0.15);
 }
 
-.side-footer-title {
-  font-size: 14px;
+.dashboard-page.user-friendly .reminder-card {
+  background: linear-gradient(135deg, rgba(165, 180, 252, 0.2), rgba(110, 231, 183, 0.18));
+  border: 1px solid rgba(255, 255, 255, 0.55);
+}
+
+.extra-title {
+  font-size: 15px;
   font-weight: 600;
-  margin-bottom: 12px;
+  color: #163b8c;
 }
 
-.side-footer ul {
+.extra-list {
   margin: 0;
   padding-left: 18px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  color: rgba(255, 255, 255, 0.85);
+  gap: 8px;
   font-size: 13px;
+  color: #42526b;
 }
 
-.hero-decor {
-  height: 140px;
-  border-radius: 22px;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.8), rgba(214, 228, 255, 0.6));
-  box-shadow: inset 0 0 0 1px rgba(34, 98, 255, 0.1);
+.dashboard-page.user-friendly .extra-title {
+  color: #4338ca;
+}
+
+.dashboard-page.user-friendly .extra-list {
+  color: #4c1d95;
 }
 
 .filter-card,
