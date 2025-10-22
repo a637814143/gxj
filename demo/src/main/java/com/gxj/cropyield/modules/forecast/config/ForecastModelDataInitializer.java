@@ -9,6 +9,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
+/**
+ * 预测管理模块的配置类，配置预测管理相关的基础设施与框架行为。
+ * <p>核心方法：run、ensureDefaultModel。</p>
+ */
 
 @Component
 public class ForecastModelDataInitializer implements ApplicationRunner {

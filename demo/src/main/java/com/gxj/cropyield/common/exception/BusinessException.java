@@ -1,6 +1,9 @@
 package com.gxj.cropyield.common.exception;
 
 import com.gxj.cropyield.common.response.ResultCode;
+/**
+ * 统一异常模块的异常类，用于标识统一异常流程中的错误状态。
+ */
 
 public class BusinessException extends RuntimeException {
 

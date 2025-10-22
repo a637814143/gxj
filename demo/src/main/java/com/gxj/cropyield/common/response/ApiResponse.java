@@ -1,6 +1,9 @@
 package com.gxj.cropyield.common.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+/**
+ * 通用响应模块的数据传输对象（记录类型），在通用响应场景下承载参数与返回值。
+ */
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record ApiResponse<T>(int code, String message, T data) {

@@ -48,6 +48,10 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
+/**
+ * 报表分析模块的业务实现类，负责落实报表分析领域的业务处理逻辑。
+ * <p>核心方法：getOverview、create、generate、getDetail、toDetail、toSummary、buildSection、toSectionResponse。</p>
+ */
 
 @Service
 public class ReportServiceImpl implements ReportService {

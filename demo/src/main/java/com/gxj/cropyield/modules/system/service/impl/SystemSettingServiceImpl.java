@@ -12,6 +12,10 @@ import com.gxj.cropyield.modules.system.service.SystemSettingService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+/**
+ * 系统设置模块的业务实现类，负责落实系统设置领域的业务处理逻辑。
+ * <p>核心方法：getCurrentSettings、toResponse、updateSettings、createDefaultSetting、normalizeNullable。</p>
+ */
 
 @Service
 public class SystemSettingServiceImpl implements SystemSettingService {

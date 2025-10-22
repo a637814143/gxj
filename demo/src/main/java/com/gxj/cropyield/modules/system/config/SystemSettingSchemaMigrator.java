@@ -7,6 +7,10 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
+/**
+ * 系统设置模块的配置类，配置系统设置相关的基础设施与框架行为。
+ * <p>核心方法：run、tableExists、createTable、ensureColumn、columnExists、ensureForeignKey、foreignKeyExists、executeDdl。</p>
+ */
 
 @Component
 public class SystemSettingSchemaMigrator implements ApplicationRunner {

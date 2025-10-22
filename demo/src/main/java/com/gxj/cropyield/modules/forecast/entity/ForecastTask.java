@@ -4,6 +4,9 @@ import com.gxj.cropyield.common.model.BaseEntity;
 import com.gxj.cropyield.modules.base.entity.Crop;
 import com.gxj.cropyield.modules.base.entity.Region;
 import jakarta.persistence.*;
+/**
+ * 预测管理模块的实体类，映射预测管理领域对应的数据表结构。
+ */
 
 @Entity
 @Table(name = "forecast_task")

@@ -17,11 +17,10 @@ import org.nd4j.linalg.lossfunctions.LossFunctions;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-
 /**
- * Minimal DL4J based forecaster that trains an in-memory LSTM model on the
- * provided history and produces iterative forecasts.
+ * 预测管理模块的业务组件，封装预测管理的算法或执行流程。
  */
+
 class Dl4jLstmForecaster {
 
     private static final int MIN_WINDOW_SIZE = 2;

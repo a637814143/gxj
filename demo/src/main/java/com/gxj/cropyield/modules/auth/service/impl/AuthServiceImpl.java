@@ -33,6 +33,10 @@ import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
+/**
+ * 认证与账号模块的业务实现类，负责落实认证与账号领域的业务处理逻辑。
+ * <p>核心方法：login、performLogin、loginAsAdmin、loginAsUser、register、refreshToken、buildTokens、getCurrentUser。</p>
+ */
 
 @Service
 public class AuthServiceImpl implements AuthService {

@@ -21,6 +21,10 @@ import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
+/**
+ * 认证与账号模块的业务实现类，负责落实认证与账号领域的业务处理逻辑。
+ * <p>核心方法：getCurrentProfile、toResponse、updateProfile、changePassword、loadCurrentUser。</p>
+ */
 
 @Service
 public class ProfileServiceImpl implements ProfileService {

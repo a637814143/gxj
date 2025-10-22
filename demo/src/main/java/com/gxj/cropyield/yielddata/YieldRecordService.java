@@ -29,6 +29,10 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
+/**
+ * 产量数据模块的业务接口，定义产量数据相关的核心业务操作。
+ * <p>核心方法：search、exportAsExcel、exportAsPdf、setNumeric、addHeaderCell、addBodyCell、buildFilterSummary、formatNumber。</p>
+ */
 
 @Service
 public class YieldRecordService {

@@ -71,6 +71,10 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+/**
+ * 数据导入模块的业务接口，定义数据导入相关的核心业务操作。
+ * <p>核心方法：deleteTasks、submitImport、mapToView、listJobs、getJobDetail、processJobAsync、ensureDatasetFile、updateDatasetFileMetadata。</p>
+ */
 
 @Service
 public class DataImportService {

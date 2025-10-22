@@ -6,6 +6,9 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
+/**
+ * 预测管理模块的实体类，映射预测管理领域对应的数据表结构。
+ */
 
 @Entity
 @Table(name = "forecast_model")

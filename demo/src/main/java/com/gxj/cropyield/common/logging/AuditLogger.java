@@ -5,6 +5,9 @@ import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
+/**
+ * 审计日志模块的日志组件，记录审计日志的操作轨迹。
+ */
 
 @Component
 public class AuditLogger {

@@ -17,6 +17,10 @@ import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+/**
+ * 认证与账号模块的业务实现类，负责落实认证与账号领域的业务处理逻辑。
+ * <p>核心方法：createCaptcha、validate、cleanupExpired、generateCaptcha、switch、generateAddition、generateSubtraction、generateMultiplication。</p>
+ */
 
 @Service
 public class CaptchaServiceImpl implements CaptchaService {

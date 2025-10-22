@@ -4,6 +4,10 @@ import com.gxj.cropyield.modules.base.dto.RegionRequest;
 import com.gxj.cropyield.modules.base.entity.Region;
 
 import java.util.List;
+/**
+ * 基础数据模块的业务接口（接口），定义基础数据相关的核心业务操作。
+ * <p>核心方法：listAll、create、update、delete。</p>
+ */
 
 public interface RegionService {
 

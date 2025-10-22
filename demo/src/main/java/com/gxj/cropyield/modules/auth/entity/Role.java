@@ -5,6 +5,9 @@ import jakarta.persistence.*;
 
 import java.util.HashSet;
 import java.util.Set;
+/**
+ * 认证与账号模块的实体类，映射认证与账号领域对应的数据表结构。
+ */
 
 @Entity
 @Table(name = "sys_role")

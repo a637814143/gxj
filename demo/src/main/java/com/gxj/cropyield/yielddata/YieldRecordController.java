@@ -13,6 +13,10 @@ import org.springframework.web.bind.annotation.RestController;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.List;
+/**
+ * 产量数据模块的控制器，用于暴露产量数据相关的 REST 接口。
+ * <p>核心方法：list、exportExcel、buildFileResponse、exportPdf。</p>
+ */
 
 @RestController("yieldDataRecordController")
 @RequestMapping("/api/yields")

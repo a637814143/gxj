@@ -14,6 +14,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+/**
+ * 报表分析模块的控制器，用于暴露报表分析相关的 REST 接口。
+ * <p>核心方法：listReports、createReport、generate、detail。</p>
+ */
 
 @RestController
 @RequestMapping("/api/report")

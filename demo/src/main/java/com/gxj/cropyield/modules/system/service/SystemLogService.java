@@ -8,6 +8,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
+/**
+ * 系统设置模块的业务接口，定义系统设置相关的核心业务操作。
+ * <p>核心方法：record、list。</p>
+ */
 @Service
 public class SystemLogService {
 

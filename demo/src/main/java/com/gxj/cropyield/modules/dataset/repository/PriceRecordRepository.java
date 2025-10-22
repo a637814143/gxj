@@ -7,6 +7,9 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.util.List;
+/**
+ * 数据集管理模块的数据访问接口（接口），封装了对数据集管理相关数据表的持久化操作。
+ */
 
 public interface PriceRecordRepository extends JpaRepository<PriceRecord, Long> {
 

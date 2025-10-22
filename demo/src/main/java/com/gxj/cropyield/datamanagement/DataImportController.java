@@ -18,6 +18,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import org.springframework.web.multipart.MultipartFile;
+/**
+ * 数据导入模块的控制器，用于暴露数据导入相关的 REST 接口。
+ * <p>核心方法：upload、listTasks、getTask、deleteTasks。</p>
+ */
 
 @RestController
 @RequestMapping("/api/data-import")

@@ -7,6 +7,9 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+/**
+ * 预测管理模块的实体类，映射预测管理领域对应的数据表结构。
+ */
 
 @Entity
 @Table(name = "forecast_result")

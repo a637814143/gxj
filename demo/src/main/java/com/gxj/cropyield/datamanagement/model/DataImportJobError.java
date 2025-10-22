@@ -7,6 +7,9 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+/**
+ * 数据导入模块的模型定义，描述数据导入领域的公共数据结构。
+ */
 
 @Entity
 @Table(name = "data_import_job_error")

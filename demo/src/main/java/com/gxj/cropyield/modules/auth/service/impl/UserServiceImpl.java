@@ -23,6 +23,10 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+/**
+ * 认证与账号模块的业务实现类，负责落实认证与账号领域的业务处理逻辑。
+ * <p>核心方法：listUsers、createUser、toResponse、updateUser、deleteUser、updatePassword、listRoles、resolveRoles。</p>
+ */
 
 @Service
 public class UserServiceImpl implements UserService {

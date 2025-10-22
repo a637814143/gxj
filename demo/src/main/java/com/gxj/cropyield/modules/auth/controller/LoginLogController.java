@@ -23,6 +23,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
+/**
+ * 认证与账号模块的控制器，用于暴露认证与账号相关的 REST 接口。
+ * <p>核心方法：list、summary、detail、create、update、delete。</p>
+ */
 
 @RestController
 @RequestMapping("/api/system/login-logs")

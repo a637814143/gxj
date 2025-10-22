@@ -13,6 +13,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+/**
+ * 预测管理模块的业务组件，封装预测管理的算法或执行流程。
+ */
 
 @Component
 public class LocalForecastEngine {

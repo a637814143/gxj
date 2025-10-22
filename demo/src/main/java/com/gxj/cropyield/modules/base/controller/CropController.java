@@ -12,6 +12,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+/**
+ * 基础数据模块的控制器，用于暴露基础数据相关的 REST 接口。
+ * <p>核心方法：listCrops、createCrop。</p>
+ */
 
 @RestController
 @RequestMapping("/api/base/crops")

@@ -15,6 +15,10 @@ import org.springframework.stereotype.Component;
 import java.util.Collections;
 import java.util.List;
 import java.util.regex.Pattern;
+/**
+ * 认证与账号模块的配置类，配置认证与账号相关的基础设施与框架行为。
+ * <p>核心方法：run、ensureExistingPasswordsEncrypted、isPasswordEncoded、ensureRole、refreshAdminAccount。</p>
+ */
 
 @Component
 public class AuthDataInitializer implements ApplicationRunner {

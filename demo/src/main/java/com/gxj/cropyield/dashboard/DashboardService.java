@@ -21,6 +21,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
+/**
+ * 驾驶舱统计模块的业务接口，定义驾驶舱统计相关的核心业务操作。
+ * <p>核心方法：getSummary、buildProductionTrend、buildCropStructure、buildRegionComparisons、buildRecentRecords、round、buildForecast、safe。</p>
+ */
 
 @Service
 public class DashboardService {
