@@ -15,31 +15,9 @@
           </div>
         </div>
       </div>
-      <div class="hero-side">
-        <div class="side-card">
-          <div class="side-card-title">生成规划</div>
-          <div class="side-items">
-            <div v-for="item in quickOverview" :key="item.label" class="side-item">
-              <div class="side-item-label">{{ item.label }}</div>
-              <div class="side-item-value">{{ item.value }}</div>
-              <div class="side-item-trend" :class="{ up: item.trend > 0, down: item.trend < 0 }">
-                {{ formatTrend(item.trend) }}
-              </div>
-            </div>
-          </div>
-          <div class="side-divider" />
-          <div class="side-footer">
-            <div class="side-footer-title">制作建议</div>
-            <ul>
-              <li v-for="notice in reminders" :key="notice">{{ notice }}</li>
-            </ul>
-          </div>
-        </div>
-        <div class="hero-decor" />
-      </div>
     </section>
 
-    <el-card class="report-card" shadow="hover" v-loading="loading">
+    <el-card ref="reportListCard" class="report-card" shadow="hover" v-loading="loading">
       <template #header>
         <div class="card-header">
           <div>
@@ -95,12 +73,16 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useRoute, useRouter } from 'vue-router'
 import { fetchReportOverview } from '../services/report'
 import { useAuthorization } from '../composables/useAuthorization'
 import ReportGenerateDialog from '../components/report/ReportGenerateDialog.vue'
 import ReportDetailDrawer from '../components/report/ReportDetailDrawer.vue'
+
+const router = useRouter()
+const route = useRoute()
 
 const reports = ref([])
 const metrics = ref({ totalReports: 0, publishedThisMonth: 0, pendingApproval: 0, autoGenerationEnabled: false })
@@ -109,6 +91,7 @@ const showGenerateDialog = ref(false)
 const showDetailDrawer = ref(false)
 const activeReportId = ref(null)
 const activeReportSummary = ref(null)
+const reportListCard = ref(null)
 const reportPagination = reactive({
   currentPage: 1,
   pageSize: 5,
@@ -146,42 +129,6 @@ const highlightStats = computed(() => {
     }
   ]
 })
-
-const quickOverview = computed(() => [
-  { label: '本月发布', value: `${metrics.value.publishedThisMonth ?? 0} 份`, trend: metrics.value.publishedThisMonth > 0 ? 1 : 0 },
-  { label: '待审核', value: `${metrics.value.pendingApproval ?? 0} 份`, trend: metrics.value.pendingApproval > 0 ? 1 : 0 },
-  { label: '自动生成', value: metrics.value.autoGenerationEnabled ? '启用' : '未启用', trend: 0 }
-])
-
-const reminders = computed(() => {
-  const items = []
-  if (metrics.value.pendingApproval > 0) {
-    items.push(`存在 ${metrics.value.pendingApproval} 份待审核报告，请尽快处理以便发布`)
-  } else {
-    items.push('暂无待审核报告，可根据计划安排新的分析任务')
-  }
-
-  items.push(
-    metrics.value.autoGenerationEnabled
-      ? '自动生成已启用，建议定期检查模板确保输出格式一致'
-      : '自动生成未启用，可在系统设置中开启以节省手工操作'
-  )
-
-  const latest = reports.value[0]
-  if (latest) {
-    items.push(`最新报告覆盖周期 ${latest.coveragePeriod || '近期数据'}，请及时共享给相关团队`)
-  } else {
-    items.push('尚未生成报告，请先运行预测任务并生成首份报告')
-  }
-
-  return items
-})
-
-function formatTrend(value) {
-  if (value > 0) return `较昨日 +${value}`
-  if (value < 0) return `较昨日 ${value}`
-  return '较昨日 持平'
-}
 
 function formatDate(value) {
   if (!value) return '暂无'
@@ -226,6 +173,28 @@ onMounted(() => {
   fetchReports()
 })
 
+const clearRouteQueryKeys = keys => {
+  const normalized = Array.isArray(keys) ? keys : [keys]
+  const currentQuery = { ...route.query }
+  let mutated = false
+  normalized.forEach(key => {
+    if (key in currentQuery) {
+      delete currentQuery[key]
+      mutated = true
+    }
+  })
+  if (mutated) {
+    router.replace({ query: currentQuery }).catch(() => {})
+  }
+}
+
+const scrollToReportList = () => {
+  nextTick(() => {
+    const target = reportListCard.value?.$el || reportListCard.value
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  })
+}
+
 const createReport = () => {
   if (!canGenerateReport.value) {
     ElMessage.warning('当前账号没有生成报告的权限')
@@ -259,6 +228,28 @@ const viewReport = report => {
   activeReportId.value = report.id
   showDetailDrawer.value = true
 }
+
+watch(
+  () => route.query.action,
+  action => {
+    if (action === 'generate') {
+      createReport()
+      clearRouteQueryKeys('action')
+    }
+  },
+  { immediate: true }
+)
+
+watch(
+  () => route.query.focus,
+  focus => {
+    if (focus === 'list') {
+      scrollToReportList()
+      clearRouteQueryKeys('focus')
+    }
+  },
+  { immediate: true }
+)
 </script>
 
 <style scoped>
@@ -272,8 +263,8 @@ const viewReport = report => {
 .hero-card {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 32px;
+  grid-template-columns: 1fr;
+  gap: 24px;
   padding: 32px;
   border-radius: 24px;
   background: linear-gradient(120deg, #e8f1ff 0%, #f4f8ff 35%, #ffffff 100%);
@@ -358,107 +349,6 @@ const viewReport = report => {
   color: #6e7fa1;
 }
 
-.hero-side {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 24px;
-}
-
-.side-card {
-  border-radius: 20px;
-  padding: 24px;
-  background: linear-gradient(160deg, rgba(34, 98, 255, 0.92) 0%, rgba(100, 149, 255, 0.8) 65%, rgba(255, 255, 255, 0.95) 100%);
-  color: #fff;
-  box-shadow: 0 20px 45px rgba(32, 84, 204, 0.25);
-  overflow: hidden;
-  position: relative;
-}
-
-.side-card::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 65%);
-  pointer-events: none;
-}
-
-.side-card-title {
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 20px;
-}
-
-.side-items {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.side-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.16);
-  backdrop-filter: blur(2px);
-}
-
-.side-item-label {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.85);
-}
-
-.side-item-value {
-  font-size: 18px;
-  font-weight: 700;
-}
-
-.side-item-trend {
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.side-item-trend.up {
-  color: #91ffba;
-}
-
-.side-item-trend.down {
-  color: #ffd48a;
-}
-
-.side-divider {
-  height: 1px;
-  margin: 24px 0;
-  background: rgba(255, 255, 255, 0.28);
-}
-
-.side-footer-title {
-  font-size: 14px;
-  font-weight: 600;
-  margin-bottom: 12px;
-}
-
-.side-footer ul {
-  margin: 0;
-  padding-left: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  color: rgba(255, 255, 255, 0.85);
-  font-size: 13px;
-}
-
-.hero-decor {
-  height: 140px;
-  border-radius: 22px;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.8), rgba(214, 228, 255, 0.6));
-  box-shadow: inset 0 0 0 1px rgba(34, 98, 255, 0.1);
-}
-
 .report-card {
   border-radius: 20px;
   overflow: hidden;
@@ -538,6 +428,10 @@ const viewReport = report => {
   }
 
   .hero-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .actions-grid {
     grid-template-columns: 1fr;
   }
 }

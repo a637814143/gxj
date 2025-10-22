@@ -1,9 +1,15 @@
 <template>
   <div class="login-page">
     <div class="login-card">
+      <div class="login-toggle">
+        <el-radio-group v-model="loginMode" size="large" class="login-toggle-group">
+          <el-radio-button label="admin">管理员登录</el-radio-button>
+          <el-radio-button label="user">用户登录</el-radio-button>
+        </el-radio-group>
+      </div>
       <div class="login-header">
         <h1>农作物产量预测平台</h1>
-        <p>请使用授权账号登录系统</p>
+        <p>{{ loginSubtitle }}</p>
       </div>
       <el-form :model="form" class="login-form" @keyup.enter="handleSubmit">
         <el-form-item>
@@ -42,16 +48,23 @@
           <el-button type="primary" :loading="loading" @click="handleSubmit" class="login-button">登录</el-button>
         </div>
       </el-form>
+      <p class="login-mode-hint">{{ loginModeHint }}</p>
       <div class="switch-auth">
-        还没有账号？
-        <el-link type="primary" @click.prevent="goToRegister">立即注册</el-link>
+        <template v-if="loginMode === 'admin'">
+          普通用户入口？
+          <el-link type="primary" @click.prevent="switchToMode('user')">切换至用户登录</el-link>
+        </template>
+        <template v-else>
+          还没有账号？
+          <el-link type="primary" @click.prevent="goToRegister">立即注册</el-link>
+        </template>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Lock, Picture } from '@element-plus/icons-vue'
@@ -61,6 +74,8 @@ import { useAuthStore } from '../stores/auth'
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+
+const loginMode = ref(route.query.mode === 'user' ? 'user' : 'admin')
 
 const form = reactive({
   username: '',
@@ -72,6 +87,18 @@ const form = reactive({
 const captchaId = ref('')
 const captchaImage = ref('')
 const loading = ref(false)
+
+const loginSubtitle = computed(() =>
+  loginMode.value === 'admin'
+    ? '系统管理员与农业部门账号请从此入口登录'
+    : '企业/农户等普通用户请从此入口登录'
+)
+
+const loginModeHint = computed(() =>
+  loginMode.value === 'admin'
+    ? '管理员登录后可使用数据管理、预测建模、系统维护等高级功能'
+    : '普通用户登录后可查看预测结果、报告中心和个人资料等功能'
+)
 
 const refreshCaptcha = async () => {
   try {
@@ -99,7 +126,8 @@ const handleSubmit = async () => {
       password: form.password,
       captchaCode: form.captchaCode,
       captchaId: captchaId.value,
-      rememberMe: form.rememberMe
+      rememberMe: form.rememberMe,
+      loginMode: loginMode.value
     })
     const redirect = route.query.redirect || '/dashboard'
     await router.replace(redirect)
@@ -121,6 +149,17 @@ const goToRegister = () => {
   const redirect = route.query.redirect
   router.push({ name: 'register', ...(redirect ? { query: { redirect } } : {}) })
 }
+
+const switchToMode = mode => {
+  loginMode.value = mode
+  const nextQuery = { ...route.query }
+  if (mode === 'admin') {
+    delete nextQuery.mode
+  } else {
+    nextQuery.mode = mode
+  }
+  router.replace({ name: 'login', query: nextQuery }).catch(() => {})
+}
 </script>
 
 <style scoped>
@@ -140,6 +179,16 @@ const goToRegister = () => {
   border-radius: 16px;
   box-shadow: 0 24px 48px rgba(11, 61, 46, 0.25);
   padding: 32px;
+}
+
+.login-toggle {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.login-toggle-group {
+  width: 100%;
 }
 
 .login-header {
@@ -199,6 +248,14 @@ const goToRegister = () => {
 
 .login-button {
   min-width: 120px;
+}
+
+.login-mode-hint {
+  margin: 16px 0 0;
+  color: #607d8b;
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
 }
 
 .switch-auth {

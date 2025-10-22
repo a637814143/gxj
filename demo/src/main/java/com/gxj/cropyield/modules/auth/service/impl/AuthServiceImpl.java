@@ -29,6 +29,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -69,28 +70,33 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public LoginResponse login(LoginRequest request, String ipAddress, String userAgent) {
-        captchaService.validate(request.captchaId(), request.captchaCode());
+        return performLogin(request, ipAddress, userAgent, null, null, "登录成功");
+    }
 
-        Authentication authentication;
-        try {
-            authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.username(), request.password())
-            );
-        } catch (AuthenticationException ex) {
-            throw new BusinessException(ResultCode.UNAUTHORIZED, "用户名或密码错误");
-        }
+    @Override
+    @Transactional
+    public LoginResponse loginAsAdmin(LoginRequest request, String ipAddress, String userAgent) {
+        return performLogin(
+            request,
+            ipAddress,
+            userAgent,
+            EnumSet.of(SystemRole.ADMIN, SystemRole.AGRICULTURE_DEPT),
+            "该账号无权使用管理员登录",
+            "管理员登录成功"
+        );
+    }
 
-        SecurityContextHolder.getContext().setAuthentication(authentication);
-
-        User user = userRepository.findByUsername(authentication.getName())
-            .orElseThrow(() -> new BusinessException(ResultCode.UNAUTHORIZED, "用户名或密码错误"));
-
-        RefreshToken refreshToken = refreshTokenService.create(user);
-        AuthTokens tokens = buildTokens(authentication, refreshToken.getToken());
-        UserInfo userInfo = buildUserInfo(user);
-
-        loginLogService.record(user.getUsername(), true, ipAddress, userAgent, "登录成功");
-        return new LoginResponse(tokens, userInfo);
+    @Override
+    @Transactional
+    public LoginResponse loginAsUser(LoginRequest request, String ipAddress, String userAgent) {
+        return performLogin(
+            request,
+            ipAddress,
+            userAgent,
+            EnumSet.of(SystemRole.FARMER),
+            "该账号无权使用用户登录",
+            "用户登录成功"
+        );
     }
 
     @Override
@@ -158,6 +164,50 @@ public class AuthServiceImpl implements AuthService {
         }
         return authentication.getAuthorities().stream()
             .anyMatch(authority -> authority.getAuthority().equals("ROLE_" + roleCode));
+    }
+
+    private LoginResponse performLogin(LoginRequest request,
+                                        String ipAddress,
+                                        String userAgent,
+                                        Set<SystemRole> allowedRoles,
+                                        String forbiddenMessage,
+                                        String successMessage) {
+        captchaService.validate(request.captchaId(), request.captchaCode());
+
+        Authentication authentication;
+        try {
+            authentication = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(request.username(), request.password())
+            );
+        } catch (AuthenticationException ex) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED, "用户名或密码错误");
+        }
+
+        User user = userRepository.findByUsername(authentication.getName())
+            .orElseThrow(() -> new BusinessException(ResultCode.UNAUTHORIZED, "用户名或密码错误"));
+
+        if (allowedRoles != null && !allowedRoles.isEmpty()) {
+            Set<String> allowedCodes = allowedRoles.stream()
+                .map(SystemRole::getCode)
+                .collect(Collectors.toSet());
+            boolean hasAllowedRole = user.getRoles().stream()
+                .map(Role::getCode)
+                .anyMatch(allowedCodes::contains);
+            if (!hasAllowedRole) {
+                throw new BusinessException(ResultCode.FORBIDDEN,
+                    forbiddenMessage != null ? forbiddenMessage : "当前账号没有访问权限");
+            }
+        }
+
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+
+        RefreshToken refreshToken = refreshTokenService.create(user);
+        AuthTokens tokens = buildTokens(authentication, refreshToken.getToken());
+        UserInfo userInfo = buildUserInfo(user);
+
+        loginLogService.record(user.getUsername(), true, ipAddress, userAgent,
+            successMessage != null ? successMessage : "登录成功");
+        return new LoginResponse(tokens, userInfo);
     }
 
     private AuthTokens buildTokens(Authentication authentication, String refreshToken) {

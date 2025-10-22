@@ -71,7 +71,7 @@ public class ApplicationSecurityConfig {
             .authenticationProvider(authenticationProvider())
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/captcha", "/api/auth/refresh", "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**").permitAll()
+                .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/login/admin", "/api/auth/login/user", "/api/auth/captcha", "/api/auth/refresh", "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/datasets/**", "/api/yields/**", "/api/dashboard/**", "/api/base/**", "/api/forecast/models/**", "/api/forecast/tasks/**", "/api/report/**").hasAnyRole("ADMIN", "AGRICULTURE_DEPT", "FARMER")
                 .requestMatchers(HttpMethod.GET, "/api/system/settings").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/forecast/models/**", "/api/forecast/tasks/**").hasAnyRole("ADMIN", "AGRICULTURE_DEPT")

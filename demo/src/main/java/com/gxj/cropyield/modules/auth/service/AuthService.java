@@ -10,6 +10,10 @@ public interface AuthService {
 
     LoginResponse login(LoginRequest request, String ipAddress, String userAgent);
 
+    LoginResponse loginAsAdmin(LoginRequest request, String ipAddress, String userAgent);
+
+    LoginResponse loginAsUser(LoginRequest request, String ipAddress, String userAgent);
+
     LoginResponse register(RegisterRequest request, String ipAddress, String userAgent);
 
     AuthTokens refreshToken(String refreshToken);
