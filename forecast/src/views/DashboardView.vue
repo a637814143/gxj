@@ -1,5 +1,5 @@
 <template>
-  <div class="dashboard-page">
+  <div :class="['dashboard-page', { 'user-friendly': isUserTheme }]">
     <section class="hero-card">
       <div class="hero-copy">
         <div class="hero-badge">云惠农作业智能分析系统</div>
@@ -172,6 +172,17 @@ import { computed, reactive, ref, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import apiClient from '../services/http'
 import { deleteForecastRun } from '@/services/forecast'
+import { useAuthStore } from '@/stores/auth'
+
+const authStore = useAuthStore()
+const isUserTheme = computed(() => {
+  const roles = authStore.user?.roles
+  if (!roles) return true
+  if (Array.isArray(roles)) {
+    return !roles.includes('ADMIN')
+  }
+  return roles !== 'ADMIN'
+})
 
 const summary = ref(null)
 const summaryLoading = ref(false)
@@ -469,11 +480,28 @@ const tableCellStyle = () => ({
 </script>
 
 <style scoped>
+
 .dashboard-page {
   display: flex;
   flex-direction: column;
   gap: 24px;
   padding-bottom: 32px;
+}
+
+.dashboard-page.user-friendly {
+  position: relative;
+  padding: 4px 0 40px;
+  background: radial-gradient(circle at top left, rgba(129, 212, 250, 0.22), transparent 55%),
+    radial-gradient(circle at 20% 80%, rgba(244, 143, 177, 0.2), transparent 60%),
+    linear-gradient(160deg, #f4f9ff 0%, #fef6ff 52%, #ffffff 100%);
+}
+
+.dashboard-page.user-friendly::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.4), transparent 60%);
+  pointer-events: none;
 }
 
 .hero-card {
@@ -488,6 +516,12 @@ const tableCellStyle = () => ({
   overflow: hidden;
 }
 
+.dashboard-page.user-friendly .hero-card {
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: linear-gradient(120deg, rgba(231, 245, 255, 0.95) 0%, rgba(247, 233, 255, 0.9) 52%, rgba(255, 255, 255, 0.95) 100%);
+  box-shadow: 0 26px 70px rgba(122, 123, 255, 0.18);
+}
+
 .hero-card::before {
   content: '';
   position: absolute;
@@ -497,6 +531,20 @@ const tableCellStyle = () => ({
   height: 400px;
   background: radial-gradient(circle at center, rgba(60, 132, 255, 0.35), transparent 65%);
   transform: rotate(12deg);
+}
+
+.dashboard-page.user-friendly .hero-card::before {
+  background: radial-gradient(circle at center, rgba(129, 212, 250, 0.45), transparent 65%);
+}
+
+.dashboard-page.user-friendly .hero-card::after {
+  content: '';
+  position: absolute;
+  bottom: -120px;
+  left: -120px;
+  width: 320px;
+  height: 320px;
+  background: radial-gradient(circle at center, rgba(244, 143, 177, 0.35), transparent 65%);
 }
 
 .hero-copy {
@@ -547,6 +595,12 @@ const tableCellStyle = () => ({
   backdrop-filter: blur(4px);
 }
 
+.dashboard-page.user-friendly .hero-stat {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(232, 244, 255, 0.85));
+  box-shadow: 0 16px 36px rgba(102, 126, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+}
+
 .hero-stat-label {
   font-size: 12px;
   color: #5c6d8d;
@@ -582,6 +636,11 @@ const tableCellStyle = () => ({
   box-shadow: 0 20px 45px rgba(32, 84, 204, 0.25);
   overflow: hidden;
   position: relative;
+}
+
+.dashboard-page.user-friendly .side-card {
+  background: linear-gradient(165deg, rgba(94, 123, 255, 0.92) 0%, rgba(129, 212, 250, 0.88) 68%, rgba(255, 255, 255, 0.9) 100%);
+  box-shadow: 0 22px 48px rgba(79, 70, 229, 0.22);
 }
 
 .side-card::after {
@@ -672,6 +731,25 @@ const tableCellStyle = () => ({
   overflow: hidden;
 }
 
+.dashboard-page.user-friendly .filter-card,
+.dashboard-page.user-friendly .table-card {
+  border: none;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.92) 0%, rgba(237, 248, 255, 0.9) 60%, rgba(255, 255, 255, 0.95) 100%);
+  box-shadow: 0 28px 54px rgba(148, 163, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+}
+
+.dashboard-page.user-friendly :deep(.filter-card .el-card__header),
+.dashboard-page.user-friendly :deep(.table-card .el-card__header) {
+  background: linear-gradient(120deg, rgba(230, 244, 255, 0.8), rgba(255, 255, 255, 0.85));
+  border-bottom: 1px solid rgba(209, 213, 255, 0.35);
+}
+
+.dashboard-page.user-friendly :deep(.filter-card .el-card__body),
+.dashboard-page.user-friendly :deep(.table-card .el-card__body) {
+  background: transparent;
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;
@@ -742,6 +820,11 @@ const tableCellStyle = () => ({
   background: #e3f2fd;
   color: #1565c0;
   font-weight: 600;
+}
+
+.dashboard-page.user-friendly .pagination-badge {
+  background: rgba(129, 212, 250, 0.2);
+  color: #0f766e;
 }
 
 @media (max-width: 992px) {

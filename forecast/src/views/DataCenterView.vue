@@ -1,5 +1,5 @@
 <template>
-  <div class="data-center-page">
+  <div :class="['data-center-page', { 'user-friendly': isUserTheme }]">
     <section class="hero-card">
       <div class="hero-copy">
         <div class="hero-badge">云惠农作业智能分析系统</div>
@@ -346,6 +346,17 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import apiClient from '../services/http'
+import { useAuthStore } from '@/stores/auth'
+
+const authStore = useAuthStore()
+const isUserTheme = computed(() => {
+  const roles = authStore.user?.roles
+  if (!roles) return true
+  if (Array.isArray(roles)) {
+    return !roles.includes('ADMIN')
+  }
+  return roles !== 'ADMIN'
+})
 
 const TASK_PAGE_SIZE = 5
 
@@ -1292,6 +1303,81 @@ onBeforeUnmount(() => {
 
 .upload-tip-list li + li {
   margin-top: 4px;
+}
+
+/* User theme enhancements */
+.data-center-page.user-friendly {
+  position: relative;
+  padding: 4px 0 40px;
+  background: radial-gradient(circle at 15% 20%, rgba(129, 212, 250, 0.22), transparent 55%),
+    radial-gradient(circle at 80% 80%, rgba(244, 143, 177, 0.18), transparent 60%),
+    linear-gradient(150deg, #f5fbff 0%, #fef7ff 50%, #ffffff 100%);
+}
+
+.data-center-page.user-friendly::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.45), transparent 65%);
+  pointer-events: none;
+}
+
+.data-center-page.user-friendly .hero-card {
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: linear-gradient(115deg, rgba(229, 246, 255, 0.95) 0%, rgba(245, 232, 255, 0.9) 50%, rgba(255, 255, 255, 0.95) 100%);
+  box-shadow: 0 28px 68px rgba(136, 132, 255, 0.18);
+}
+
+.data-center-page.user-friendly .hero-card::before {
+  background: radial-gradient(circle at center, rgba(129, 212, 250, 0.45), transparent 65%);
+}
+
+.data-center-page.user-friendly .hero-card::after {
+  content: '';
+  position: absolute;
+  bottom: -120px;
+  left: -120px;
+  width: 320px;
+  height: 320px;
+  background: radial-gradient(circle at center, rgba(244, 143, 177, 0.32), transparent 65%);
+}
+
+.data-center-page.user-friendly .hero-stat {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(233, 246, 255, 0.85));
+  box-shadow: 0 16px 36px rgba(102, 126, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+}
+
+.data-center-page.user-friendly .side-card {
+  background: linear-gradient(165deg, rgba(94, 123, 255, 0.92) 0%, rgba(129, 212, 250, 0.88) 68%, rgba(255, 255, 255, 0.9) 100%);
+  box-shadow: 0 24px 50px rgba(96, 110, 255, 0.22);
+}
+
+.data-center-page.user-friendly .data-card {
+  border: none;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.92) 0%, rgba(237, 248, 255, 0.9) 60%, rgba(255, 255, 255, 0.95) 100%);
+  box-shadow: 0 28px 54px rgba(148, 163, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+}
+
+.data-center-page.user-friendly :deep(.data-card .el-card__header) {
+  background: linear-gradient(120deg, rgba(230, 244, 255, 0.82), rgba(255, 255, 255, 0.88));
+  border-bottom: 1px solid rgba(209, 213, 255, 0.3);
+}
+
+.data-center-page.user-friendly :deep(.data-card .el-card__body) {
+  background: transparent;
+}
+
+.data-center-page.user-friendly .summary-item {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(235, 245, 255, 0.88));
+  border: 1px solid rgba(209, 213, 255, 0.4);
+  box-shadow: 0 14px 30px rgba(143, 155, 255, 0.18);
+}
+
+.data-center-page.user-friendly .pagination-badge {
+  background: rgba(129, 212, 250, 0.2);
+  color: #0f766e;
 }
 
 @media (max-width: 992px) {
