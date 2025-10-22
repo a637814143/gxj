@@ -271,6 +271,19 @@
         <el-table-column label="生成时间" min-width="200">
           <template #default="{ row }">{{ formatHistoryDateTime(row.generatedAt) }}</template>
         </el-table-column>
+        <el-table-column label="操作" width="120" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              type="danger"
+              link
+              size="small"
+              :disabled="deletingRunId === row.runId"
+              @click="handleDeleteHistory(row)"
+            >
+              删除
+            </el-button>
+          </template>
+        </el-table-column>
       </el-table>
       <div
         v-if="historyPagination.total > historyPagination.pageSize"
@@ -291,9 +304,16 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import BaseChart from '@/components/charts/BaseChart.vue'
-import { executeForecast, fetchCrops, fetchForecastHistory, fetchModels, fetchRegions } from '@/services/forecast'
+import {
+  deleteForecastRun,
+  executeForecast,
+  fetchCrops,
+  fetchForecastHistory,
+  fetchModels,
+  fetchRegions,
+} from '@/services/forecast'
 
 const selectors = reactive({
   regionId: null,
@@ -336,6 +356,7 @@ const historyPagination = reactive({
   total: 0,
 })
 const historyLoading = ref(false)
+const deletingRunId = ref(null)
 let historyRequestId = 0
 const loading = ref(false)
 const errorMessage = ref('')
@@ -553,6 +574,45 @@ const loadForecastHistory = async (page = historyPagination.currentPage) => {
 const handleHistoryPageChange = page => {
   historyPagination.currentPage = page
   loadForecastHistory(page)
+}
+
+const handleDeleteHistory = async row => {
+  if (!row?.runId) {
+    ElMessage.warning('缺少运行编号，无法删除该记录')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      '确定要删除这条预测记录吗？删除后将无法恢复。',
+      '删除确认',
+      {
+        type: 'warning',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+      },
+    )
+  } catch (error) {
+    return
+  }
+  deletingRunId.value = row.runId
+  try {
+    await deleteForecastRun(row.runId)
+    ElMessage.success('预测记录已删除')
+    if (runId.value === row.runId) {
+      resetResult()
+    }
+    const nextPage = forecastHistory.value.length <= 1 && historyPagination.currentPage > 1
+      ? historyPagination.currentPage - 1
+      : historyPagination.currentPage
+    historyPagination.currentPage = nextPage
+    await loadForecastHistory(nextPage)
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.message || '删除预测记录失败')
+  } finally {
+    if (deletingRunId.value === row.runId) {
+      deletingRunId.value = null
+    }
+  }
 }
 
 const fetchOptions = async type => {

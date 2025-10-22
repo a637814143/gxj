@@ -1,11 +1,14 @@
 package com.gxj.cropyield.modules.forecast.service.impl;
 
+import com.gxj.cropyield.common.exception.BusinessException;
+import com.gxj.cropyield.common.response.ResultCode;
 import com.gxj.cropyield.modules.forecast.dto.ForecastHistoryPageResponse;
 import com.gxj.cropyield.modules.forecast.dto.ForecastHistoryResponse;
 import com.gxj.cropyield.modules.forecast.entity.ForecastResult;
 import com.gxj.cropyield.modules.forecast.entity.ForecastRun;
 import com.gxj.cropyield.modules.forecast.entity.ForecastSnapshot;
 import com.gxj.cropyield.modules.forecast.repository.ForecastResultRepository;
+import com.gxj.cropyield.modules.forecast.repository.ForecastRunRepository;
 import com.gxj.cropyield.modules.forecast.repository.ForecastSnapshotRepository;
 import com.gxj.cropyield.modules.forecast.repository.ForecastTaskRepository;
 import com.gxj.cropyield.modules.forecast.service.ForecastHistoryService;
@@ -16,9 +19,11 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 public class ForecastHistoryServiceImpl implements ForecastHistoryService {
@@ -26,13 +31,16 @@ public class ForecastHistoryServiceImpl implements ForecastHistoryService {
     private static final Logger log = LoggerFactory.getLogger(ForecastHistoryServiceImpl.class);
 
     private final ForecastSnapshotRepository forecastSnapshotRepository;
+    private final ForecastRunRepository forecastRunRepository;
     private final ForecastTaskRepository forecastTaskRepository;
     private final ForecastResultRepository forecastResultRepository;
 
     public ForecastHistoryServiceImpl(ForecastSnapshotRepository forecastSnapshotRepository,
+                                      ForecastRunRepository forecastRunRepository,
                                       ForecastTaskRepository forecastTaskRepository,
                                       ForecastResultRepository forecastResultRepository) {
         this.forecastSnapshotRepository = forecastSnapshotRepository;
+        this.forecastRunRepository = forecastRunRepository;
         this.forecastTaskRepository = forecastTaskRepository;
         this.forecastResultRepository = forecastResultRepository;
     }
@@ -70,6 +78,27 @@ public class ForecastHistoryServiceImpl implements ForecastHistoryService {
         } catch (DataAccessException ex) {
             log.warn("Failed to load forecast history snapshots, returning empty list", ex);
             return new ForecastHistoryPageResponse(List.of(), 0L, 1, safeSize);
+        }
+    }
+
+    @Override
+    @Transactional
+    public void deleteHistory(Long runId) {
+        if (runId == null) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "预测记录编号不能为空");
+        }
+        try {
+            ForecastRun run = forecastRunRepository.findById(runId)
+                .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "预测记录不存在"));
+            List<ForecastSnapshot> snapshots = forecastSnapshotRepository.findByRunIdOrderByPeriodAsc(runId);
+            removeForecastResults(run, snapshots);
+            deleteSnapshots(snapshots);
+            forecastRunRepository.delete(run);
+        } catch (BusinessException ex) {
+            throw ex;
+        } catch (DataAccessException ex) {
+            log.error("Failed to delete forecast run {}", runId, ex);
+            throw new BusinessException(ResultCode.SERVER_ERROR, "删除预测记录失败");
         }
     }
 
@@ -111,5 +140,36 @@ public class ForecastHistoryServiceImpl implements ForecastHistoryService {
             .flatMap(task -> forecastResultRepository.findByTaskIdAndTargetYear(task.getId(), targetYear))
             .map(ForecastResult::getId)
             .orElse(null);
+    }
+
+    private void removeForecastResults(ForecastRun run, List<ForecastSnapshot> snapshots) {
+        if (snapshots == null || snapshots.isEmpty()) {
+            return;
+        }
+        forecastTaskRepository.findByModelIdAndCropIdAndRegionId(
+                run.getModel().getId(),
+                run.getCrop().getId(),
+                run.getRegion().getId()
+            )
+            .ifPresent(task -> snapshots.stream()
+                .map(ForecastSnapshot::getYear)
+                .filter(Objects::nonNull)
+                .distinct()
+                .forEach(year -> {
+                    try {
+                        forecastResultRepository.findByTaskIdAndTargetYear(task.getId(), year)
+                            .ifPresent(forecastResultRepository::delete);
+                    } catch (DataAccessException ex) {
+                        log.warn("Failed to delete forecast result for task {} and year {}", task.getId(), year, ex);
+                    }
+                }));
+    }
+
+    private void deleteSnapshots(List<ForecastSnapshot> snapshots) {
+        if (snapshots == null || snapshots.isEmpty()) {
+            return;
+        }
+        forecastSnapshotRepository.deleteAll(snapshots);
+        forecastSnapshotRepository.flush();
     }
 }

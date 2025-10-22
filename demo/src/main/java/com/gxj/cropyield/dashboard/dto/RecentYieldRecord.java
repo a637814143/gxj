@@ -3,6 +3,7 @@ package com.gxj.cropyield.dashboard.dto;
 import java.time.LocalDate;
 
 public record RecentYieldRecord(
+        Long runId,
         String cropName,
         String regionName,
         int year,
