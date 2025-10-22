@@ -4,6 +4,7 @@
     :model-value="modelValue"
     width="640px"
     top="6vh"
+    :append-to-body="true"
     :close-on-click-modal="false"
     @close="handleClose"
   >
@@ -318,7 +319,9 @@ const handleClose = () => {
 
 .report-generate-dialog :deep(.el-dialog__body) {
   flex: 1;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   padding: 0;
 }
 
@@ -346,6 +349,9 @@ const handleClose = () => {
 }
 
 .dialog-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   padding: 16px 24px 20px;
 }
 
