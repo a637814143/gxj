@@ -1,5 +1,5 @@
 <template>
-  <div class="forecast-page">
+  <div :class="['forecast-page', { 'user-friendly': isUserTheme }]">
     <section class="hero-card">
       <div class="hero-copy">
         <div class="hero-badge">云惠农作业智能分析系统</div>
@@ -15,27 +15,25 @@
           </div>
         </div>
       </div>
-      <div class="hero-side">
-        <div class="side-card">
-          <div class="side-card-title">预测准备情况</div>
-          <div class="side-items">
-            <div v-for="item in quickOverview" :key="item.label" class="side-item">
-              <div class="side-item-label">{{ item.label }}</div>
-              <div class="side-item-value">{{ item.value }}</div>
-              <div class="side-item-trend" :class="{ up: item.trend > 0, down: item.trend < 0 }">
-                {{ formatTrend(item.trend) }}
-              </div>
-            </div>
-          </div>
-          <div class="side-divider" />
-          <div class="side-footer">
-            <div class="side-footer-title">执行建议</div>
-            <ul>
-              <li v-for="notice in reminders" :key="notice">{{ notice }}</li>
-            </ul>
+      <div class="hero-extra">
+        <div class="extra-grid">
+          <div
+            v-for="item in quickOverview"
+            :key="item.label"
+            class="extra-card"
+            :class="{ positive: item.trend > 0, negative: item.trend < 0 }"
+          >
+            <div class="extra-label">{{ item.label }}</div>
+            <div class="extra-value">{{ item.value }}</div>
+            <div class="extra-trend">{{ formatTrend(item.trend) }}</div>
           </div>
         </div>
-        <div class="hero-decor" />
+        <div class="extra-card reminder-card">
+          <div class="extra-title">执行建议</div>
+          <ul class="extra-list">
+            <li v-for="notice in reminders" :key="notice">{{ notice }}</li>
+          </ul>
+        </div>
       </div>
     </section>
 
@@ -314,6 +312,7 @@ import {
   fetchModels,
   fetchRegions,
 } from '@/services/forecast'
+import { useAuthStore } from '@/stores/auth'
 
 const selectors = reactive({
   regionId: null,
@@ -328,6 +327,16 @@ const optionLists = reactive({
   regions: [],
   crops: [],
   models: []
+})
+
+const authStore = useAuthStore()
+const isUserTheme = computed(() => {
+  const roles = authStore.user?.roles
+  if (!roles) return true
+  if (Array.isArray(roles)) {
+    return !roles.includes('ADMIN')
+  }
+  return roles !== 'ADMIN'
 })
 
 const loadingOptions = reactive({
@@ -759,9 +768,9 @@ const formatHistoryDateTime = value => {
 
 .hero-card {
   position: relative;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
   padding: 32px;
   border-radius: 24px;
   background: linear-gradient(120deg, #e8f1ff 0%, #f4f8ff 35%, #ffffff 100%);
@@ -774,8 +783,8 @@ const formatHistoryDateTime = value => {
   position: absolute;
   top: -160px;
   right: -160px;
-  width: 400px;
-  height: 400px;
+  width: 360px;
+  height: 360px;
   background: radial-gradient(circle at center, rgba(60, 132, 255, 0.35), transparent 65%);
   transform: rotate(12deg);
 }
@@ -846,105 +855,88 @@ const formatHistoryDateTime = value => {
   color: #6e7fa1;
 }
 
-.hero-side {
+.hero-extra {
   position: relative;
   z-index: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 24px;
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 20px;
 }
 
-.side-card {
-  border-radius: 20px;
-  padding: 24px;
-  background: linear-gradient(160deg, rgba(34, 98, 255, 0.92) 0%, rgba(100, 149, 255, 0.8) 65%, rgba(255, 255, 255, 0.95) 100%);
-  color: #fff;
-  box-shadow: 0 20px 45px rgba(32, 84, 204, 0.25);
-  overflow: hidden;
-  position: relative;
+@media (max-width: 1200px) {
+  .hero-extra {
+    grid-template-columns: 1fr;
+  }
 }
 
-.side-card::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 65%);
-  pointer-events: none;
-}
-
-.side-card-title {
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 20px;
-}
-
-.side-items {
-  display: flex;
-  flex-direction: column;
+.extra-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 16px;
 }
 
-.side-item {
+.extra-card {
+  border-radius: 18px;
+  padding: 18px 20px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: inset 0 0 0 1px rgba(34, 98, 255, 0.08);
+  backdrop-filter: blur(4px);
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.16);
-  backdrop-filter: blur(2px);
+  flex-direction: column;
+  gap: 10px;
 }
 
-.side-item-label {
+.extra-card.positive {
+  border-left: 4px solid rgba(45, 212, 191, 0.9);
+}
+
+.extra-card.negative {
+  border-left: 4px solid rgba(248, 113, 113, 0.85);
+}
+
+.extra-label {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.85);
+  color: #52617f;
 }
 
-.side-item-value {
-  font-size: 18px;
+.extra-value {
+  font-size: 22px;
   font-weight: 700;
+  color: #1a2a4a;
 }
 
-.side-item-trend {
+.extra-trend {
   font-size: 12px;
-  font-weight: 500;
+  color: #64748b;
 }
 
-.side-item-trend.up {
-  color: #91ffba;
+.extra-card.positive .extra-trend {
+  color: #0f766e;
 }
 
-.side-item-trend.down {
-  color: #ffd48a;
+.extra-card.negative .extra-trend {
+  color: #be123c;
 }
 
-.side-divider {
-  height: 1px;
-  margin: 24px 0;
-  background: rgba(255, 255, 255, 0.28);
+.reminder-card {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(14, 165, 233, 0.12));
+  border: 1px solid rgba(14, 165, 233, 0.15);
 }
 
-.side-footer-title {
-  font-size: 14px;
+.extra-title {
+  font-size: 15px;
   font-weight: 600;
-  margin-bottom: 12px;
+  color: #163b8c;
 }
 
-.side-footer ul {
+.extra-list {
   margin: 0;
   padding-left: 18px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  color: rgba(255, 255, 255, 0.85);
+  gap: 8px;
   font-size: 13px;
-}
-
-.hero-decor {
-  height: 140px;
-  border-radius: 22px;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.8), rgba(214, 228, 255, 0.6));
-  box-shadow: inset 0 0 0 1px rgba(34, 98, 255, 0.1);
+  color: #42526b;
 }
 
 .panel-card {
@@ -1046,6 +1038,84 @@ const formatHistoryDateTime = value => {
   display: flex;
   justify-content: flex-end;
   padding: 16px 0 4px;
+}
+
+/* User theme enhancements */
+.forecast-page.user-friendly {
+  position: relative;
+  padding: 4px 0 40px;
+  background: radial-gradient(circle at 18% 22%, rgba(129, 212, 250, 0.22), transparent 55%),
+    radial-gradient(circle at 82% 78%, rgba(244, 143, 177, 0.2), transparent 60%),
+    linear-gradient(150deg, #f5fbff 0%, #fef7ff 52%, #ffffff 100%);
+}
+
+.forecast-page.user-friendly::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.45), transparent 65%);
+  pointer-events: none;
+}
+
+.forecast-page.user-friendly .hero-card {
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: linear-gradient(115deg, rgba(229, 246, 255, 0.95) 0%, rgba(245, 232, 255, 0.9) 52%, rgba(255, 255, 255, 0.95) 100%);
+  box-shadow: 0 28px 68px rgba(136, 132, 255, 0.18);
+}
+
+.forecast-page.user-friendly .hero-card::before {
+  background: radial-gradient(circle at center, rgba(129, 212, 250, 0.45), transparent 65%);
+}
+
+.forecast-page.user-friendly .hero-stat {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(233, 246, 255, 0.85));
+  box-shadow: 0 16px 36px rgba(102, 126, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+}
+
+.forecast-page.user-friendly .extra-card {
+  background: linear-gradient(140deg, rgba(255, 255, 255, 0.92), rgba(231, 246, 255, 0.88));
+  box-shadow: 0 18px 36px rgba(148, 163, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+}
+
+.forecast-page.user-friendly .reminder-card {
+  background: linear-gradient(135deg, rgba(165, 180, 252, 0.2), rgba(110, 231, 183, 0.18));
+  border: 1px solid rgba(255, 255, 255, 0.55);
+}
+
+.forecast-page.user-friendly .extra-title {
+  color: #4338ca;
+}
+
+.forecast-page.user-friendly .extra-list {
+  color: #4c1d95;
+}
+
+.forecast-page.user-friendly .panel-card {
+  border: none;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.92) 0%, rgba(237, 248, 255, 0.9) 60%, rgba(255, 255, 255, 0.95) 100%);
+  box-shadow: 0 28px 54px rgba(148, 163, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+}
+
+.forecast-page.user-friendly :deep(.panel-card .el-card__header) {
+  background: linear-gradient(120deg, rgba(230, 244, 255, 0.82), rgba(255, 255, 255, 0.88));
+  border-bottom: 1px solid rgba(209, 213, 255, 0.3);
+}
+
+.forecast-page.user-friendly :deep(.panel-card .el-card__body) {
+  background: transparent;
+}
+
+.forecast-page.user-friendly .detail-card {
+  border: 1px solid rgba(209, 213, 255, 0.5);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(235, 245, 255, 0.88));
+  box-shadow: 0 16px 34px rgba(136, 132, 255, 0.18);
+}
+
+.forecast-page.user-friendly .history-id span {
+  color: #2563eb;
 }
 
 @media (max-width: 992px) {
