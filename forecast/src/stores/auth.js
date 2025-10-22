@@ -167,9 +167,15 @@ export const useAuthStore = defineStore('auth', {
       return response
     },
     async login(payload) {
-      const { rememberMe, ...requestBody } = payload
+      const { rememberMe, loginMode, ...requestBody } = payload
       const client = await getApiClient()
-      const { data } = await client.post('/api/auth/login', requestBody)
+      let endpoint = '/api/auth/login'
+      if (loginMode === 'admin') {
+        endpoint = '/api/auth/login/admin'
+      } else if (loginMode === 'user') {
+        endpoint = '/api/auth/login/user'
+      }
+      const { data } = await client.post(endpoint, requestBody)
       const response = data?.data
       if (!response) {
         throw new Error('登录响应数据不完整')

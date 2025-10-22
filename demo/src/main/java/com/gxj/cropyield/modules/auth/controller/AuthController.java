@@ -64,6 +64,30 @@ public class AuthController {
         }
     }
 
+    @PostMapping("/login/admin")
+    public ApiResponse<LoginResponse> adminLogin(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
+        String ipAddress = resolveClientIp(httpRequest);
+        String userAgent = httpRequest.getHeader("User-Agent");
+        try {
+            return ApiResponse.success(authService.loginAsAdmin(request, ipAddress, userAgent));
+        } catch (BusinessException ex) {
+            loginLogService.record(request.username(), false, ipAddress, userAgent, ex.getMessage());
+            throw ex;
+        }
+    }
+
+    @PostMapping("/login/user")
+    public ApiResponse<LoginResponse> userLogin(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
+        String ipAddress = resolveClientIp(httpRequest);
+        String userAgent = httpRequest.getHeader("User-Agent");
+        try {
+            return ApiResponse.success(authService.loginAsUser(request, ipAddress, userAgent));
+        } catch (BusinessException ex) {
+            loginLogService.record(request.username(), false, ipAddress, userAgent, ex.getMessage());
+            throw ex;
+        }
+    }
+
     @PostMapping("/refresh")
     public ApiResponse<AuthTokens> refreshToken(@Valid @RequestBody RefreshTokenRequest request) {
         return ApiResponse.success(authService.refreshToken(request.refreshToken()));
