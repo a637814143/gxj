@@ -15,31 +15,36 @@
           </div>
         </div>
       </div>
-      <div class="hero-side">
-        <div class="side-card">
-          <div class="side-card-title">生成规划</div>
-          <div class="side-items">
-            <div v-for="item in quickOverview" :key="item.label" class="side-item">
-              <div class="side-item-label">{{ item.label }}</div>
-              <div class="side-item-value">{{ item.value }}</div>
-              <div class="side-item-trend" :class="{ up: item.trend > 0, down: item.trend < 0 }">
-                {{ formatTrend(item.trend) }}
-              </div>
-            </div>
-          </div>
-          <div class="side-divider" />
-          <div class="side-footer">
-            <div class="side-footer-title">制作建议</div>
-            <ul>
-              <li v-for="notice in reminders" :key="notice">{{ notice }}</li>
-            </ul>
-          </div>
+      <div class="hero-actions">
+        <div class="actions-header">
+          <div class="actions-title">快捷导航</div>
+          <p class="actions-desc">按照你的工作节奏快速跳转到常用模块，提升预测与报告协同效率。</p>
         </div>
-        <div class="hero-decor" />
+        <div class="actions-grid">
+          <button
+            v-for="action in reportQuickActions"
+            :key="action.key"
+            type="button"
+            class="action-card"
+            :class="`accent-${action.accent}`"
+            @click="handleAction(action)"
+          >
+            <span class="action-icon">{{ action.icon }}</span>
+            <span class="action-content">
+              <span class="action-label">{{ action.label }}</span>
+              <span class="action-desc">{{ action.description }}</span>
+            </span>
+            <span class="action-arrow">→</span>
+          </button>
+        </div>
+        <div class="actions-tip">
+          <span class="tip-icon">💡</span>
+          <span>善用快捷入口快速发起预测、查看仪表盘或管理个人资料。</span>
+        </div>
       </div>
     </section>
 
-    <el-card class="report-card" shadow="hover" v-loading="loading">
+    <el-card ref="reportListCard" class="report-card" shadow="hover" v-loading="loading">
       <template #header>
         <div class="card-header">
           <div>
@@ -97,10 +102,13 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useRouter } from 'vue-router'
 import { fetchReportOverview } from '../services/report'
 import { useAuthorization } from '../composables/useAuthorization'
 import ReportGenerateDialog from '../components/report/ReportGenerateDialog.vue'
 import ReportDetailDrawer from '../components/report/ReportDetailDrawer.vue'
+
+const router = useRouter()
 
 const reports = ref([])
 const metrics = ref({ totalReports: 0, publishedThisMonth: 0, pendingApproval: 0, autoGenerationEnabled: false })
@@ -109,12 +117,13 @@ const showGenerateDialog = ref(false)
 const showDetailDrawer = ref(false)
 const activeReportId = ref(null)
 const activeReportSummary = ref(null)
+const reportListCard = ref(null)
 const reportPagination = reactive({
   currentPage: 1,
   pageSize: 5,
 })
 
-const { hasRole } = useAuthorization()
+const { hasRole, canAccessRoute } = useAuthorization()
 const canGenerateReport = computed(() => hasRole(['ADMIN', 'AGRICULTURE_DEPT']))
 
 const paginatedReports = computed(() => {
@@ -147,41 +156,63 @@ const highlightStats = computed(() => {
   ]
 })
 
-const quickOverview = computed(() => [
-  { label: '本月发布', value: `${metrics.value.publishedThisMonth ?? 0} 份`, trend: metrics.value.publishedThisMonth > 0 ? 1 : 0 },
-  { label: '待审核', value: `${metrics.value.pendingApproval ?? 0} 份`, trend: metrics.value.pendingApproval > 0 ? 1 : 0 },
-  { label: '自动生成', value: metrics.value.autoGenerationEnabled ? '启用' : '未启用', trend: 0 }
-])
+const reportQuickActions = computed(() => {
+  const baseActions = [
+    {
+      key: 'dashboard',
+      name: 'dashboard',
+      label: '仪表盘总览',
+      description: '回到首页查看最新运行态势',
+      accent: 'sunrise',
+      icon: '📊',
+      type: 'route'
+    },
+    {
+      key: 'forecast',
+      name: 'forecast',
+      label: '预测中心',
+      description: '发起或查看预测任务',
+      accent: 'sunset',
+      icon: '🚀',
+      type: 'route'
+    },
+    {
+      key: 'report-generate',
+      label: '生成报告',
+      description: '一键生成新的分析报告',
+      accent: 'forest',
+      icon: '📝',
+      type: 'generate'
+    },
+    {
+      key: 'report-history',
+      label: '报告列表',
+      description: '跳转到下方历史记录',
+      accent: 'ocean',
+      icon: '📚',
+      type: 'scroll'
+    },
+    {
+      key: 'profile',
+      name: 'profile',
+      label: '个人中心',
+      description: '维护资料与安全信息',
+      accent: 'violet',
+      icon: '👤',
+      type: 'route'
+    }
+  ]
 
-const reminders = computed(() => {
-  const items = []
-  if (metrics.value.pendingApproval > 0) {
-    items.push(`存在 ${metrics.value.pendingApproval} 份待审核报告，请尽快处理以便发布`)
-  } else {
-    items.push('暂无待审核报告，可根据计划安排新的分析任务')
-  }
-
-  items.push(
-    metrics.value.autoGenerationEnabled
-      ? '自动生成已启用，建议定期检查模板确保输出格式一致'
-      : '自动生成未启用，可在系统设置中开启以节省手工操作'
-  )
-
-  const latest = reports.value[0]
-  if (latest) {
-    items.push(`最新报告覆盖周期 ${latest.coveragePeriod || '近期数据'}，请及时共享给相关团队`)
-  } else {
-    items.push('尚未生成报告，请先运行预测任务并生成首份报告')
-  }
-
-  return items
+  return baseActions.filter(action => {
+    if (action.type === 'route') {
+      return canAccessRoute(action.name)
+    }
+    if (action.type === 'generate') {
+      return canGenerateReport.value
+    }
+    return true
+  })
 })
-
-function formatTrend(value) {
-  if (value > 0) return `较昨日 +${value}`
-  if (value < 0) return `较昨日 ${value}`
-  return '较昨日 持平'
-}
 
 function formatDate(value) {
   if (!value) return '暂无'
@@ -190,6 +221,23 @@ function formatDate(value) {
     return value
   }
   return date.toLocaleDateString('zh-CN')
+}
+
+const handleAction = action => {
+  if (!action) {
+    return
+  }
+  if (action.type === 'generate') {
+    createReport()
+    return
+  }
+  if (action.type === 'scroll') {
+    reportListCard.value?.$el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    return
+  }
+  if (action.type === 'route' && action.name) {
+    router.push({ name: action.name }).catch(() => {})
+  }
 }
 
 const fetchReports = async () => {
@@ -272,7 +320,7 @@ const viewReport = report => {
 .hero-card {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: minmax(320px, 1.4fr) minmax(260px, 1fr);
   gap: 32px;
   padding: 32px;
   border-radius: 24px;
@@ -358,105 +406,138 @@ const viewReport = report => {
   color: #6e7fa1;
 }
 
-.hero-side {
+.hero-actions {
   position: relative;
   z-index: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 24px;
-}
-
-.side-card {
-  border-radius: 20px;
-  padding: 24px;
-  background: linear-gradient(160deg, rgba(34, 98, 255, 0.92) 0%, rgba(100, 149, 255, 0.8) 65%, rgba(255, 255, 255, 0.95) 100%);
-  color: #fff;
-  box-shadow: 0 20px 45px rgba(32, 84, 204, 0.25);
-  overflow: hidden;
-  position: relative;
-}
-
-.side-card::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 65%);
-  pointer-events: none;
-}
-
-.side-card-title {
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 20px;
-}
-
-.side-items {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.side-item {
+.actions-header {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.16);
-  backdrop-filter: blur(2px);
+  flex-direction: column;
+  gap: 8px;
 }
 
-.side-item-label {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.85);
-}
-
-.side-item-value {
+.actions-title {
   font-size: 18px;
   font-weight: 700;
+  color: #1346af;
 }
 
-.side-item-trend {
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.side-item-trend.up {
-  color: #91ffba;
-}
-
-.side-item-trend.down {
-  color: #ffd48a;
-}
-
-.side-divider {
-  height: 1px;
-  margin: 24px 0;
-  background: rgba(255, 255, 255, 0.28);
-}
-
-.side-footer-title {
-  font-size: 14px;
-  font-weight: 600;
-  margin-bottom: 12px;
-}
-
-.side-footer ul {
+.actions-desc {
   margin: 0;
-  padding-left: 18px;
+  font-size: 13px;
+  color: #3c4f79;
+  line-height: 1.6;
+}
+
+.actions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.action-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 20px;
+  border-radius: 18px;
+  border: none;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  color: #fff;
+  font: inherit;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  text-align: left;
+}
+
+.action-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 60%);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.action-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 18px 35px rgba(34, 98, 255, 0.2);
+}
+
+.action-card:hover::after {
+  opacity: 1;
+}
+
+.action-icon {
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.action-content {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  color: rgba(255, 255, 255, 0.85);
-  font-size: 13px;
 }
 
-.hero-decor {
-  height: 140px;
-  border-radius: 22px;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.8), rgba(214, 228, 255, 0.6));
-  box-shadow: inset 0 0 0 1px rgba(34, 98, 255, 0.1);
+.action-label {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.action-desc {
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.action-arrow {
+  margin-left: auto;
+  font-size: 18px;
+  opacity: 0.85;
+}
+
+.actions-tip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(34, 98, 255, 0.08);
+  color: #345296;
+  font-size: 12px;
+}
+
+.tip-icon {
+  font-size: 16px;
+}
+
+.action-card.accent-sunrise {
+  background: linear-gradient(135deg, #facc15 0%, #fb7185 100%);
+  box-shadow: 0 12px 28px rgba(251, 113, 133, 0.26);
+}
+
+.action-card.accent-sunset {
+  background: linear-gradient(135deg, #f97316 0%, #f43f5e 100%);
+  box-shadow: 0 12px 28px rgba(244, 63, 94, 0.26);
+}
+
+.action-card.accent-forest {
+  background: linear-gradient(135deg, #34d399 0%, #22d3ee 100%);
+  box-shadow: 0 12px 28px rgba(45, 212, 191, 0.26);
+}
+
+.action-card.accent-ocean {
+  background: linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%);
+  box-shadow: 0 12px 28px rgba(14, 165, 233, 0.26);
+}
+
+.action-card.accent-violet {
+  background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
+  box-shadow: 0 12px 28px rgba(139, 92, 246, 0.26);
 }
 
 .report-card {
@@ -526,6 +607,7 @@ const viewReport = report => {
 
 @media (max-width: 768px) {
   .hero-card {
+    grid-template-columns: 1fr;
     padding: 24px;
   }
 
@@ -538,6 +620,10 @@ const viewReport = report => {
   }
 
   .hero-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .actions-grid {
     grid-template-columns: 1fr;
   }
 }
