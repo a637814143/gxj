@@ -130,6 +130,19 @@
         <el-table-column label="数据日期" width="160">
           <template #default="{ row }">{{ formatDate(row.collectedAt) }}</template>
         </el-table-column>
+        <el-table-column label="操作" width="120" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              type="danger"
+              link
+              size="small"
+              :disabled="deletingRunId === row.runId"
+              @click="handleDeleteRecord(row)"
+            >
+              删除
+            </el-button>
+          </template>
+        </el-table-column>
       </el-table>
       <div class="table-footer">
         <div class="table-tip">
@@ -156,11 +169,13 @@
 
 <script setup>
 import { computed, reactive, ref, onMounted, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import apiClient from '../services/http'
+import { deleteForecastRun } from '@/services/forecast'
 
 const summary = ref(null)
 const summaryLoading = ref(false)
+const deletingRunId = ref(null)
 
 const TABLE_PAGE_SIZE = 5
 const tablePagination = reactive({ page: 1, size: TABLE_PAGE_SIZE })
@@ -338,6 +353,42 @@ const handleReset = () => {
 
 const handleTablePageChange = page => {
   tablePagination.page = page
+}
+
+const handleDeleteRecord = async record => {
+  if (!record?.runId) {
+    ElMessage.warning('缺少运行编号，无法删除该预测数据')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      '确定要删除这条预测数据吗？删除后将无法恢复。',
+      '删除确认',
+      {
+        type: 'warning',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+      },
+    )
+  } catch (error) {
+    return
+  }
+  deletingRunId.value = record.runId
+  try {
+    await deleteForecastRun(record.runId)
+    ElMessage.success('预测数据已删除')
+    const needPrevPage = paginatedTableData.value.length <= 1 && tablePagination.page > 1
+    if (needPrevPage) {
+      tablePagination.page -= 1
+    }
+    await fetchDashboardSummary()
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.message || '删除预测数据失败')
+  } finally {
+    if (deletingRunId.value === record.runId) {
+      deletingRunId.value = null
+    }
+  }
 }
 
 onMounted(() => {

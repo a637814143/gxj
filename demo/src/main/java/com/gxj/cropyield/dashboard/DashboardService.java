@@ -157,6 +157,7 @@ public class DashboardService {
                         double yield = safe(snapshot.getPredictedYield());
                         double revenue = safe(snapshot.getEstimatedRevenue());
                         return new RecentYieldRecord(
+                                run.getId(),
                                 run.getCrop().getName(),
                                 run.getRegion().getName(),
                                 year,

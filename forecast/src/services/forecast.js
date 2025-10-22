@@ -38,6 +38,13 @@ export const fetchForecastHistory = async params => {
   return { items, total, page, size }
 }
 
+export const deleteForecastRun = async runId => {
+  if (runId === undefined || runId === null) {
+    throw new Error('缺少预测运行编号')
+  }
+  await apiClient.delete(`/api/forecast/history/${runId}`)
+}
+
 const parseNumber = value => {
   const numeric = Number(value)
   return Number.isFinite(numeric) ? numeric : null
@@ -85,5 +92,6 @@ export default {
   fetchCrops,
   fetchModels,
   fetchForecastHistory,
+  deleteForecastRun,
   executeForecast,
 }
