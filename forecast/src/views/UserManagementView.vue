@@ -1,38 +1,33 @@
 <template>
   <div class="user-management-page">
-    <el-card class="intro-card" shadow="hover">
-      <div class="intro-content">
-        <div class="intro-text">
-          <div class="intro-badge">账户与权限中心</div>
-          <h1 class="intro-title">农业部门与用户统一管理</h1>
-          <p class="intro-desc">
-            集中维护农业部门及业务用户的基础信息，支持管理员快速分配角色、重置密码与停用账户，保障平台安全合规运行。
-          </p>
-          <div class="intro-highlights">
-            <div class="highlight-item">
-              <div class="highlight-value">{{ pagination.total }}</div>
-              <div class="highlight-label">已接入账户</div>
-            </div>
-            <div class="highlight-item">
-              <div class="highlight-value">{{ agricultureUserCount }}</div>
-              <div class="highlight-label">农业部门用户</div>
-            </div>
-            <div class="highlight-item">
-              <div class="highlight-value">{{ farmerUserCount }}</div>
-              <div class="highlight-label">企业/农户用户</div>
-            </div>
+    <PageHeader
+      badge="账户与权限中心"
+      title="农业部门与用户统一管理"
+      description="集中维护农业部门及业务用户的基础信息，支持管理员快速分配角色、重置密码与停用账户，保障平台安全合规运行。"
+    >
+      <template #meta>
+        <div class="header-stat-grid">
+          <div class="header-stat">
+            <div class="stat-value">{{ pagination.total }}</div>
+            <div class="stat-label">已接入账户</div>
+          </div>
+          <div class="header-stat">
+            <div class="stat-value">{{ agricultureUserCount }}</div>
+            <div class="stat-label">农业部门用户</div>
+          </div>
+          <div class="header-stat">
+            <div class="stat-value">{{ farmerUserCount }}</div>
+            <div class="stat-label">企业/农户用户</div>
           </div>
         </div>
-        <div class="intro-side">
-          <div class="side-tip-title">操作建议</div>
-          <ul class="side-tip-list">
-            <li>定期核验角色配置，确保农业部门具备最新权限。</li>
-            <li>为临时账户设置到期提醒，按时回收使用权限。</li>
-            <li>重置密码后及时通知相关责任人完成首次登录。</li>
-          </ul>
-        </div>
-      </div>
-    </el-card>
+      </template>
+      <template #extra>
+        <el-space wrap :size="12">
+          <el-button @click="handleImportUsers">批量导入</el-button>
+          <el-button type="primary" @click="openCreateDialog">新增用户</el-button>
+        </el-space>
+      </template>
+    </PageHeader>
 
     <el-card class="table-card" shadow="hover">
       <template #header>
@@ -42,8 +37,8 @@
             <div class="table-subtitle">查看与维护农业部门、企业/农户等平台用户的基础信息</div>
           </div>
           <div class="table-actions">
-            <el-button @click="fetchUsers" :loading="loading">刷新</el-button>
-            <el-button type="primary" @click="openCreateDialog">新增用户</el-button>
+            <el-button @click="handleExportUsers">导出名单</el-button>
+            <el-button type="primary" @click="fetchUsers" :loading="loading">刷新列表</el-button>
           </div>
         </div>
       </template>
@@ -185,6 +180,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import PageHeader from '../components/PageHeader.vue'
 import apiClient from '../services/http'
 import { useAuthStore } from '../stores/auth'
 
@@ -307,6 +303,14 @@ const fetchUsers = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const handleImportUsers = () => {
+  ElMessage.info('批量导入功能即将上线')
+}
+
+const handleExportUsers = () => {
+  ElMessage.info('导出名单功能即将上线')
 }
 
 const agricultureUserCount = computed(() =>
@@ -518,124 +522,65 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 24px;
+  padding-bottom: 40px;
 }
 
-.intro-card {
-  border: none;
-}
-
-.intro-content {
-  display: flex;
-  gap: 32px;
-  align-items: stretch;
-}
-
-.intro-text {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
+.header-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 16px;
 }
 
-.intro-badge {
-  display: inline-flex;
-  align-items: center;
+.header-stat {
+  display: flex;
+  flex-direction: column;
   gap: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #1b5e20;
-  background: rgba(27, 94, 32, 0.12);
-  border-radius: 999px;
-  padding: 6px 14px;
-  width: fit-content;
+  padding: 16px 20px;
+  border-radius: 14px;
+  background: var(--surface-muted, #f2f4f7);
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.08);
 }
 
-.intro-title {
+.stat-value {
   font-size: 24px;
   font-weight: 600;
-  color: #1f2d3d;
-  margin: 0;
+  color: var(--text-primary, #111827);
 }
 
-.intro-desc {
-  margin: 0;
-  color: #546e7a;
-  line-height: 1.6;
-}
-
-.intro-highlights {
-  display: flex;
-  gap: 24px;
-}
-
-.highlight-item {
-  background: #f5f7fa;
-  border-radius: 12px;
-  padding: 16px 20px;
-  min-width: 160px;
-}
-
-.highlight-value {
-  font-size: 28px;
-  font-weight: 600;
-  color: #0d47a1;
-}
-
-.highlight-label {
-  margin-top: 6px;
+.stat-label {
   font-size: 13px;
-  color: #607d8b;
-}
-
-.intro-side {
-  width: 280px;
-  background: linear-gradient(180deg, rgba(0, 121, 107, 0.14), rgba(0, 150, 136, 0.05));
-  border-radius: 16px;
-  padding: 20px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  color: #004d40;
-}
-
-.side-tip-title {
-  font-weight: 600;
-  font-size: 16px;
-}
-
-.side-tip-list {
-  padding-left: 18px;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  color: var(--text-secondary, #667085);
 }
 
 .table-card {
   border: none;
+  border-radius: 16px;
+  box-shadow: var(--shadow-soft, 0 12px 32px rgba(15, 23, 42, 0.08));
 }
 
 .table-header {
   display: flex;
-  align-items: center;
   justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
 }
 
 .table-title {
   font-size: 18px;
   font-weight: 600;
-  color: #263238;
+  color: var(--text-primary, #111827);
 }
 
 .table-subtitle {
-  margin-top: 4px;
-  color: #607d8b;
+  margin-top: 6px;
+  color: var(--text-secondary, #667085);
   font-size: 13px;
 }
 
 .table-actions {
   display: flex;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .table-footer {
@@ -644,12 +589,15 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 16px;
+  color: var(--text-secondary, #667085);
+  font-size: 12px;
 }
 
 .table-tip {
-  color: #546e7a;
-  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .table-pagination {
@@ -664,8 +612,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 10px;
-  color: #607d8b;
-  font-size: 12px;
+  flex-wrap: wrap;
 }
 
 .pagination-badge {
@@ -673,8 +620,8 @@ onMounted(async () => {
   align-items: center;
   padding: 2px 10px;
   border-radius: 999px;
-  background: #e3f2fd;
-  color: #1565c0;
+  background: rgba(37, 99, 235, 0.12);
+  color: #2563eb;
   font-weight: 600;
   font-size: 12px;
 }
@@ -683,20 +630,21 @@ onMounted(async () => {
   width: 100%;
 }
 
-@media (max-width: 1024px) {
-  .intro-content {
-    flex-direction: column;
-  }
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
 
-  .intro-side {
-    width: 100%;
-    flex-direction: row;
-    justify-content: space-between;
+@media (max-width: 768px) {
+  .table-header {
+    flex-direction: column;
     align-items: flex-start;
   }
 
-  .side-tip-list {
-    padding-left: 16px;
+  .table-actions {
+    width: 100%;
+    justify-content: flex-start;
   }
 }
 </style>
