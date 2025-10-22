@@ -81,6 +81,7 @@ public class ApplicationSecurityConfig {
                 .requestMatchers(HttpMethod.PUT, "/api/datasets/**", "/api/base/**", "/api/system/settings").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/datasets/**", "/api/base/**").hasRole("ADMIN")
                 .requestMatchers("/api/system/logs/**", "/api/auth/users/**").hasRole("ADMIN")
+                .requestMatchers("/api/auth/profile/**").hasAnyRole("ADMIN", "AGRICULTURE_DEPT", "FARMER")
                 .anyRequest().authenticated()
             )
             .exceptionHandling(exception -> exception
