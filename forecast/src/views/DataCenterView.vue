@@ -279,7 +279,13 @@
       </div>
     </el-card>
 
-    <el-dialog v-model="uploadDialogVisible" title="导入数据文件" width="520px" @closed="resetUploadForm">
+    <el-dialog
+      v-model="uploadDialogVisible"
+      class="upload-dialog"
+      title="导入数据文件"
+      width="520px"
+      @closed="resetUploadForm"
+    >
       <el-form label-width="88px" class="upload-form">
         <el-form-item label="数据类型">
           <el-select v-model="uploadForm.type">
@@ -1275,6 +1281,20 @@ onBeforeUnmount(() => {
 
 .upload-tip-list li + li {
   margin-top: 4px;
+}
+
+.upload-dialog {
+  --el-dialog-body-padding: 20px 24px 24px;
+}
+
+.upload-dialog :deep(.el-dialog__body) {
+  max-height: 70vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.upload-dialog :deep(.el-form-item) {
+  margin-bottom: 16px;
 }
 
 /* User theme enhancements */
