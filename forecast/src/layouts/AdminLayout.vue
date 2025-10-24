@@ -180,5 +180,6 @@ watch(
 
 .main {
   background: #f5f7fa;
+  overflow-y: auto;
 }
 </style>
