@@ -1283,17 +1283,17 @@ onBeforeUnmount(() => {
   margin-top: 4px;
 }
 
-.upload-dialog {
+:deep(.upload-dialog) {
   --el-dialog-body-padding: 20px 24px 24px;
 }
 
-.upload-dialog :deep(.el-dialog__body) {
+:deep(.upload-dialog .el-dialog__body) {
   max-height: 70vh;
   overflow-y: auto;
   padding-right: 4px;
 }
 
-.upload-dialog :deep(.el-form-item) {
+:deep(.upload-dialog .el-form-item) {
   margin-bottom: 16px;
 }
 
