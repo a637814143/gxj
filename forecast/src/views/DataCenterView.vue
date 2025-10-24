@@ -282,8 +282,8 @@
     <el-dialog
       v-model="uploadDialogVisible"
       class="upload-dialog"
+      modal-class="upload-dialog-overlay"
       title="导入数据文件"
-      width="520px"
       @closed="resetUploadForm"
     >
       <el-form label-width="88px" class="upload-form">
@@ -1283,14 +1283,35 @@ onBeforeUnmount(() => {
   margin-top: 4px;
 }
 
+:deep(.upload-dialog-overlay) {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 6vh 16px 24px;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
 :deep(.upload-dialog) {
   --el-dialog-body-padding: 20px 24px 24px;
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100vh - 12vh);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  margin: 0;
 }
 
 :deep(.upload-dialog .el-dialog__body) {
-  max-height: 70vh;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding-right: 4px;
+}
+
+:deep(.upload-dialog .el-dialog__footer) {
+  padding-top: 16px;
+  border-top: 1px solid var(--el-border-color-lighter);
 }
 
 :deep(.upload-dialog .el-form-item) {
