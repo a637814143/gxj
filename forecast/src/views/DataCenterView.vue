@@ -282,57 +282,66 @@
     <el-dialog
       v-model="uploadDialogVisible"
       class="upload-dialog"
-      modal-class="upload-dialog-overlay"
-      title="导入数据文件"
+      :append-to-body="true"
+      :close-on-click-modal="false"
       @closed="resetUploadForm"
     >
-      <el-form label-width="88px" class="upload-form">
-        <el-form-item label="数据类型">
-          <el-select v-model="uploadForm.type">
-            <el-option v-for="item in datasetTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="数据集名称">
-          <el-input v-model="uploadForm.name" placeholder="默认使用文件名" maxlength="128" show-word-limit />
-        </el-form-item>
-        <el-form-item label="描述">
-          <el-input
-            v-model="uploadForm.description"
-            type="textarea"
-            placeholder="可选，最长 256 字"
-            :rows="3"
-            maxlength="256"
-            show-word-limit
-          />
-        </el-form-item>
-        <el-form-item label="选择文件">
-          <el-upload
-            class="upload-block"
-            drag
-            :auto-upload="false"
-            :file-list="uploadFileList"
-            accept=".xls,.xlsx,.csv,text/csv"
-            :limit="1"
-            :on-change="handleFileChange"
-            :on-remove="handleFileRemove"
-            :before-upload="beforeUpload"
-          >
-            <el-icon class="upload-icon"><UploadFilled /></el-icon>
-            <div class="el-upload__text">
-              将文件拖到此处，或<em>点击上传</em>
-            </div>
-            <template #tip>
-              <div class="el-upload__tip">
-                支持 Excel（.xls/.xlsx）和 UTF-8 编码的 CSV（.csv）文件，系统会自动识别常见的分隔符。
+      <template #header>
+        <div class="upload-dialog-header">
+          <h3>导入数据文件</h3>
+          <p>上传 Excel 或 CSV 文件以创建新的数据集，系统会自动校验数据格式。</p>
+        </div>
+      </template>
+
+      <div class="upload-dialog-body">
+        <el-form label-width="88px" class="upload-form">
+          <el-form-item label="数据类型">
+            <el-select v-model="uploadForm.type">
+              <el-option v-for="item in datasetTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="数据集名称">
+            <el-input v-model="uploadForm.name" placeholder="默认使用文件名" maxlength="128" show-word-limit />
+          </el-form-item>
+          <el-form-item label="描述">
+            <el-input
+              v-model="uploadForm.description"
+              type="textarea"
+              placeholder="可选，最长 256 字"
+              :rows="3"
+              maxlength="256"
+              show-word-limit
+            />
+          </el-form-item>
+          <el-form-item label="选择文件">
+            <el-upload
+              class="upload-block"
+              drag
+              :auto-upload="false"
+              :file-list="uploadFileList"
+              accept=".xls,.xlsx,.csv,text/csv"
+              :limit="1"
+              :on-change="handleFileChange"
+              :on-remove="handleFileRemove"
+              :before-upload="beforeUpload"
+            >
+              <el-icon class="upload-icon"><UploadFilled /></el-icon>
+              <div class="el-upload__text">
+                将文件拖到此处，或<em>点击上传</em>
               </div>
-              <ul class="upload-tip-list">
-                <li>CSV 将自动检测逗号、制表符、分号或竖线分隔。</li>
-                <li>请保留模板中的字段名称（如“作物”“地区”“年份”等），便于系统匹配。</li>
-              </ul>
-            </template>
-          </el-upload>
-        </el-form-item>
-      </el-form>
+              <template #tip>
+                <div class="el-upload__tip">
+                  支持 Excel（.xls/.xlsx）和 UTF-8 编码的 CSV（.csv）文件，系统会自动识别常见的分隔符。
+                </div>
+                <ul class="upload-tip-list">
+                  <li>CSV 将自动检测逗号、制表符、分号或竖线分隔。</li>
+                  <li>请保留模板中的字段名称（如“作物”“地区”“年份”等），便于系统匹配。</li>
+                </ul>
+              </template>
+            </el-upload>
+          </el-form-item>
+        </el-form>
+      </div>
       <template #footer>
         <el-button @click="uploadDialogVisible = false" :disabled="uploading">取 消</el-button>
         <el-button type="primary" @click="submitUpload" :loading="uploading" :disabled="uploadFileList.length === 0">
@@ -1283,39 +1292,64 @@ onBeforeUnmount(() => {
   margin-top: 4px;
 }
 
-:deep(.upload-dialog-overlay) {
+.upload-dialog :deep(.el-overlay-dialog) {
   display: flex;
   align-items: flex-start;
   justify-content: center;
   padding: 6vh 16px 24px;
-  overflow-y: auto;
   box-sizing: border-box;
+  overflow-y: auto;
 }
 
-:deep(.upload-dialog) {
-  --el-dialog-body-padding: 20px 24px 24px;
-  width: min(520px, calc(100vw - 32px));
-  max-height: calc(100vh - 12vh);
+.upload-dialog :deep(.el-dialog) {
+  margin: 0;
+  max-height: 88vh;
   display: flex;
   flex-direction: column;
-  box-sizing: border-box;
-  margin: 0;
+  width: min(600px, calc(100vw - 32px));
 }
 
-:deep(.upload-dialog .el-dialog__body) {
+.upload-dialog :deep(.el-dialog__body) {
   flex: 1;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
-  overflow-y: auto;
-  padding-right: 4px;
+  padding: 0;
 }
 
-:deep(.upload-dialog .el-dialog__footer) {
-  padding-top: 16px;
+.upload-dialog :deep(.el-dialog__footer) {
+  padding: 12px 24px 20px;
   border-top: 1px solid var(--el-border-color-lighter);
 }
 
-:deep(.upload-dialog .el-form-item) {
+.upload-dialog :deep(.el-form-item) {
   margin-bottom: 16px;
+}
+
+.upload-dialog-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.upload-dialog-header h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.upload-dialog-header p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
+.upload-dialog-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 24px 20px;
 }
 
 /* User theme enhancements */
