@@ -19,19 +19,63 @@ const toArray = value => {
   return [value]
 }
 
-const normalizeConversation = item => ({
-  id: item?.id ?? item?.consultationId ?? null,
-  subject: item?.subject || item?.title || '未命名咨询',
-  cropType: item?.cropType || item?.crop || '',
-  status: item?.status || 'pending',
-  priority: item?.priority || 'normal',
-  createdAt: item?.createdAt || item?.created_at || null,
-  updatedAt: item?.updatedAt || item?.updated_at || null,
-  closedAt: item?.closedAt || item?.closed_at || null,
-  lastMessage: item?.lastMessage || item?.latestMessage || null,
-  unreadCount: item?.unreadCount ?? item?.unread_count ?? 0,
-  participants: toArray(item?.participants || item?.members)
+const normalizeParticipant = participant => ({
+  userId: participant?.userId ?? participant?.id ?? participant?.user_id ?? null,
+  name: participant?.name || participant?.fullName || participant?.username || '',
+  role: participant?.role || participant?.roleCode || participant?.role_code || '',
+  owner: Boolean(participant?.owner),
+  self: Boolean(participant?.self)
 })
+
+const buildUserRef = (id, name, fallback) => {
+  if (fallback && (fallback.userId || fallback.name)) {
+    return {
+      id: fallback.userId ?? null,
+      name: fallback.name || '',
+      role: fallback.role || ''
+    }
+  }
+  if (!id && !name) {
+    return null
+  }
+  return {
+    id: id ?? null,
+    name: name || '',
+    role: fallback?.role || ''
+  }
+}
+
+const normalizeConversation = item => {
+  const participantsRaw = toArray(item?.participants || item?.members)
+  const participants = participantsRaw.map(normalizeParticipant)
+  const ownerParticipant = participants.find(participant => participant.owner)
+  const ownerId = item?.ownerId ?? item?.owner_id
+  const ownerName = item?.ownerName || item?.owner_name
+  const assignedId = item?.assignedToId ?? item?.assigned_to_id
+  const assignedName = item?.assignedToName || item?.assigned_to_name
+  const messageCountValue =
+    typeof item?.messageCount === 'number'
+      ? item.messageCount
+      : Number(item?.messageCount ?? item?.message_count ?? 0)
+
+  return {
+    id: item?.id ?? item?.consultationId ?? null,
+    subject: item?.subject || item?.title || '未命名咨询',
+    cropType: item?.cropType || item?.crop || '',
+    status: item?.status || 'pending',
+    priority: item?.priority || 'normal',
+    createdAt: item?.createdAt || item?.created_at || null,
+    updatedAt: item?.updatedAt || item?.updated_at || null,
+    closedAt: item?.closedAt || item?.closed_at || null,
+    lastMessage: item?.lastMessage || item?.latestMessage || null,
+    unreadCount: item?.unreadCount ?? item?.unread_count ?? 0,
+    participants,
+    description: item?.description || '',
+    owner: buildUserRef(ownerId, ownerName, ownerParticipant),
+    assignedTo: buildUserRef(assignedId, assignedName),
+    messageCount: Number.isFinite(messageCountValue) ? messageCountValue : 0
+  }
+}
 
 const normalizeMessage = item => ({
   id: item?.id ?? item?.messageId ?? crypto.randomUUID?.() ?? Math.random().toString(36).slice(2),
@@ -111,14 +155,26 @@ export const useConsultationStore = defineStore('consultation', {
         })
       }
     },
-    async loadConversations({ page, pageSize, silent = false } = {}) {
+    async loadConversations({ page, pageSize, silent = false, ...rest } = {}) {
       if (!silent) {
         this.loadingConversations = true
       }
       try {
+        const filters = { ...rest }
+        Object.keys(filters).forEach(key => {
+          const value = filters[key]
+          if (
+            value === undefined ||
+            value === null ||
+            (typeof value === 'string' && (!value.trim() || value.trim().toLowerCase() === 'all'))
+          ) {
+            delete filters[key]
+          }
+        })
         const params = {
           page: page ?? this.pagination.page,
-          pageSize: pageSize ?? this.pagination.pageSize
+          pageSize: pageSize ?? this.pagination.pageSize,
+          ...filters
         }
         const { data } = await fetchConsultations(params)
         const payload = data?.data || data || {}

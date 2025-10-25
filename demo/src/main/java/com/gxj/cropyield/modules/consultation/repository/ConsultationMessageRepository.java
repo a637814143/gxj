@@ -19,4 +19,6 @@ public interface ConsultationMessageRepository extends JpaRepository<Consultatio
     long countByConsultationIdAndCreatedAtAfterAndSenderIdNot(Long consultationId, LocalDateTime createdAt, Long senderId);
 
     long countByConsultationIdAndSenderIdNot(Long consultationId, Long senderId);
+
+    long countByConsultationId(Long consultationId);
 }

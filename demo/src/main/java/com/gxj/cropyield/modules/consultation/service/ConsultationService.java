@@ -13,7 +13,7 @@ import com.gxj.cropyield.modules.consultation.dto.ConsultationUpdateRequest;
  */
 public interface ConsultationService {
 
-    ConsultationPageResponse listConsultations(int page, int pageSize);
+    ConsultationPageResponse listConsultations(int page, int pageSize, String status, String keyword);
 
     ConsultationSummary createConsultation(ConsultationCreateRequest request);
 

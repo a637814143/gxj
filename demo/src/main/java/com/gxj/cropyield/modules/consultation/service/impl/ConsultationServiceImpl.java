@@ -21,6 +21,7 @@ import com.gxj.cropyield.modules.consultation.repository.ConsultationMessageRepo
 import com.gxj.cropyield.modules.consultation.repository.ConsultationParticipantRepository;
 import com.gxj.cropyield.modules.consultation.repository.ConsultationRepository;
 import com.gxj.cropyield.modules.consultation.service.ConsultationService;
+import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -66,7 +67,7 @@ public class ConsultationServiceImpl implements ConsultationService {
 
     @Override
     @Transactional(readOnly = true)
-    public ConsultationPageResponse listConsultations(int page, int pageSize) {
+    public ConsultationPageResponse listConsultations(int page, int pageSize, String status, String keyword) {
         int pageIndex = Math.max(page - 1, 0);
         int size = pageSize <= 0 ? 20 : pageSize;
         Pageable pageable = PageRequest.of(pageIndex, size,
@@ -74,12 +75,32 @@ public class ConsultationServiceImpl implements ConsultationService {
 
         User currentUser = currentUserService.getCurrentUser();
         Set<String> roles = resolveRoles(currentUser);
-        Page<Consultation> pageResult;
-        if (roles.contains(ROLE_ADMIN) || roles.contains(ROLE_DEPT)) {
-            pageResult = consultationRepository.findAll(pageable);
-        } else {
-            pageResult = consultationRepository.findByCreatedBy(currentUser, pageable);
-        }
+        final boolean privileged = roles.contains(ROLE_ADMIN) || roles.contains(ROLE_DEPT);
+        final String statusFilter = StringUtils.hasText(status) && !"all".equalsIgnoreCase(status)
+            ? status.trim().toLowerCase()
+            : null;
+        final String keywordFilter = StringUtils.hasText(keyword) ? keyword.trim().toLowerCase() : null;
+
+        Page<Consultation> pageResult = consultationRepository.findAll((root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (!privileged) {
+                predicates.add(cb.equal(root.get("createdBy"), currentUser));
+            }
+            if (statusFilter != null) {
+                predicates.add(cb.equal(cb.lower(root.get("status")), statusFilter));
+            }
+            if (keywordFilter != null) {
+                String pattern = "%" + keywordFilter + "%";
+                Predicate subjectPredicate = cb.like(cb.lower(root.get("subject")), pattern);
+                Predicate cropPredicate = cb.like(cb.lower(root.get("cropType")), pattern);
+                Predicate descriptionPredicate = cb.like(cb.lower(root.get("description")), pattern);
+                predicates.add(cb.or(subjectPredicate, cropPredicate, descriptionPredicate));
+            }
+            if (predicates.isEmpty()) {
+                return null;
+            }
+            return cb.and(predicates.toArray(new Predicate[0]));
+        }, pageable);
 
         List<ConsultationSummary> items = pageResult.getContent().stream()
             .map(consultation -> toSummary(consultation, currentUser))
@@ -260,6 +281,15 @@ public class ConsultationServiceImpl implements ConsultationService {
                 participant.getUser().getId().equals(currentUser.getId())
             ))
             .collect(Collectors.toList());
+        User owner = consultation.getCreatedBy();
+        String ownerName = owner == null
+            ? null
+            : (StringUtils.hasText(owner.getFullName()) ? owner.getFullName() : owner.getUsername());
+        User assignee = consultation.getAssignedTo();
+        String assigneeName = assignee == null
+            ? null
+            : (StringUtils.hasText(assignee.getFullName()) ? assignee.getFullName() : assignee.getUsername());
+        long messageCount = messageRepository.countByConsultationId(consultation.getId());
         return new ConsultationSummary(
             consultation.getId(),
             consultation.getSubject(),
@@ -271,7 +301,13 @@ public class ConsultationServiceImpl implements ConsultationService {
             consultation.getClosedAt(),
             lastMessageResponse,
             unreadCount,
-            participants
+            participants,
+            consultation.getDescription(),
+            owner != null ? owner.getId() : null,
+            ownerName,
+            assignee != null ? assignee.getId() : null,
+            assigneeName,
+            messageCount
         );
     }
 

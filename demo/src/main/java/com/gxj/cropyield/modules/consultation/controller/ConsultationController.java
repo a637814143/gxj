@@ -36,8 +36,10 @@ public class ConsultationController {
 
     @GetMapping
     public ApiResponse<ConsultationPageResponse> listConsultations(@RequestParam(defaultValue = "1") int page,
-                                                                   @RequestParam(name = "pageSize", defaultValue = "20") int pageSize) {
-        return ApiResponse.success(consultationService.listConsultations(page, pageSize));
+                                                                   @RequestParam(name = "pageSize", defaultValue = "20") int pageSize,
+                                                                   @RequestParam(required = false) String status,
+                                                                   @RequestParam(required = false) String keyword) {
+        return ApiResponse.success(consultationService.listConsultations(page, pageSize, status, keyword));
     }
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)

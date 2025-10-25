@@ -17,6 +17,12 @@ public record ConsultationSummary(
     LocalDateTime closedAt,
     ConsultationMessageResponse lastMessage,
     long unreadCount,
-    List<ConsultationParticipantResponse> participants
+    List<ConsultationParticipantResponse> participants,
+    String description,
+    Long ownerId,
+    String ownerName,
+    Long assignedToId,
+    String assignedToName,
+    long messageCount
 ) {
 }
