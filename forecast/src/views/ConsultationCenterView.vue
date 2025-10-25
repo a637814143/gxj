@@ -4,8 +4,11 @@
       :conversations="conversations"
       :active-id="activeConversationId"
       :loading="loadingConversations"
+      :allow-create="canCreateConsultation"
+      :subtitle="sidebarSubtitle"
+      :empty-description="sidebarEmptyDescription"
       @select="handleSelectConversation"
-      @create="openCreateDialog"
+      @create="handleCreateRequest"
     />
 
     <section class="conversation-panel">
@@ -45,6 +48,7 @@
     </aside>
 
     <el-dialog
+      v-if="canCreateConsultation"
       v-model="createVisible"
       title="发起新的咨询"
       width="520px"
@@ -110,6 +114,13 @@ const activeConversationId = computed(() => consultationStore.activeConversation
 const loadingConversations = computed(() => consultationStore.loadingConversations)
 const loadingMessages = computed(() => consultationStore.loadingMessages)
 const currentUserId = computed(() => authStore.user?.id || authStore.user?.userId || authStore.user?.username)
+const canCreateConsultation = computed(() => authStore.hasAnyRole(['FARMER']))
+const sidebarSubtitle = computed(() =>
+  canCreateConsultation.value ? '与农业部门保持实时沟通' : '查看农户咨询并提供建议'
+)
+const sidebarEmptyDescription = computed(() =>
+  canCreateConsultation.value ? '暂无相关会话，立即发起咨询' : '暂无新的咨询会话'
+)
 
 const createVisible = ref(false)
 const resetKey = ref(0)
@@ -144,7 +155,10 @@ const handleSendReply = async payload => {
   }
 }
 
-const openCreateDialog = () => {
+const handleCreateRequest = () => {
+  if (!canCreateConsultation.value) {
+    return
+  }
   createVisible.value = true
 }
 
@@ -161,6 +175,9 @@ const submitCreate = () => {
       return
     }
     try {
+      if (!canCreateConsultation.value) {
+        throw new Error('当前账号无权发起咨询')
+      }
       await consultationStore.createConsultation({
         cropType: createForm.cropType,
         subject: createForm.subject,

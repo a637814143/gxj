@@ -3,9 +3,14 @@
     <header class="sidebar-header">
       <div class="header-text">
         <h2 class="header-title">咨询会话</h2>
-        <p class="header-subtitle">与农业部门保持实时沟通</p>
+        <p class="header-subtitle">{{ subtitle }}</p>
       </div>
-      <el-button type="primary" size="small" @click="$emit('create')">
+      <el-button
+        v-if="allowCreate"
+        type="primary"
+        size="small"
+        @click="$emit('create')"
+      >
         <el-icon class="icon"><Plus /></el-icon>
         新建咨询
       </el-button>
@@ -34,10 +39,7 @@
       <el-skeleton v-if="loading" animated :rows="6" class="skeleton" />
       <template v-else>
         <div v-if="!filteredConversations.length" class="empty">
-          <el-empty
-            :image-size="120"
-            description="暂无相关会话，立即发起咨询"
-          />
+          <el-empty :image-size="120" :description="emptyDescription" />
         </div>
         <button
           v-for="item in filteredConversations"
@@ -88,6 +90,18 @@ const props = defineProps({
   loading: {
     type: Boolean,
     default: false
+  },
+  allowCreate: {
+    type: Boolean,
+    default: true
+  },
+  subtitle: {
+    type: String,
+    default: '与农业部门保持实时沟通'
+  },
+  emptyDescription: {
+    type: String,
+    default: '暂无相关会话，立即发起咨询'
   }
 })
 
