@@ -17,9 +17,12 @@
         :messages="activeMessages"
         :loading="loadingMessages"
         :current-user-id="currentUserId"
+        :allow-close="canCloseActiveConversation"
+        :closing="consultationStore.closing"
+        @close="handleCloseConversation"
       />
       <ReplyComposer
-        :disabled="!activeConversation"
+        :disabled="composerDisabled"
         :sending="consultationStore.sending"
         :reset-key="resetKey"
         @send="handleSendReply"
@@ -115,12 +118,20 @@ const loadingConversations = computed(() => consultationStore.loadingConversatio
 const loadingMessages = computed(() => consultationStore.loadingMessages)
 const currentUserId = computed(() => authStore.user?.id || authStore.user?.userId || authStore.user?.username)
 const canCreateConsultation = computed(() => authStore.hasAnyRole(['FARMER']))
+const canCloseConversation = computed(() => authStore.hasAnyRole(['FARMER', 'AGRICULTURE_DEPT', 'ADMIN']))
 const sidebarSubtitle = computed(() =>
   canCreateConsultation.value ? '与农业部门保持实时沟通' : '查看农户咨询并提供建议'
 )
 const sidebarEmptyDescription = computed(() =>
   canCreateConsultation.value ? '暂无相关会话，立即发起咨询' : '暂无新的咨询会话'
 )
+const conversationClosed = computed(
+  () => (activeConversation.value?.status || '').toLowerCase() === 'closed'
+)
+const canCloseActiveConversation = computed(
+  () => canCloseConversation.value && !!activeConversation.value && !conversationClosed.value
+)
+const composerDisabled = computed(() => !activeConversation.value || conversationClosed.value)
 
 const createVisible = ref(false)
 const resetKey = ref(0)
@@ -151,6 +162,20 @@ const handleSendReply = async payload => {
     consultationStore.markAsRead()
   } catch (error) {
     const message = error?.response?.data?.message || error.message || '发送失败，请稍后重试'
+    ElMessage.error(message)
+  }
+}
+
+const handleCloseConversation = async () => {
+  if (!activeConversation.value) {
+    return
+  }
+  try {
+    await consultationStore.closeConversation(activeConversation.value.id)
+    resetKey.value = Date.now()
+    ElMessage.success('对话已结束')
+  } catch (error) {
+    const message = error?.response?.data?.message || error.message || '结束对话失败'
     ElMessage.error(message)
   }
 }

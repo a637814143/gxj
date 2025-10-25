@@ -14,6 +14,7 @@ public record ConsultationSummary(
     String priority,
     LocalDateTime createdAt,
     LocalDateTime updatedAt,
+    LocalDateTime closedAt,
     ConsultationMessageResponse lastMessage,
     long unreadCount,
     List<ConsultationParticipantResponse> participants

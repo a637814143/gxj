@@ -13,12 +13,13 @@ export const fetchConsultationMessages = (consultationId, params) =>
   })
 
 export const sendConsultationMessage = (consultationId, payload) =>
-  apiClient.post(`/api/consultations/${consultationId}/messages`, payload, {
-    headers: payload instanceof FormData ? { 'Content-Type': 'multipart/form-data' } : undefined
-  })
+  apiClient.post(`/api/consultations/${consultationId}/messages`, payload)
 
 export const updateConsultation = (consultationId, payload) =>
   apiClient.patch(`/api/consultations/${consultationId}`, payload)
 
 export const markConsultationRead = consultationId =>
   apiClient.post(`/api/consultations/${consultationId}/read`)
+
+export const closeConsultation = consultationId =>
+  apiClient.post(`/api/consultations/${consultationId}/close`)

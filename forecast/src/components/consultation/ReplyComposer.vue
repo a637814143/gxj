@@ -13,63 +13,22 @@
       placeholder="输入您的回复内容，例如作物症状、环境信息等"
     />
 
-    <div class="composer-tools">
-      <div class="attachment-area">
-        <input
-          ref="fileInput"
-          type="file"
-          multiple
-          class="file-input"
-          accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-          @change="handleFileChange"
-          :disabled="disabled || sending"
-        />
-        <el-button
-          type="default"
-          text
-          :disabled="disabled || sending"
-          @click="triggerFile"
-        >
-          <el-icon><Upload /></el-icon>
-          添加附件
-        </el-button>
-      </div>
-      <div class="composer-actions">
-        <el-button
-          type="primary"
-          :loading="sending"
-          :disabled="disabled || sending || (!draft.trim() && !attachments.length)"
-          @click="handleSend"
-        >
-          发送
-        </el-button>
-      </div>
+    <div class="composer-actions">
+      <el-button
+        type="primary"
+        :loading="sending"
+        :disabled="disabled || sending || !draft.trim()"
+        @click="handleSend"
+      >
+        发送
+      </el-button>
     </div>
-
-    <transition-group tag="ul" name="attachment" class="attachment-list">
-      <li v-for="file in attachments" :key="file.uid" class="attachment-item">
-        <el-icon class="attachment-icon"><Paperclip /></el-icon>
-        <div class="attachment-info">
-          <div class="name">{{ file.name }}</div>
-          <div class="size">{{ formatSize(file.size) }}</div>
-        </div>
-        <el-button
-          text
-          type="danger"
-          :disabled="disabled || sending"
-          @click="removeAttachment(file.uid)"
-        >
-          移除
-        </el-button>
-      </li>
-    </transition-group>
   </div>
 </template>
 
 <script setup>
 import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Paperclip, Upload } from '@element-plus/icons-vue'
 
 const props = defineProps({
   disabled: {
@@ -89,67 +48,26 @@ const props = defineProps({
 const emit = defineEmits(['send'])
 
 const draft = ref('')
-const attachments = ref([])
-const fileInput = ref(null)
 
 watch(
   () => props.resetKey,
   () => {
     draft.value = ''
-    attachments.value = []
-    if (fileInput.value) {
-      fileInput.value.value = ''
-    }
   }
 )
-
-const triggerFile = () => {
-  fileInput.value?.click()
-}
-
-const handleFileChange = event => {
-  const files = Array.from(event.target.files || [])
-  const mapped = files.map(file => ({
-    uid: `${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(16).slice(2)}`,
-    raw: file,
-    name: file.name,
-    size: file.size
-  }))
-  attachments.value = [...attachments.value, ...mapped]
-  event.target.value = ''
-}
-
-const removeAttachment = uid => {
-  attachments.value = attachments.value.filter(item => item.uid !== uid)
-}
 
 const handleSend = () => {
   if (props.disabled || props.sending) {
     return
   }
   const trimmed = draft.value.trim()
-  if (!trimmed && !attachments.value.length) {
-    ElMessage.warning('请输入消息内容或上传附件')
+  if (!trimmed) {
+    ElMessage.warning('请输入消息内容')
     return
   }
   emit('send', {
-    content: trimmed,
-    attachments: attachments.value.map(item => item.raw)
+    content: trimmed
   })
-}
-
-const formatSize = size => {
-  if (!size) {
-    return '0 KB'
-  }
-  const units = ['B', 'KB', 'MB', 'GB']
-  let index = 0
-  let value = size
-  while (value >= 1024 && index < units.length - 1) {
-    value /= 1024
-    index += 1
-  }
-  return `${value.toFixed(index === 0 ? 0 : 1)} ${units[index]}`
 }
 </script>
 
@@ -187,67 +105,8 @@ const formatSize = size => {
   color: #607d8b;
 }
 
-.composer-tools {
+.composer-actions {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.attachment-area {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.file-input {
-  display: none;
-}
-
-.attachment-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.attachment-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
-  border-radius: 12px;
-  background: rgba(27, 127, 95, 0.08);
-}
-
-.attachment-icon {
-  color: #1b4332;
-}
-
-.attachment-info {
-  flex: 1;
-}
-
-.attachment-info .name {
-  font-weight: 600;
-  font-size: 13px;
-}
-
-.attachment-info .size {
-  font-size: 12px;
-  color: #607d8b;
-}
-
-.attachment-enter-active,
-.attachment-leave-active {
-  transition: all 0.2s ease;
-}
-
-.attachment-enter-from,
-.attachment-leave-to {
-  opacity: 0;
-  transform: translateY(-4px);
+  justify-content: flex-end;
 }
 </style>

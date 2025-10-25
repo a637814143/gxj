@@ -6,8 +6,6 @@ import com.gxj.cropyield.modules.auth.entity.Role;
 import com.gxj.cropyield.modules.auth.entity.User;
 import com.gxj.cropyield.modules.auth.repository.UserRepository;
 import com.gxj.cropyield.modules.auth.service.CurrentUserService;
-import com.gxj.cropyield.modules.consultation.dto.ConsultationAttachmentDownload;
-import com.gxj.cropyield.modules.consultation.dto.ConsultationAttachmentResponse;
 import com.gxj.cropyield.modules.consultation.dto.ConsultationCreateRequest;
 import com.gxj.cropyield.modules.consultation.dto.ConsultationMessageRequest;
 import com.gxj.cropyield.modules.consultation.dto.ConsultationMessageResponse;
@@ -17,16 +15,12 @@ import com.gxj.cropyield.modules.consultation.dto.ConsultationParticipantRespons
 import com.gxj.cropyield.modules.consultation.dto.ConsultationSummary;
 import com.gxj.cropyield.modules.consultation.dto.ConsultationUpdateRequest;
 import com.gxj.cropyield.modules.consultation.entity.Consultation;
-import com.gxj.cropyield.modules.consultation.entity.ConsultationAttachment;
 import com.gxj.cropyield.modules.consultation.entity.ConsultationMessage;
 import com.gxj.cropyield.modules.consultation.entity.ConsultationParticipant;
-import com.gxj.cropyield.modules.consultation.repository.ConsultationAttachmentRepository;
 import com.gxj.cropyield.modules.consultation.repository.ConsultationMessageRepository;
 import com.gxj.cropyield.modules.consultation.repository.ConsultationParticipantRepository;
 import com.gxj.cropyield.modules.consultation.repository.ConsultationRepository;
 import com.gxj.cropyield.modules.consultation.service.ConsultationService;
-import org.springframework.core.io.FileSystemResource;
-import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -34,18 +28,11 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
-import org.springframework.web.multipart.MultipartFile;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -62,22 +49,17 @@ public class ConsultationServiceImpl implements ConsultationService {
     private final ConsultationRepository consultationRepository;
     private final ConsultationMessageRepository messageRepository;
     private final ConsultationParticipantRepository participantRepository;
-    private final ConsultationAttachmentRepository attachmentRepository;
     private final CurrentUserService currentUserService;
     private final UserRepository userRepository;
-
-    private final Path attachmentRoot = Path.of("uploads", "consultations");
 
     public ConsultationServiceImpl(ConsultationRepository consultationRepository,
                                     ConsultationMessageRepository messageRepository,
                                     ConsultationParticipantRepository participantRepository,
-                                    ConsultationAttachmentRepository attachmentRepository,
                                     CurrentUserService currentUserService,
                                     UserRepository userRepository) {
         this.consultationRepository = consultationRepository;
         this.messageRepository = messageRepository;
         this.participantRepository = participantRepository;
-        this.attachmentRepository = attachmentRepository;
         this.currentUserService = currentUserService;
         this.userRepository = userRepository;
     }
@@ -163,17 +145,14 @@ public class ConsultationServiceImpl implements ConsultationService {
 
     @Override
     public ConsultationMessageResponse sendMessage(Long consultationId, ConsultationMessageRequest request) {
-        return sendMessage(consultationId, request.content(), List.of());
-    }
-
-    @Override
-    public ConsultationMessageResponse sendMessage(Long consultationId, String content, List<MultipartFile> attachments) {
         Consultation consultation = loadAccessibleConsultation(consultationId);
+        if ("closed".equalsIgnoreCase(consultation.getStatus())) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "该对话已结束，无法继续发送消息");
+        }
         User currentUser = currentUserService.getCurrentUser();
-        String trimmedContent = content == null ? null : content.trim();
-        boolean hasAttachments = attachments != null && !attachments.isEmpty();
-        if (!StringUtils.hasText(trimmedContent) && !hasAttachments) {
-            throw new BusinessException(ResultCode.BAD_REQUEST, "请输入消息内容或上传附件");
+        String trimmedContent = request == null || request.content() == null ? null : request.content().trim();
+        if (!StringUtils.hasText(trimmedContent)) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "消息内容不能为空");
         }
 
         ConsultationMessage message = new ConsultationMessage();
@@ -182,21 +161,6 @@ public class ConsultationServiceImpl implements ConsultationService {
         message.setSenderRole(resolvePrimaryRole(currentUser));
         message.setContent(trimmedContent);
         ConsultationMessage savedMessage = messageRepository.save(message);
-
-        if (hasAttachments) {
-            ensureAttachmentDirectory();
-            List<ConsultationAttachment> savedAttachments = new ArrayList<>();
-            for (MultipartFile file : attachments) {
-                if (file == null || file.isEmpty()) {
-                    continue;
-                }
-                ConsultationAttachment attachment = storeAttachment(consultation.getId(), savedMessage, file);
-                savedAttachments.add(attachment);
-            }
-            if (!savedAttachments.isEmpty()) {
-                savedMessage.setAttachments(savedAttachments);
-            }
-        }
 
         consultation.setLastMessageAt(savedMessage.getCreatedAt());
         consultationRepository.save(consultation);
@@ -269,51 +233,16 @@ public class ConsultationServiceImpl implements ConsultationService {
     }
 
     @Override
-    @Transactional(readOnly = true)
-    public ConsultationAttachmentDownload loadAttachment(Long consultationId, Long attachmentId) {
-        loadAccessibleConsultation(consultationId);
-        ConsultationAttachment attachment = attachmentRepository
-            .findByIdAndMessageConsultationId(attachmentId, consultationId)
-            .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "附件不存在"));
-        Path path = Path.of(attachment.getStoragePath());
-        if (!Files.exists(path)) {
-            throw new BusinessException(ResultCode.NOT_FOUND, "附件文件不存在");
+    public ConsultationSummary closeConsultation(Long consultationId) {
+        Consultation consultation = loadAccessibleConsultation(consultationId);
+        User currentUser = currentUserService.getCurrentUser();
+        if ("closed".equalsIgnoreCase(consultation.getStatus())) {
+            return toSummary(consultation, currentUser);
         }
-        Resource resource = new FileSystemResource(path);
-        return new ConsultationAttachmentDownload(resource,
-            attachment.getOriginalName() != null ? attachment.getOriginalName() : attachment.getFileName(),
-            attachment.getContentType());
-    }
-
-    private ConsultationAttachment storeAttachment(Long consultationId, ConsultationMessage message, MultipartFile file) {
-        String originalName = StringUtils.hasText(file.getOriginalFilename()) ? file.getOriginalFilename() : file.getName();
-        String extension = StringUtils.getFilenameExtension(originalName);
-        String generatedName = UUID.randomUUID().toString().replaceAll("-", "");
-        String fileName = extension == null ? generatedName : generatedName + "." + extension;
-        Path directory = attachmentRoot.resolve(String.valueOf(consultationId));
-        try {
-            Files.createDirectories(directory);
-            Path target = directory.resolve(fileName);
-            Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
-            ConsultationAttachment attachment = new ConsultationAttachment();
-            attachment.setMessage(message);
-            attachment.setFileName(fileName);
-            attachment.setOriginalName(originalName);
-            attachment.setContentType(file.getContentType());
-            attachment.setFileSize(file.getSize());
-            attachment.setStoragePath(target.toAbsolutePath().toString());
-            return attachmentRepository.save(attachment);
-        } catch (IOException ex) {
-            throw new BusinessException(ResultCode.SERVER_ERROR, "保存附件失败: " + ex.getMessage());
-        }
-    }
-
-    private void ensureAttachmentDirectory() {
-        try {
-            Files.createDirectories(attachmentRoot);
-        } catch (IOException ex) {
-            throw new BusinessException(ResultCode.SERVER_ERROR, "无法创建附件目录: " + ex.getMessage());
-        }
+        consultation.setStatus("closed");
+        consultation.setClosedAt(LocalDateTime.now());
+        Consultation updated = consultationRepository.save(consultation);
+        return toSummary(updated, currentUser);
     }
 
     private ConsultationSummary toSummary(Consultation consultation, User currentUser) {
@@ -339,6 +268,7 @@ public class ConsultationServiceImpl implements ConsultationService {
             consultation.getPriority(),
             consultation.getCreatedAt(),
             consultation.getUpdatedAt(),
+            consultation.getClosedAt(),
             lastMessageResponse,
             unreadCount,
             participants
@@ -346,15 +276,6 @@ public class ConsultationServiceImpl implements ConsultationService {
     }
 
     private ConsultationMessageResponse toMessageResponse(ConsultationMessage message) {
-        List<ConsultationAttachmentResponse> attachments = message.getAttachments().stream()
-            .sorted(Comparator.comparing(ConsultationAttachment::getId))
-            .map(attachment -> new ConsultationAttachmentResponse(
-                attachment.getId(),
-                attachment.getOriginalName() != null ? attachment.getOriginalName() : attachment.getFileName(),
-                String.format("/api/consultations/%d/attachments/%d", message.getConsultation().getId(), attachment.getId()),
-                attachment.getContentType()
-            ))
-            .collect(Collectors.toList());
         User sender = message.getSender();
         String senderName = sender.getFullName() != null && !sender.getFullName().isBlank()
             ? sender.getFullName()
@@ -366,8 +287,7 @@ public class ConsultationServiceImpl implements ConsultationService {
             senderName,
             message.getSenderRole(),
             message.getContent(),
-            message.getCreatedAt(),
-            attachments
+            message.getCreatedAt()
         );
     }
 

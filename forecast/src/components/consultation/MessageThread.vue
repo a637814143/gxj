@@ -1,6 +1,6 @@
 <template>
   <section class="message-thread">
-    <header class="thread-header" v-if="conversation">
+    <header v-if="conversation" class="thread-header">
       <div class="header-text">
         <h3 class="thread-title">{{ conversation.subject }}</h3>
         <p class="thread-meta">
@@ -8,19 +8,34 @@
           <span>会话编号：{{ conversation.id }}</span>
         </p>
       </div>
-      <div class="header-tags">
-        <el-tag size="small" :type="statusMeta[conversation.status]?.type || 'info'">
-          {{ statusMeta[conversation.status]?.label || '未知状态' }}
-        </el-tag>
-        <el-tag size="small" effect="plain" v-if="conversation.priority">
-          {{ priorityMeta[conversation.priority]?.label || '普通' }}
-        </el-tag>
+      <div class="header-actions">
+        <div class="header-tags">
+          <el-tag size="small" :type="statusMeta[conversation.status]?.type || 'info'">
+            {{ statusMeta[conversation.status]?.label || '未知状态' }}
+          </el-tag>
+          <el-tag size="small" effect="plain" v-if="conversation.priority">
+            {{ priorityMeta[conversation.priority]?.label || '普通' }}
+          </el-tag>
+        </div>
+        <el-button
+          v-if="canCloseConversation"
+          type="danger"
+          size="small"
+          plain
+          :loading="closing"
+          @click="$emit('close', conversation.id)"
+        >
+          结束对话
+        </el-button>
       </div>
     </header>
 
     <el-scrollbar ref="scrollbar" class="thread-body">
       <el-skeleton v-if="loading" animated :rows="6" />
       <template v-else>
+        <div v-if="isClosed" class="thread-notice">
+          该对话已结束，如需继续沟通请发起新的咨询。
+        </div>
         <el-empty
           v-if="!messages.length"
           description="暂未有消息，开始对话吧"
@@ -51,14 +66,6 @@
               <div class="bubble-content" v-if="message.content">
                 <p>{{ message.content }}</p>
               </div>
-              <ul v-if="message.attachments?.length" class="attachment-list">
-                <li v-for="attachment in message.attachments" :key="attachment.id">
-                  <el-link :href="attachment.url" target="_blank" type="primary">
-                    {{ attachment.name }}
-                  </el-link>
-                  <span class="attachment-type">{{ attachment.type }}</span>
-                </li>
-              </ul>
             </div>
           </div>
         </div>
@@ -68,7 +75,7 @@
 </template>
 
 <script setup>
-import { nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 
 const props = defineProps({
   messages: {
@@ -86,10 +93,24 @@ const props = defineProps({
   conversation: {
     type: Object,
     default: null
+  },
+  allowClose: {
+    type: Boolean,
+    default: false
+  },
+  closing: {
+    type: Boolean,
+    default: false
   }
 })
 
+defineEmits(['close'])
+
 const scrollbar = ref()
+
+const isClosed = computed(() => (props.conversation?.status || '').toLowerCase() === 'closed')
+
+const canCloseConversation = computed(() => props.allowClose && props.conversation && !isClosed.value)
 
 const statusMeta = {
   pending: { label: '待回复', type: 'warning' },
@@ -197,6 +218,12 @@ watch(
   color: #607d8b;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .header-tags {
   display: flex;
   gap: 8px;
@@ -204,20 +231,31 @@ watch(
 
 .thread-body {
   flex: 1;
-  padding: 16px 24px;
+  min-height: 0;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.thread-notice {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(21, 82, 56, 0.08);
+  color: #1b4332;
+  font-size: 13px;
 }
 
 .message-list {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding-bottom: 8px;
 }
 
 .message-item {
   display: flex;
-  gap: 12px;
   align-items: flex-start;
+  gap: 12px;
 }
 
 .message-item.mine {
@@ -228,50 +266,44 @@ watch(
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #72c6a2, #2c7a7b);
+  background: #e8f5e9;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
-  font-weight: 600;
-  flex-shrink: 0;
+  overflow: hidden;
 }
 
 .avatar-image {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 50%;
 }
 
 .avatar-fallback {
   font-size: 16px;
+  font-weight: 600;
+  color: #2f855a;
 }
 
 .bubble {
-  max-width: 520px;
+  flex: 1;
+  max-width: 70%;
   background: #ffffff;
-  border-radius: 16px;
+  border-radius: 12px;
   padding: 12px 16px;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
-  position: relative;
+  box-shadow: 0 10px 30px rgba(27, 67, 50, 0.06);
 }
 
 .message-item.mine .bubble {
-  background: linear-gradient(120deg, #1b7f5f, #29a76f);
+  background: #1b4332;
   color: #ffffff;
 }
 
 .bubble-header {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
-  font-size: 12px;
   margin-bottom: 8px;
-}
-
-.message-item.mine .bubble-header {
-  color: rgba(255, 255, 255, 0.8);
 }
 
 .sender-name {
@@ -279,47 +311,27 @@ watch(
 }
 
 .sender-role {
-  padding: 2px 6px;
-  border-radius: 999px;
-  background: rgba(27, 127, 95, 0.12);
-  color: #1b4332;
+  font-size: 12px;
+  color: rgba(96, 125, 139, 0.8);
 }
 
 .message-item.mine .sender-role {
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .timestamp {
   margin-left: auto;
+  font-size: 12px;
+  color: rgba(96, 125, 139, 0.8);
 }
 
-.message-item.mine .bubble-content p {
-  color: #ffffff;
+.message-item.mine .timestamp {
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .bubble-content p {
   margin: 0;
   line-height: 1.6;
   white-space: pre-wrap;
-}
-
-.attachment-list {
-  margin: 8px 0 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.attachment-type {
-  margin-left: 8px;
-  font-size: 12px;
-  color: rgba(96, 125, 139, 0.8);
-}
-
-.message-item.mine .attachment-type {
-  color: rgba(255, 255, 255, 0.7);
 }
 </style>

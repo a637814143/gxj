@@ -5,7 +5,8 @@ import {
   fetchConsultationMessages,
   sendConsultationMessage,
   updateConsultation,
-  markConsultationRead
+  markConsultationRead,
+  closeConsultation
 } from '../services/consultation'
 
 const toArray = value => {
@@ -26,6 +27,7 @@ const normalizeConversation = item => ({
   priority: item?.priority || 'normal',
   createdAt: item?.createdAt || item?.created_at || null,
   updatedAt: item?.updatedAt || item?.updated_at || null,
+  closedAt: item?.closedAt || item?.closed_at || null,
   lastMessage: item?.lastMessage || item?.latestMessage || null,
   unreadCount: item?.unreadCount ?? item?.unread_count ?? 0,
   participants: toArray(item?.participants || item?.members)
@@ -39,12 +41,6 @@ const normalizeMessage = item => ({
   senderRole: item?.senderRole || item?.role || '',
   senderAvatar: item?.senderAvatar || item?.avatar || '',
   content: item?.content || item?.message || '',
-  attachments: toArray(item?.attachments).map(attachment => ({
-    id: attachment?.id ?? attachment?.fileId ?? crypto.randomUUID?.() ?? Math.random().toString(36).slice(2),
-    name: attachment?.name || attachment?.fileName || '附件',
-    url: attachment?.url || attachment?.fileUrl || attachment?.path || '',
-    type: attachment?.type || attachment?.mimeType || ''
-  })),
   createdAt: item?.createdAt || item?.created_at || item?.timestamp || null,
   metadata: item?.metadata || {}
 })
@@ -64,6 +60,7 @@ export const useConsultationStore = defineStore('consultation', {
     creating: false,
     sending: false,
     updatingStatus: false,
+    closing: false,
     poller: null
   }),
   getters: {
@@ -202,35 +199,21 @@ export const useConsultationStore = defineStore('consultation', {
         this.creating = false
       }
     },
-    async sendReply({ consultationId = this.activeConversationId, content, attachments = [], metadata = {} }) {
+    async sendReply({ consultationId = this.activeConversationId, content }) {
       if (!consultationId) {
         throw new Error('未选择会话')
       }
-      if (!content && (!attachments || !attachments.length)) {
-        throw new Error('请输入消息内容或上传附件')
+      const target = this.conversations.find(item => item.id === consultationId)
+      if (target && (target.status || '').toLowerCase() === 'closed') {
+        throw new Error('该对话已结束，无法发送新消息')
+      }
+      if (!content || !content.trim()) {
+        throw new Error('请输入消息内容')
       }
       this.sending = true
       try {
-        let payload
-        if (attachments && attachments.length) {
-          payload = new FormData()
-          if (content) {
-            payload.append('content', content)
-          }
-          Object.entries(metadata || {}).forEach(([key, value]) => {
-            if (value !== undefined && value !== null) {
-              payload.append(key, value)
-            }
-          })
-          attachments.forEach(file => {
-            const actual = file?.raw || file
-            payload.append('attachments', actual)
-          })
-        } else {
-          payload = {
-            content,
-            ...metadata
-          }
+        const payload = {
+          content: content.trim()
         }
         const { data } = await sendConsultationMessage(consultationId, payload)
         const record = data?.data || data
@@ -251,6 +234,26 @@ export const useConsultationStore = defineStore('consultation', {
         throw error
       } finally {
         this.sending = false
+      }
+    },
+    async closeConversation(consultationId = this.activeConversationId) {
+      if (!consultationId) {
+        return
+      }
+      this.closing = true
+      try {
+        const { data } = await closeConsultation(consultationId)
+        const record = data?.data || data
+        if (record) {
+          this.upsertConversation(record)
+        } else {
+          this.updateConversationMeta(consultationId, { status: 'closed', closedAt: new Date().toISOString() })
+        }
+      } catch (error) {
+        console.error('Failed to close consultation', error)
+        throw error
+      } finally {
+        this.closing = false
       }
     },
     async updateStatus(consultationId, statusPayload) {

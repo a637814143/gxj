@@ -2,17 +2,12 @@ package com.gxj.cropyield.modules.consultation.entity;
 
 import com.gxj.cropyield.common.model.BaseEntity;
 import com.gxj.cropyield.modules.auth.entity.User;
-import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
-import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * 在线咨询模块的实体类，记录会话中的消息内容。
@@ -34,9 +29,6 @@ public class ConsultationMessage extends BaseEntity {
 
     @Column(columnDefinition = "TEXT")
     private String content;
-
-    @OneToMany(mappedBy = "message", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<ConsultationAttachment> attachments = new ArrayList<>();
 
     public Consultation getConsultation() {
         return consultation;
@@ -70,11 +62,4 @@ public class ConsultationMessage extends BaseEntity {
         this.content = content;
     }
 
-    public List<ConsultationAttachment> getAttachments() {
-        return attachments;
-    }
-
-    public void setAttachments(List<ConsultationAttachment> attachments) {
-        this.attachments = attachments;
-    }
 }

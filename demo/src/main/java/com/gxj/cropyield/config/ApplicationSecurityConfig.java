@@ -79,7 +79,7 @@ public class ApplicationSecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/datasets/**", "/api/yields/**", "/api/dashboard/**", "/api/base/**", "/api/forecast/models/**", "/api/forecast/tasks/**", "/api/report/**").hasAnyRole("ADMIN", "AGRICULTURE_DEPT", "FARMER")
                 .requestMatchers(HttpMethod.GET, "/api/consultations/**").hasAnyRole("ADMIN", "AGRICULTURE_DEPT", "FARMER")
                 .requestMatchers(HttpMethod.POST, "/api/consultations").hasAnyRole("ADMIN", "FARMER")
-                .requestMatchers(HttpMethod.POST, "/api/consultations/*/messages", "/api/consultations/*/read").hasAnyRole("ADMIN", "AGRICULTURE_DEPT", "FARMER")
+                .requestMatchers(HttpMethod.POST, "/api/consultations/*/messages", "/api/consultations/*/read", "/api/consultations/*/close").hasAnyRole("ADMIN", "AGRICULTURE_DEPT", "FARMER")
                 .requestMatchers(HttpMethod.PATCH, "/api/consultations/**").hasAnyRole("ADMIN", "AGRICULTURE_DEPT", "FARMER")
                 .requestMatchers(HttpMethod.GET, "/api/system/settings").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/forecast/models/**", "/api/forecast/tasks/**").hasAnyRole("ADMIN", "AGRICULTURE_DEPT")
