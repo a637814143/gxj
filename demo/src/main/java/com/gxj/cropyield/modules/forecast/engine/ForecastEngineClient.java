@@ -3,6 +3,7 @@ package com.gxj.cropyield.modules.forecast.engine;
 import com.gxj.cropyield.modules.forecast.config.ForecastEngineProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -21,7 +22,7 @@ public class ForecastEngineClient {
     private final ForecastEngineProperties properties;
     private final LocalForecastEngine localForecastEngine;
 
-    public ForecastEngineClient(RestTemplate forecastRestTemplate,
+    public ForecastEngineClient(@Qualifier("forecastRestTemplate") RestTemplate forecastRestTemplate,
                                 ForecastEngineProperties properties,
                                 LocalForecastEngine localForecastEngine) {
         this.restTemplate = forecastRestTemplate;

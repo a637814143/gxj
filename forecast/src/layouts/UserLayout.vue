@@ -31,6 +31,7 @@
             <p v-if="userSubtitle" class="header-subtitle">{{ userSubtitle }}</p>
           </div>
           <div class="header-actions">
+            <WeatherWidget class="header-weather" />
             <div class="user-info">
               <div class="user-name">{{ displayName }}</div>
               <div class="user-role">{{ displayRoles }}</div>
@@ -64,6 +65,7 @@ import { computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useAuthorization } from '../composables/useAuthorization'
+import WeatherWidget from '../components/weather/WeatherWidget.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -359,6 +361,10 @@ watch(
   display: flex;
   align-items: center;
   gap: 16px;
+}
+
+.header-weather {
+  flex: 0 0 auto;
 }
 
 .user-info {

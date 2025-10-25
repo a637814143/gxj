@@ -47,3 +47,11 @@ forecast:
     base-url: ""
     connect-timeout: 2s
     read-timeout: 8s
+
+weather:
+  cache-ttl: 120s
+  caiyun:
+    base-url: https://api.caiyunapp.com/v2.6
+    token: RA1saynz7zWYLTmA
+    connect-timeout: 2s
+    read-timeout: 5s
