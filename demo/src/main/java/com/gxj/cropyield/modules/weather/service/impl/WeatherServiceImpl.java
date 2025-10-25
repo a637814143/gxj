@@ -75,9 +75,9 @@ public class WeatherServiceImpl implements WeatherService {
             .orElse("https://api.caiyunapp.com/v2.6");
         String trimmedBase = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
         String location = longitude + "," + latitude;
-        String url = trimmedBase + "/" + caiyun.getToken() + "/" + location + "/weather.json";
+        String url = trimmedBase + "/" + caiyun.getToken() + "/" + location + "/weather";
 
-        URI requestUri = URI.create(url + "?alert=true&dailysteps=1&hourlysteps=1");
+        URI requestUri = URI.create(url + "?alert=true");
         ResponseEntity<JsonNode> response = restTemplate.getForEntity(requestUri, JsonNode.class);
         if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
             throw new IllegalStateException("获取天气数据失败");
@@ -86,6 +86,13 @@ public class WeatherServiceImpl implements WeatherService {
         JsonNode body = response.getBody();
         String status = body.path("status").asText();
         if (!"ok".equalsIgnoreCase(status)) {
+            String errorMessage = body.path("error").asText();
+            if (!StringUtils.hasText(errorMessage)) {
+                errorMessage = body.path("message").asText();
+            }
+            if (StringUtils.hasText(errorMessage)) {
+                throw new IllegalStateException("彩云天气返回异常状态: " + errorMessage);
+            }
             throw new IllegalStateException("彩云天气返回异常状态: " + status);
         }
 
