@@ -75,7 +75,7 @@ public class WeatherServiceImpl implements WeatherService {
             .orElse("https://api.caiyunapp.com/v2.6");
         String trimmedBase = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
         String location = longitude + "," + latitude;
-        String url = trimmedBase + "/" + caiyun.getToken() + "/" + location + "/weather";
+        String url = trimmedBase + "/" + caiyun.getToken() + "/" + location + "/realtime";
 
         URI requestUri = URI.create(url + "?alert=true");
         ResponseEntity<JsonNode> response = restTemplate.getForEntity(requestUri, JsonNode.class);
@@ -98,9 +98,14 @@ public class WeatherServiceImpl implements WeatherService {
 
         JsonNode result = body.path("result");
         JsonNode realtime = result.path("realtime");
+        if (realtime == null || realtime.isMissingNode() || realtime.isNull()) {
+            throw new IllegalStateException("彩云天气返回数据格式异常: 缺少 realtime 节点");
+        }
+
         JsonNode precipitation = realtime.path("precipitation");
         JsonNode wind = realtime.path("wind");
         JsonNode airQuality = realtime.path("air_quality");
+        JsonNode minutely = result.path("minutely");
 
         WeatherRealtimeResponse responseDto = new WeatherRealtimeResponse(
             longitude,
@@ -123,7 +128,7 @@ public class WeatherServiceImpl implements WeatherService {
             ),
             buildAirQuality(airQuality),
             result.path("forecast_keypoint").asText(null),
-            result.path("minutely").path("description").asText(null),
+            minutely.path("description").asText(null),
             parseInstant(realtime.path("obs_time").asText(null)),
             Instant.now()
         );
