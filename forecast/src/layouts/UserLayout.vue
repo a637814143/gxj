@@ -75,6 +75,7 @@ const rawMenuItems = [
   { label: '数据中心', name: 'data', path: '/data' },
   { label: '数据可视化', name: 'visualization', path: '/visualization' },
   { label: '预测中心', name: 'forecast', path: '/forecast' },
+  { label: '在线咨询', name: 'consultation', path: '/consultation' },
   { label: '报告中心', name: 'report', path: '/report' },
   { label: '个人中心', name: 'profile', path: '/profile' }
 ]
@@ -86,6 +87,7 @@ const quickActionConfigs = computed(() => [
   { key: 'data', label: '数据中心', icon: '🗄️', type: 'route', name: 'data', accent: 'coral' },
   { key: 'visualization', label: '数据可视化', icon: '📈', type: 'route', name: 'visualization', accent: 'violet' },
   { key: 'forecast', label: '预测中心', icon: '🚀', type: 'route', name: 'forecast', accent: 'sunset' },
+  { key: 'consultation', label: '在线咨询', icon: '💬', type: 'route', name: 'consultation', accent: 'lagoon' },
   { key: 'report', label: '报告中心', icon: '📄', type: 'route', name: 'report', accent: 'ocean' },
   { key: 'report-generate', label: '生成报告', icon: '📝', type: 'generate', accent: 'forest' },
   { key: 'profile', label: '个人中心', icon: '👤', type: 'route', name: 'profile', accent: 'peach' }
@@ -114,6 +116,7 @@ const titles = {
   data: '数据资源管理',
   visualization: '数据可视化洞察',
   forecast: '预测建模与任务',
+  consultation: '在线咨询与专家建议',
   report: '报告输出与分享',
   profile: '个人资料与安全设置'
 }

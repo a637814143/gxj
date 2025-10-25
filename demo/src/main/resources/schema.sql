@@ -659,4 +659,53 @@ CREATE TABLE IF NOT EXISTS sys_log (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '系统操作日志';
 
+CREATE TABLE IF NOT EXISTS consultation (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    subject VARCHAR(128) NOT NULL,
+    crop_type VARCHAR(64) NOT NULL,
+    description TEXT,
+    status VARCHAR(32) NOT NULL DEFAULT 'pending',
+    priority VARCHAR(32) NOT NULL DEFAULT 'normal',
+    created_by BIGINT UNSIGNED NOT NULL,
+    assigned_to BIGINT UNSIGNED,
+    last_message_at DATETIME,
+    closed_at DATETIME,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_consultation_status (status),
+    KEY idx_consultation_creator (created_by),
+    KEY idx_consultation_assignee (assigned_to),
+    CONSTRAINT fk_consultation_creator FOREIGN KEY (created_by) REFERENCES sys_user (id) ON DELETE CASCADE,
+    CONSTRAINT fk_consultation_assignee FOREIGN KEY (assigned_to) REFERENCES sys_user (id) ON DELETE SET NULL
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '在线咨询会话';
+
+CREATE TABLE IF NOT EXISTS consultation_participant (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    consultation_id BIGINT UNSIGNED NOT NULL,
+    user_id BIGINT UNSIGNED NOT NULL,
+    role_code VARCHAR(64) NOT NULL,
+    is_owner TINYINT(1) NOT NULL DEFAULT 0,
+    last_read_at DATETIME,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_consultation_participant (consultation_id, user_id),
+    KEY idx_participant_user (user_id),
+    CONSTRAINT fk_participant_consultation FOREIGN KEY (consultation_id) REFERENCES consultation (id) ON DELETE CASCADE,
+    CONSTRAINT fk_participant_user FOREIGN KEY (user_id) REFERENCES sys_user (id) ON DELETE CASCADE
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '在线咨询参与人';
+
+CREATE TABLE IF NOT EXISTS consultation_message (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    consultation_id BIGINT UNSIGNED NOT NULL,
+    sender_id BIGINT UNSIGNED NOT NULL,
+    sender_role VARCHAR(64),
+    content TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_message_consultation (consultation_id),
+    KEY idx_message_sender (sender_id),
+    CONSTRAINT fk_message_consultation FOREIGN KEY (consultation_id) REFERENCES consultation (id) ON DELETE CASCADE,
+    CONSTRAINT fk_message_sender FOREIGN KEY (sender_id) REFERENCES sys_user (id) ON DELETE CASCADE
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '在线咨询消息';
+
 SET FOREIGN_KEY_CHECKS = 1;
