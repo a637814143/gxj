@@ -49,6 +49,12 @@ const routes = [
         meta: { requiresAuth: true, roles: ['ADMIN', 'AGRICULTURE_DEPT'] }
       },
       {
+        path: 'weather',
+        name: 'weather',
+        component: () => import('../views/WeatherCenterView.vue'),
+        meta: { requiresAuth: true, roles: ['ADMIN', 'AGRICULTURE_DEPT', 'FARMER'] }
+      },
+      {
         path: 'consultation',
         name: 'consultation',
         component: () => import('../views/ConsultationCenterView.vue'),
