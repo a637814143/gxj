@@ -4,10 +4,22 @@ import { fetchRealtimeWeather } from '../services/weather'
 const STORAGE_KEY = 'cropyield-weather-location'
 
 export const LOCATION_PRESETS = [
-  { id: 'guangzhou', label: '广州农服站', longitude: 113.2644, latitude: 23.1291 },
-  { id: 'beijing', label: '北京试验田', longitude: 116.4074, latitude: 39.9042 },
-  { id: 'chengdu', label: '成都基地', longitude: 104.0665, latitude: 30.5723 },
-  { id: 'wuhan', label: '武汉示范区', longitude: 114.3054, latitude: 30.5931 }
+  { id: 'kunming', label: '昆明市', longitude: 102.8329, latitude: 24.8801 },
+  { id: 'qujing', label: '曲靖市', longitude: 103.7963, latitude: 25.4839 },
+  { id: 'yuxi', label: '玉溪市', longitude: 102.5439, latitude: 24.3500 },
+  { id: 'baoshan', label: '保山市', longitude: 99.1617, latitude: 25.1120 },
+  { id: 'zhaotong', label: '昭通市', longitude: 103.7172, latitude: 27.3383 },
+  { id: 'lijiang', label: '丽江市', longitude: 100.2253, latitude: 26.8721 },
+  { id: 'puer', label: '普洱市', longitude: 100.9669, latitude: 22.8252 },
+  { id: 'lincang', label: '临沧市', longitude: 100.0869, latitude: 23.8866 },
+  { id: 'chuxiong', label: '楚雄彝族自治州', longitude: 101.546, latitude: 25.0445 },
+  { id: 'honghe', label: '红河哈尼族彝族自治州', longitude: 103.3842, latitude: 23.3668 },
+  { id: 'wenshan', label: '文山壮族苗族自治州', longitude: 104.25, latitude: 23.363 },
+  { id: 'xishuangbanna', label: '西双版纳傣族自治州', longitude: 100.7979, latitude: 22.005 },
+  { id: 'dali', label: '大理白族自治州', longitude: 100.2676, latitude: 25.6065 },
+  { id: 'dehong', label: '德宏傣族景颇族自治州', longitude: 98.5894, latitude: 24.4367 },
+  { id: 'nujiang', label: '怒江傈僳族自治州', longitude: 98.8567, latitude: 25.823 },
+  { id: 'diqing', label: '迪庆藏族自治州', longitude: 99.7078, latitude: 27.8251 }
 ]
 
 const readStoredLocation = () => {
