@@ -12,6 +12,12 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Collections;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -33,13 +39,16 @@ public class AuthDataInitializer implements ApplicationRunner {
     private final RoleRepository roleRepository;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final DataSource dataSource;
 
     public AuthDataInitializer(RoleRepository roleRepository,
                                UserRepository userRepository,
-                               PasswordEncoder passwordEncoder) {
+                               PasswordEncoder passwordEncoder,
+                               DataSource dataSource) {
         this.roleRepository = roleRepository;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.dataSource = dataSource;
     }
 
     @Override
@@ -48,6 +57,7 @@ public class AuthDataInitializer implements ApplicationRunner {
         ensureRole(SystemRole.AGRICULTURE_DEPT);
         ensureRole(SystemRole.FARMER);
 
+        ensureUserDepartmentColumnExists();
         ensureExistingPasswordsEncrypted();
 
         userRepository.findWithRolesByUsername(DEFAULT_ADMIN_USERNAME)
@@ -73,6 +83,27 @@ public class AuthDataInitializer implements ApplicationRunner {
                 userRepository.save(user);
                 logger.info("已为用户 [{}] 加密存量密码", user.getUsername());
             });
+    }
+
+    private void ensureUserDepartmentColumnExists() {
+        try (Connection connection = dataSource.getConnection()) {
+            DatabaseMetaData metaData = connection.getMetaData();
+            boolean columnExists = false;
+
+            try (ResultSet columns = metaData.getColumns(connection.getCatalog(), null, "sys_user", "department_code")) {
+                columnExists = columns.next();
+            }
+
+            if (!columnExists) {
+                try (Statement statement = connection.createStatement()) {
+                    statement.executeUpdate("ALTER TABLE sys_user ADD COLUMN department_code VARCHAR(64)");
+                    logger.info("已自动为 sys_user 表添加 department_code 列");
+                }
+            }
+        } catch (SQLException ex) {
+            logger.error("检查或创建 sys_user.department_code 列时发生异常", ex);
+            throw new IllegalStateException("无法初始化 sys_user.department_code 列", ex);
+        }
     }
 
     private boolean isPasswordEncoded(String password) {
