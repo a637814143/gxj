@@ -37,6 +37,9 @@ public class Consultation extends BaseEntity {
     @Column(nullable = false, length = 32)
     private String priority = "normal";
 
+    @Column(name = "department_code", length = 64)
+    private String departmentCode;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by", nullable = false)
     private User createdBy;
@@ -95,6 +98,14 @@ public class Consultation extends BaseEntity {
 
     public void setPriority(String priority) {
         this.priority = priority;
+    }
+
+    public String getDepartmentCode() {
+        return departmentCode;
+    }
+
+    public void setDepartmentCode(String departmentCode) {
+        this.departmentCode = departmentCode;
     }
 
     public User getCreatedBy() {

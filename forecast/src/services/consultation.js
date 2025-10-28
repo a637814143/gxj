@@ -23,3 +23,5 @@ export const markConsultationRead = consultationId =>
 
 export const closeConsultation = consultationId =>
   apiClient.post(`/api/consultations/${consultationId}/close`)
+
+export const fetchConsultationDepartments = () => apiClient.get('/api/consultations/departments')

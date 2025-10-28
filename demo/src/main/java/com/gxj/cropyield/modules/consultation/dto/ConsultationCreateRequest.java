@@ -9,6 +9,7 @@ public record ConsultationCreateRequest(
     @NotBlank(message = "请选择作物类型") String cropType,
     @NotBlank(message = "请输入咨询主题") String subject,
     @NotBlank(message = "请填写问题详情") String description,
+    @NotBlank(message = "请选择咨询部门") String departmentCode,
     String priority
 ) {
 }

@@ -6,7 +6,8 @@ import {
   sendConsultationMessage,
   updateConsultation,
   markConsultationRead,
-  closeConsultation
+  closeConsultation,
+  fetchConsultationDepartments
 } from '../services/consultation'
 
 const toArray = value => {
@@ -64,6 +65,8 @@ const normalizeConversation = item => {
     cropType: item?.cropType || item?.crop || '',
     status: item?.status || 'pending',
     priority: item?.priority || 'normal',
+    departmentCode: item?.departmentCode || item?.department_code || '',
+    departmentName: item?.departmentName || item?.department_name || '',
     createdAt: item?.createdAt || item?.created_at || null,
     updatedAt: item?.updatedAt || item?.updated_at || null,
     closedAt: item?.closedAt || item?.closed_at || null,
@@ -101,6 +104,8 @@ export const useConsultationStore = defineStore('consultation', {
     },
     loadingConversations: false,
     loadingMessages: false,
+    loadingDepartments: false,
+    departments: [],
     creating: false,
     sending: false,
     updatingStatus: false,
@@ -153,6 +158,29 @@ export const useConsultationStore = defineStore('consultation', {
           ...this.conversations[index],
           ...normalized
         })
+      }
+    },
+    async loadDepartments({ force = false } = {}) {
+      if (!force && Array.isArray(this.departments) && this.departments.length) {
+        return this.departments
+      }
+      this.loadingDepartments = true
+      try {
+        const { data } = await fetchConsultationDepartments()
+        const payload = data?.data || data || []
+        this.departments = Array.isArray(payload)
+          ? payload.map(item => ({
+              code: item?.code || item?.departmentCode || '',
+              name: item?.name || item?.departmentName || '',
+              description: item?.description || ''
+            }))
+          : []
+        return this.departments
+      } catch (error) {
+        console.error('Failed to load consultation departments', error)
+        throw error
+      } finally {
+        this.loadingDepartments = false
       }
     },
     async loadConversations({ page, pageSize, silent = false, ...rest } = {}) {
@@ -239,7 +267,11 @@ export const useConsultationStore = defineStore('consultation', {
     async createConsultation(payload) {
       this.creating = true
       try {
-        const { data } = await createConsultation(payload)
+        const requestBody = { ...payload }
+        if (typeof requestBody.departmentCode === 'string') {
+          requestBody.departmentCode = requestBody.departmentCode.trim()
+        }
+        const { data } = await createConsultation(requestBody)
         const record = data?.data || data
         if (record) {
           const normalized = normalizeConversation(record)

@@ -10,6 +10,8 @@ public record UserInfo(
     String username,
     String fullName,
     String email,
-    Set<String> roles
+    Set<String> roles,
+    String departmentCode,
+    String departmentName
 ) {
 }

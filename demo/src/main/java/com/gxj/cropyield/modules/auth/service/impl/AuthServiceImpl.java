@@ -19,6 +19,7 @@ import com.gxj.cropyield.modules.auth.service.CaptchaService;
 import com.gxj.cropyield.modules.auth.service.LoginLogService;
 import com.gxj.cropyield.modules.auth.service.RefreshTokenService;
 import com.gxj.cropyield.modules.auth.constant.SystemRole;
+import com.gxj.cropyield.modules.consultation.model.ConsultationDepartment;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -223,12 +224,18 @@ public class AuthServiceImpl implements AuthService {
         Set<String> roles = user.getRoles().stream()
             .map(Role::getCode)
             .collect(Collectors.toSet());
+        String departmentCode = user.getDepartmentCode();
+        String departmentName = ConsultationDepartment.fromCode(departmentCode)
+            .map(ConsultationDepartment::getName)
+            .orElse(null);
         return new UserInfo(
             user.getId(),
             user.getUsername(),
             user.getFullName(),
             user.getEmail(),
-            roles
+            roles,
+            departmentCode,
+            departmentName
         );
     }
 

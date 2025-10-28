@@ -12,6 +12,8 @@ public record ConsultationSummary(
     String cropType,
     String status,
     String priority,
+    String departmentCode,
+    String departmentName,
     LocalDateTime createdAt,
     LocalDateTime updatedAt,
     LocalDateTime closedAt,

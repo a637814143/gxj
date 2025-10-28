@@ -68,17 +68,17 @@ ON DUPLICATE KEY UPDATE
     created_at = VALUES(created_at);
 
 -- 初始化管理员账户（密码在应用启动时自动加密）
-INSERT INTO sys_user (id, username, password, full_name, email)
-VALUES (1, 'admin', 'Admin@123', '系统管理员', 'admin@example.com')
+INSERT INTO sys_user (id, username, password, full_name, email, department_code)
+VALUES (1, 'admin', 'Admin@123', '系统管理员', 'admin@example.com', NULL)
 ON DUPLICATE KEY UPDATE
     full_name = VALUES(full_name),
     email = VALUES(email);
 
 -- 初始化示例农业部门与农户账号
-INSERT INTO sys_user (id, username, password, full_name, email)
+INSERT INTO sys_user (id, username, password, full_name, email, department_code)
 VALUES
-    (2, 'agri', 'Agri@123', '农业技术员', 'agri@example.com'),
-    (3, 'farmer', 'Farmer@123', '示例农户', 'farmer@example.com')
+    (2, 'agri', 'Agri@123', '农业技术员', 'agri@example.com', 'PLANT_PROTECTION'),
+    (3, 'farmer', 'Farmer@123', '示例农户', 'farmer@example.com', NULL)
 ON DUPLICATE KEY UPDATE
     full_name = VALUES(full_name),
     email = VALUES(email);
@@ -145,9 +145,9 @@ ON DUPLICATE KEY UPDATE
     price = VALUES(price);
 
 -- 初始化示例在线咨询数据
-INSERT INTO consultation (id, subject, crop_type, description, status, priority, created_by, assigned_to, last_message_at, created_at, updated_at)
+INSERT INTO consultation (id, subject, crop_type, description, status, priority, department_code, created_by, assigned_to, last_message_at, created_at, updated_at)
 VALUES
-    (1, '水稻病害咨询', '水稻', '稻叶出现褐色斑点，请协助诊断。', 'processing', 'high', 3, 2, DATE_SUB(NOW(), INTERVAL 20 MINUTE), DATE_SUB(NOW(), INTERVAL 1 DAY), DATE_SUB(NOW(), INTERVAL 10 MINUTE))
+    (1, '水稻病害咨询', '水稻', '稻叶出现褐色斑点，请协助诊断。', 'processing', 'high', 'PLANT_PROTECTION', 3, 2, DATE_SUB(NOW(), INTERVAL 20 MINUTE), DATE_SUB(NOW(), INTERVAL 1 DAY), DATE_SUB(NOW(), INTERVAL 10 MINUTE))
 ON DUPLICATE KEY UPDATE
     status = VALUES(status),
     priority = VALUES(priority),
