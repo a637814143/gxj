@@ -19,7 +19,8 @@ import com.gxj.cropyield.modules.auth.service.CaptchaService;
 import com.gxj.cropyield.modules.auth.service.LoginLogService;
 import com.gxj.cropyield.modules.auth.service.RefreshTokenService;
 import com.gxj.cropyield.modules.auth.constant.SystemRole;
-import com.gxj.cropyield.modules.consultation.model.ConsultationDepartment;
+import com.gxj.cropyield.modules.consultation.dto.ConsultationDepartmentOption;
+import com.gxj.cropyield.modules.consultation.service.ConsultationDepartmentDirectory;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -29,6 +30,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.util.EnumSet;
 import java.util.HashSet;
@@ -51,6 +53,7 @@ public class AuthServiceImpl implements AuthService {
     private final RefreshTokenService refreshTokenService;
     private final LoginLogService loginLogService;
     private final PasswordEncoder passwordEncoder;
+    private final ConsultationDepartmentDirectory departmentDirectory;
 
     public AuthServiceImpl(UserRepository userRepository,
                            RoleRepository roleRepository,
@@ -60,7 +63,8 @@ public class AuthServiceImpl implements AuthService {
                            CaptchaService captchaService,
                            RefreshTokenService refreshTokenService,
                            LoginLogService loginLogService,
-                           PasswordEncoder passwordEncoder) {
+                           PasswordEncoder passwordEncoder,
+                           ConsultationDepartmentDirectory departmentDirectory) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.authenticationManager = authenticationManager;
@@ -70,6 +74,7 @@ public class AuthServiceImpl implements AuthService {
         this.refreshTokenService = refreshTokenService;
         this.loginLogService = loginLogService;
         this.passwordEncoder = passwordEncoder;
+        this.departmentDirectory = departmentDirectory;
     }
 
     @Override
@@ -225,9 +230,9 @@ public class AuthServiceImpl implements AuthService {
             .map(Role::getCode)
             .collect(Collectors.toSet());
         String departmentCode = user.getDepartmentCode();
-        String departmentName = ConsultationDepartment.fromCode(departmentCode)
-            .map(ConsultationDepartment::getName)
-            .orElse(null);
+        String departmentName = departmentDirectory.findByCode(departmentCode)
+            .map(ConsultationDepartmentOption::name)
+            .orElseGet(() -> StringUtils.hasText(departmentCode) ? departmentCode.trim() : null);
         return new UserInfo(
             user.getId(),
             user.getUsername(),

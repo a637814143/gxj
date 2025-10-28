@@ -7,7 +7,7 @@ import com.gxj.cropyield.modules.consultation.dto.ConsultationMessagesResponse;
 import com.gxj.cropyield.modules.consultation.dto.ConsultationPageResponse;
 import com.gxj.cropyield.modules.consultation.dto.ConsultationSummary;
 import com.gxj.cropyield.modules.consultation.dto.ConsultationUpdateRequest;
-import com.gxj.cropyield.modules.consultation.model.ConsultationDepartment;
+import com.gxj.cropyield.modules.consultation.dto.ConsultationDepartmentOption;
 
 import java.util.List;
 
@@ -30,5 +30,5 @@ public interface ConsultationService {
 
     ConsultationSummary closeConsultation(Long consultationId);
 
-    List<ConsultationDepartment.DepartmentOption> listDepartments();
+    List<ConsultationDepartmentOption> listDepartments();
 }

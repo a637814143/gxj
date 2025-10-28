@@ -8,7 +8,7 @@ import com.gxj.cropyield.modules.consultation.dto.ConsultationMessagesResponse;
 import com.gxj.cropyield.modules.consultation.dto.ConsultationPageResponse;
 import com.gxj.cropyield.modules.consultation.dto.ConsultationSummary;
 import com.gxj.cropyield.modules.consultation.dto.ConsultationUpdateRequest;
-import com.gxj.cropyield.modules.consultation.model.ConsultationDepartment;
+import com.gxj.cropyield.modules.consultation.dto.ConsultationDepartmentOption;
 import com.gxj.cropyield.modules.consultation.service.ConsultationService;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
@@ -51,7 +51,7 @@ public class ConsultationController {
     }
 
     @GetMapping("/departments")
-    public ApiResponse<List<ConsultationDepartment.DepartmentOption>> listDepartments() {
+    public ApiResponse<List<ConsultationDepartmentOption>> listDepartments() {
         return ApiResponse.success(consultationService.listDepartments());
     }
 

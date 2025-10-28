@@ -15,12 +15,13 @@ import com.gxj.cropyield.modules.consultation.dto.ConsultationParticipantRespons
 import com.gxj.cropyield.modules.consultation.dto.ConsultationSummary;
 import com.gxj.cropyield.modules.consultation.dto.ConsultationUpdateRequest;
 import com.gxj.cropyield.modules.consultation.entity.Consultation;
+import com.gxj.cropyield.modules.consultation.dto.ConsultationDepartmentOption;
 import com.gxj.cropyield.modules.consultation.entity.ConsultationMessage;
 import com.gxj.cropyield.modules.consultation.entity.ConsultationParticipant;
-import com.gxj.cropyield.modules.consultation.model.ConsultationDepartment;
 import com.gxj.cropyield.modules.consultation.repository.ConsultationMessageRepository;
 import com.gxj.cropyield.modules.consultation.repository.ConsultationParticipantRepository;
 import com.gxj.cropyield.modules.consultation.repository.ConsultationRepository;
+import com.gxj.cropyield.modules.consultation.service.ConsultationDepartmentDirectory;
 import com.gxj.cropyield.modules.consultation.service.ConsultationService;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.Page;
@@ -54,17 +55,20 @@ public class ConsultationServiceImpl implements ConsultationService {
     private final ConsultationParticipantRepository participantRepository;
     private final CurrentUserService currentUserService;
     private final UserRepository userRepository;
+    private final ConsultationDepartmentDirectory departmentDirectory;
 
     public ConsultationServiceImpl(ConsultationRepository consultationRepository,
                                     ConsultationMessageRepository messageRepository,
                                     ConsultationParticipantRepository participantRepository,
                                     CurrentUserService currentUserService,
-                                    UserRepository userRepository) {
+                                    UserRepository userRepository,
+                                    ConsultationDepartmentDirectory departmentDirectory) {
         this.consultationRepository = consultationRepository;
         this.messageRepository = messageRepository;
         this.participantRepository = participantRepository;
         this.currentUserService = currentUserService;
         this.userRepository = userRepository;
+        this.departmentDirectory = departmentDirectory;
     }
 
     @Override
@@ -131,10 +135,10 @@ public class ConsultationServiceImpl implements ConsultationService {
             throw new BusinessException(ResultCode.FORBIDDEN, "当前账号无权发起咨询");
         }
 
-        ConsultationDepartment department = ConsultationDepartment.fromCode(request.departmentCode())
+        ConsultationDepartmentOption department = departmentDirectory.findByCode(request.departmentCode())
             .orElseThrow(() -> new BusinessException(ResultCode.BAD_REQUEST, "请选择有效的咨询部门"));
 
-        User departmentAssignee = resolveDepartmentAssignee(department.getCode());
+        User departmentAssignee = resolveDepartmentAssignee(department.code());
 
         Consultation consultation = new Consultation();
         consultation.setSubject(request.subject());
@@ -143,7 +147,7 @@ public class ConsultationServiceImpl implements ConsultationService {
         consultation.setPriority(defaultPriority(request.priority()));
         consultation.setStatus("pending");
         consultation.setCreatedBy(currentUser);
-        consultation.setDepartmentCode(department.getCode());
+        consultation.setDepartmentCode(department.code());
         if (departmentAssignee != null) {
             consultation.setAssignedTo(departmentAssignee);
         }
@@ -301,8 +305,8 @@ public class ConsultationServiceImpl implements ConsultationService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<ConsultationDepartment.DepartmentOption> listDepartments() {
-        return ConsultationDepartment.toOptions();
+    public List<ConsultationDepartmentOption> listDepartments() {
+        return departmentDirectory.listActiveDepartments();
     }
 
     private ConsultationSummary toSummary(Consultation consultation, User currentUser) {
@@ -329,8 +333,9 @@ public class ConsultationServiceImpl implements ConsultationService {
             ? null
             : (StringUtils.hasText(assignee.getFullName()) ? assignee.getFullName() : assignee.getUsername());
         long messageCount = messageRepository.countByConsultationId(consultation.getId());
-        ConsultationDepartment department = ConsultationDepartment.fromCode(consultation.getDepartmentCode()).orElse(null);
-        String departmentName = department == null ? null : department.getName();
+        String departmentName = departmentDirectory.findByCode(consultation.getDepartmentCode())
+            .map(ConsultationDepartmentOption::name)
+            .orElse(null);
         return new ConsultationSummary(
             consultation.getId(),
             consultation.getSubject(),

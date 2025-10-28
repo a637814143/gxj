@@ -92,6 +92,10 @@
               <p class="department-hint__description" v-if="selectedDepartment.description">
                 {{ selectedDepartment.description }}
               </p>
+              <p class="department-hint__contact" v-if="selectedDepartment.contactName">
+                值班专家：{{ selectedDepartment.contactName }}
+                <span v-if="selectedDepartment.contactUsername">（账号 {{ selectedDepartment.contactUsername }}）</span>
+              </p>
               <p class="department-hint__note">{{ departmentLockMessage }}</p>
             </div>
           </transition>
@@ -378,6 +382,11 @@ watch(
   font-size: 13px;
   color: #2f4f40;
   line-height: 1.6;
+}
+
+.department-hint__contact {
+  font-size: 13px;
+  color: #245847;
 }
 
 .department-hint__note {

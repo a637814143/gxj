@@ -172,7 +172,11 @@ export const useConsultationStore = defineStore('consultation', {
           ? payload.map(item => ({
               code: item?.code || item?.departmentCode || '',
               name: item?.name || item?.departmentName || '',
-              description: item?.description || ''
+              description: item?.description || '',
+              contactName: item?.contactName || item?.contact_name || '',
+              contactUsername: item?.contactUsername || item?.contact_username || '',
+              contactUserId:
+                item?.contactUserId ?? item?.contact_user_id ?? null
             }))
           : []
         return this.departments
