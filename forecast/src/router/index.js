@@ -28,7 +28,7 @@ const routes = [
         path: 'dashboard',
         name: 'dashboard',
         component: () => import('../views/DashboardView.vue'),
-        meta: { requiresAuth: true }
+        meta: { requiresAuth: true, roles: ['ADMIN', 'AGRICULTURE_DEPT'] }
       },
       {
         path: 'data',
@@ -137,7 +137,7 @@ router.beforeEach(async (to, from, next) => {
     .filter((value, index, array) => array.indexOf(value) === index)
 
   if (requiresAuth && requiredRoles.length > 0 && !authStore.hasAnyRole(requiredRoles)) {
-    return next({ name: 'dashboard' })
+    return next({ name: 'weather' })
   }
 
   return next()

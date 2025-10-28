@@ -13,7 +13,8 @@
           placeholder="选择监测地点"
           class="location-select"
           size="large"
-          :teleported="false"
+          :teleported="true"
+          popper-class="weather-location-dropdown"
         >
           <el-option
             v-for="option in locationOptions"
@@ -77,46 +78,26 @@
             </div>
           </div>
         </el-card>
-        <el-card class="summary-card">
-          <div class="summary-grid">
-            <div class="grid-item">
-              <div class="grid-label">空气湿度</div>
-              <div class="grid-value">{{ formatPercent(currentWeather.humidity) }}</div>
+        <div class="summary-metrics">
+          <el-card
+            v-for="metric in metricCards"
+            :key="metric.label"
+            class="summary-card metric-card"
+            :class="[`metric-card--${metric.intent}`]"
+          >
+            <div class="metric-header">
+              <span class="metric-icon">{{ metric.icon }}</span>
+              <div class="metric-titles">
+                <span class="metric-label">{{ metric.label }}</span>
+                <span v-if="metric.subLabel" class="metric-sub-label">{{ metric.subLabel }}</span>
+              </div>
+              <span v-if="metric.badge" class="metric-badge">{{ metric.badge }}</span>
             </div>
-            <div class="grid-item">
-              <div class="grid-label">气压</div>
-              <div class="grid-value">{{ formatNumber(currentWeather.pressure) }} hPa</div>
-            </div>
-            <div class="grid-item">
-              <div class="grid-label">能见度</div>
-              <div class="grid-value">{{ formatNumber(currentWeather.visibility) }} km</div>
-            </div>
-            <div class="grid-item">
-              <div class="grid-label">降水</div>
-              <div class="grid-value">{{ precipitationLabel }}</div>
-            </div>
-          </div>
-        </el-card>
-        <el-card class="summary-card">
-          <div class="summary-grid">
-            <div class="grid-item">
-              <div class="grid-label">风速</div>
-              <div class="grid-value">{{ formatNumber(currentWeather.wind?.speed) }} m/s</div>
-            </div>
-            <div class="grid-item">
-              <div class="grid-label">风向</div>
-              <div class="grid-value">{{ formatDirection(currentWeather.wind?.direction) }}</div>
-            </div>
-            <div class="grid-item">
-              <div class="grid-label">空气质量指数</div>
-              <div class="grid-value">{{ formatNumber(currentWeather.airQuality?.aqi) }}</div>
-            </div>
-            <div class="grid-item">
-              <div class="grid-label">空气质量描述</div>
-              <div class="grid-value">{{ currentWeather.airQuality?.description || '—' }}</div>
-            </div>
-          </div>
-        </el-card>
+            <div class="metric-value">{{ metric.value }}</div>
+            <div v-if="metric.detail" class="metric-detail">{{ metric.detail }}</div>
+            <div v-if="metric.footer" class="metric-footer">{{ metric.footer }}</div>
+          </el-card>
+        </div>
       </section>
 
       <section class="weather-insights">
@@ -335,6 +316,54 @@ const fieldReminder = computed(() => {
   return '暂无明显气象风险，保持常规巡田与田间管理即可。'
 })
 
+const metricCards = computed(() => {
+  const humidityValue = toFiniteNumber(currentWeather.value?.humidity)
+  const pressureValue = toFiniteNumber(currentWeather.value?.pressure)
+  const visibilityValue = toFiniteNumber(currentWeather.value?.visibility)
+  const precipitation = precipitationLabel.value
+  const windSpeedValue = toFiniteNumber(currentWeather.value?.wind?.speed)
+  const windDirection = formatDirection(currentWeather.value?.wind?.direction)
+  const aqiValue = toFiniteNumber(currentWeather.value?.airQuality?.aqi)
+  const airDescription = currentWeather.value?.airQuality?.description || '—'
+
+  return [
+    {
+      intent: 'moisture',
+      icon: '💧',
+      label: '空气湿度',
+      subLabel: describeHumidityLevel(humidityValue),
+      value: formatPercent(currentWeather.value?.humidity),
+      detail: humidityValue === null ? '' : `露点 ${formatNumber(currentWeather.value?.dewPoint)}℃`
+    },
+    {
+      intent: 'pressure',
+      icon: '🎯',
+      label: '大气压力',
+      subLabel: pressureValue === null ? '' : '海平面气压',
+      value: pressureValue === null ? '—' : `${formatNumber(pressureValue)} hPa`,
+      detail: visibilityValue === null ? '' : `能见度 ${formatNumber(visibilityValue)} km`
+    },
+    {
+      intent: 'wind',
+      icon: '🍃',
+      label: '风场状况',
+      subLabel: describeWindLevel(windSpeedValue),
+      value: windSpeedValue === null ? '—' : `${formatNumber(windSpeedValue)} m/s`,
+      detail: `风向 ${windDirection}`,
+      footer: precipitation && precipitation !== '—' ? `降水 ${precipitation}` : ''
+    },
+    {
+      intent: 'air',
+      icon: '🌫️',
+      label: '空气质量',
+      subLabel: airDescription !== '—' ? airDescription : describeAqiLevel(aqiValue)?.label,
+      value: aqiValue === null ? '—' : formatNumber(aqiValue),
+      badge: describeAqiLevel(aqiValue)?.badge || '',
+      detail: comfortLevel.value
+    }
+  ]
+})
+
 const farmingRecommendations = computed(() => [
   { icon: '🧑‍🌾', title: '作业舒适度', text: comfortLevel.value },
   { icon: '⏱️', title: '作业窗口', text: operationWindow.value },
@@ -439,6 +468,46 @@ const SKY_EMOJI_MAP = {
   SAND: '🌪️',
   WIND: '💨'
 }
+
+const describeHumidityLevel = value => {
+  if (value === null) {
+    return ''
+  }
+  if (value < 40) return '偏干'
+  if (value <= 70) return '舒适'
+  if (value <= 85) return '偏潮'
+  return '高湿'
+}
+
+const describeWindLevel = value => {
+  if (value === null) {
+    return ''
+  }
+  if (value < 1) return '静风'
+  if (value < 5) return '微风'
+  if (value < 10) return '和风'
+  if (value < 17) return '强风'
+  return '大风'
+}
+
+const describeAqiLevel = value => {
+  if (value === null) {
+    return null
+  }
+  if (value <= 50) {
+    return { badge: '优', label: '空气清新' }
+  }
+  if (value <= 100) {
+    return { badge: '良', label: '户外活动适宜' }
+  }
+  if (value <= 150) {
+    return { badge: '轻度', label: '敏感人群需注意' }
+  }
+  if (value <= 200) {
+    return { badge: '中度', label: '减少户外活动' }
+  }
+  return { badge: '重度', label: '建议暂停户外' }
+}
 </script>
 
 <style scoped>
@@ -505,6 +574,18 @@ const SKY_EMOJI_MAP = {
 
 .location-select {
   min-width: 220px;
+}
+
+.location-select :deep(.el-input__wrapper) {
+  box-shadow: 0 12px 24px rgba(56, 161, 105, 0.18);
+  border-radius: 14px;
+  padding: 6px 14px;
+}
+
+.weather-location-dropdown {
+  border-radius: 14px !important;
+  box-shadow: 0 18px 40px rgba(30, 136, 118, 0.18) !important;
+  overflow: hidden;
 }
 
 .weather-alert {
@@ -673,27 +754,95 @@ const SKY_EMOJI_MAP = {
   }
 }
 
-.summary-grid {
+.summary-metrics {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
 }
 
-.grid-item {
+.metric-card {
+  position: relative;
+  overflow: hidden;
+  border: none;
+}
+
+.metric-card :deep(.el-card__body) {
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.metric-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.metric-icon {
+  font-size: 24px;
+  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.12));
+}
+
+.metric-titles {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.grid-label {
-  font-size: 13px;
-  color: #78909c;
+.metric-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: #0b3d2e;
 }
 
-.grid-value {
-  font-size: 18px;
-  font-weight: 500;
+.metric-sub-label {
+  font-size: 12px;
+  color: rgba(11, 61, 46, 0.65);
+}
+
+.metric-badge {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
   color: #0b3d2e;
+  background: rgba(255, 255, 255, 0.7);
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.metric-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #0b3d2e;
+}
+
+.metric-detail,
+.metric-footer {
+  font-size: 13px;
+  color: #4b636e;
+  line-height: 1.6;
+}
+
+.metric-footer {
+  font-weight: 500;
+  color: #0f4c3a;
+}
+
+.metric-card--moisture {
+  background: linear-gradient(160deg, rgba(178, 235, 242, 0.4), rgba(230, 255, 251, 0.9));
+}
+
+.metric-card--pressure {
+  background: linear-gradient(155deg, rgba(255, 245, 234, 0.4), rgba(255, 253, 245, 0.92));
+}
+
+.metric-card--wind {
+  background: linear-gradient(150deg, rgba(225, 245, 254, 0.45), rgba(232, 248, 245, 0.92));
+}
+
+.metric-card--air {
+  background: linear-gradient(150deg, rgba(240, 244, 255, 0.45), rgba(236, 253, 245, 0.92));
 }
 
 .weather-insights {
