@@ -608,6 +608,10 @@ CREATE TABLE IF NOT EXISTS sys_user (
     UNIQUE KEY uq_user_email (email)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '系统用户';
 
+ALTER TABLE sys_user
+    ADD COLUMN IF NOT EXISTS department_code VARCHAR(64)
+        AFTER email;
+
 CREATE TABLE IF NOT EXISTS sys_login_log (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(64) NOT NULL,
