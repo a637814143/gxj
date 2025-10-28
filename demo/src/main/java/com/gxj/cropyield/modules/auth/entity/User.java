@@ -25,6 +25,9 @@ public class User extends BaseEntity {
     @Column(length = 128)
     private String email;
 
+    @Column(name = "department_code", length = 64)
+    private String departmentCode;
+
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(name = "sys_user_role",
         joinColumns = @JoinColumn(name = "user_id"),
@@ -61,6 +64,14 @@ public class User extends BaseEntity {
 
     public void setEmail(String email) {
         this.email = email;
+    }
+
+    public String getDepartmentCode() {
+        return departmentCode;
+    }
+
+    public void setDepartmentCode(String departmentCode) {
+        this.departmentCode = departmentCode;
     }
 
     public Set<Role> getRoles() {

@@ -6,7 +6,8 @@ import {
   sendConsultationMessage,
   updateConsultation,
   markConsultationRead,
-  closeConsultation
+  closeConsultation,
+  fetchConsultationDepartments
 } from '../services/consultation'
 
 const toArray = value => {
@@ -101,6 +102,8 @@ export const useConsultationStore = defineStore('consultation', {
     },
     loadingConversations: false,
     loadingMessages: false,
+    loadingDepartments: false,
+    departments: [],
     creating: false,
     sending: false,
     updatingStatus: false,
@@ -153,6 +156,32 @@ export const useConsultationStore = defineStore('consultation', {
           ...this.conversations[index],
           ...normalized
         })
+      }
+    },
+    async loadDepartments({ force = false } = {}) {
+      if (!force && Array.isArray(this.departments) && this.departments.length) {
+        return this.departments
+      }
+      this.loadingDepartments = true
+      try {
+        const { data } = await fetchConsultationDepartments()
+        const payload = data?.data || data || []
+        this.departments = Array.isArray(payload)
+          ? payload.map(item => ({
+              code: item?.code || item?.departmentCode || '',
+              name: item?.name || item?.departmentName || '',
+              description: item?.description || '',
+              contactName: item?.contactName || item?.contact_name || '',
+              contactUsername: item?.contactUsername || item?.contact_username || '',
+              contactUserId: item?.contactUserId ?? item?.contact_user_id ?? null
+            }))
+          : []
+        return this.departments
+      } catch (error) {
+        console.error('Failed to load consultation departments', error)
+        throw error
+      } finally {
+        this.loadingDepartments = false
       }
     },
     async loadConversations({ page, pageSize, silent = false, ...rest } = {}) {

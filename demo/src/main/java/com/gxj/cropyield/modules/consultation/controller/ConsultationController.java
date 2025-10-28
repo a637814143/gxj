@@ -8,6 +8,7 @@ import com.gxj.cropyield.modules.consultation.dto.ConsultationMessagesResponse;
 import com.gxj.cropyield.modules.consultation.dto.ConsultationPageResponse;
 import com.gxj.cropyield.modules.consultation.dto.ConsultationSummary;
 import com.gxj.cropyield.modules.consultation.dto.ConsultationUpdateRequest;
+import com.gxj.cropyield.modules.consultation.dto.ConsultationDepartmentOption;
 import com.gxj.cropyield.modules.consultation.service.ConsultationService;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
@@ -19,6 +20,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 /**
  * 在线咨询模块的控制器，用于暴露咨询会话相关的 REST 接口。
@@ -45,6 +48,11 @@ public class ConsultationController {
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     public ApiResponse<ConsultationSummary> createConsultation(@Valid @RequestBody ConsultationCreateRequest request) {
         return ApiResponse.success(consultationService.createConsultation(request));
+    }
+
+    @GetMapping("/departments")
+    public ApiResponse<List<ConsultationDepartmentOption>> listDepartments() {
+        return ApiResponse.success(consultationService.listDepartments());
     }
 
     @GetMapping("/{consultationId}/messages")

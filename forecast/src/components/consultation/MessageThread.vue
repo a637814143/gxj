@@ -5,11 +5,19 @@
         <h3 class="thread-title">{{ conversation.subject }}</h3>
         <p class="thread-meta">
           <span v-if="conversation.cropType">作物：{{ conversation.cropType }}</span>
+          <span v-if="conversation.departmentName">服务部门：{{ conversation.departmentName }}</span>
           <span>会话编号：{{ conversation.id }}</span>
+        </p>
+        <p v-if="conversation.departmentName" class="thread-privacy">
+          <el-icon><Lock /></el-icon>
+          <span>对话仅对 {{ conversation.departmentName }} 部门开放，其它部门不可见</span>
         </p>
       </div>
       <div class="header-actions">
         <div class="header-tags">
+          <el-tag v-if="conversation.departmentName" size="small" effect="dark" class="department-chip">
+            {{ conversation.departmentName }}
+          </el-tag>
           <el-tag size="small" :type="statusMeta[conversation.status]?.type || 'info'">
             {{ statusMeta[conversation.status]?.label || '未知状态' }}
           </el-tag>
@@ -76,6 +84,7 @@
 
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
+import { Lock } from '@element-plus/icons-vue'
 
 const props = defineProps({
   messages: {
@@ -218,6 +227,20 @@ watch(
   color: #607d8b;
 }
 
+.thread-privacy {
+  margin: 6px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #1b4332;
+}
+
+.thread-privacy :deep(.el-icon) {
+  font-size: 14px;
+  color: #43a047;
+}
+
 .header-actions {
   display: flex;
   align-items: center;
@@ -227,6 +250,12 @@ watch(
 .header-tags {
   display: flex;
   gap: 8px;
+}
+
+.department-chip {
+  border: none;
+  background: linear-gradient(135deg, #2e7d32, #43a047);
+  color: #fff;
 }
 
 .thread-body {

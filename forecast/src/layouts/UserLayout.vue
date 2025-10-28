@@ -186,7 +186,11 @@ watch(
     }
     const hasCurrent = items.some(item => item.name === currentName)
     if (!hasCurrent) {
-      router.replace({ name: items[0].name }).catch(() => {})
+      const fallbackOrder = ['weather', 'consultation', 'visualization', 'report', 'profile']
+      const fallbackItem = fallbackOrder
+        .map(name => items.find(item => item.name === name))
+        .find(Boolean) || items[0]
+      router.replace({ name: fallbackItem.name }).catch(() => {})
     }
   },
   { immediate: true }

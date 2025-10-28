@@ -601,11 +601,16 @@ CREATE TABLE IF NOT EXISTS sys_user (
     password VARCHAR(128) NOT NULL,
     full_name VARCHAR(128),
     email VARCHAR(128),
+    department_code VARCHAR(64),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_user_username (username),
     UNIQUE KEY uq_user_email (email)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '系统用户';
+
+ALTER TABLE sys_user
+    ADD COLUMN IF NOT EXISTS department_code VARCHAR(64)
+        AFTER email;
 
 CREATE TABLE IF NOT EXISTS sys_login_log (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -666,6 +671,7 @@ CREATE TABLE IF NOT EXISTS consultation (
     description TEXT,
     status VARCHAR(32) NOT NULL DEFAULT 'pending',
     priority VARCHAR(32) NOT NULL DEFAULT 'normal',
+    department_code VARCHAR(64),
     created_by BIGINT UNSIGNED NOT NULL,
     assigned_to BIGINT UNSIGNED,
     last_message_at DATETIME,

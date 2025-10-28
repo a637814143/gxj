@@ -15,11 +15,13 @@ import com.gxj.cropyield.modules.consultation.dto.ConsultationParticipantRespons
 import com.gxj.cropyield.modules.consultation.dto.ConsultationSummary;
 import com.gxj.cropyield.modules.consultation.dto.ConsultationUpdateRequest;
 import com.gxj.cropyield.modules.consultation.entity.Consultation;
+import com.gxj.cropyield.modules.consultation.dto.ConsultationDepartmentOption;
 import com.gxj.cropyield.modules.consultation.entity.ConsultationMessage;
 import com.gxj.cropyield.modules.consultation.entity.ConsultationParticipant;
 import com.gxj.cropyield.modules.consultation.repository.ConsultationMessageRepository;
 import com.gxj.cropyield.modules.consultation.repository.ConsultationParticipantRepository;
 import com.gxj.cropyield.modules.consultation.repository.ConsultationRepository;
+import com.gxj.cropyield.modules.consultation.service.ConsultationDepartmentDirectory;
 import com.gxj.cropyield.modules.consultation.service.ConsultationService;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.Page;
@@ -31,6 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
@@ -52,17 +55,20 @@ public class ConsultationServiceImpl implements ConsultationService {
     private final ConsultationParticipantRepository participantRepository;
     private final CurrentUserService currentUserService;
     private final UserRepository userRepository;
+    private final ConsultationDepartmentDirectory departmentDirectory;
 
     public ConsultationServiceImpl(ConsultationRepository consultationRepository,
                                     ConsultationMessageRepository messageRepository,
                                     ConsultationParticipantRepository participantRepository,
                                     CurrentUserService currentUserService,
-                                    UserRepository userRepository) {
+                                    UserRepository userRepository,
+                                    ConsultationDepartmentDirectory departmentDirectory) {
         this.consultationRepository = consultationRepository;
         this.messageRepository = messageRepository;
         this.participantRepository = participantRepository;
         this.currentUserService = currentUserService;
         this.userRepository = userRepository;
+        this.departmentDirectory = departmentDirectory;
     }
 
     @Override
@@ -75,7 +81,12 @@ public class ConsultationServiceImpl implements ConsultationService {
 
         User currentUser = currentUserService.getCurrentUser();
         Set<String> roles = resolveRoles(currentUser);
-        final boolean privileged = roles.contains(ROLE_ADMIN) || roles.contains(ROLE_DEPT);
+        final boolean isAdmin = roles.contains(ROLE_ADMIN);
+        final boolean isDepartmentUser = roles.contains(ROLE_DEPT);
+        final String normalizedDepartmentCode = StringUtils.hasText(currentUser.getDepartmentCode())
+            ? currentUser.getDepartmentCode().trim().toLowerCase()
+            : null;
+
         final String statusFilter = StringUtils.hasText(status) && !"all".equalsIgnoreCase(status)
             ? status.trim().toLowerCase()
             : null;
@@ -83,7 +94,20 @@ public class ConsultationServiceImpl implements ConsultationService {
 
         Page<Consultation> pageResult = consultationRepository.findAll((root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
-            if (!privileged) {
+            if (isAdmin) {
+                // 管理员可以查看全部会话
+            } else if (isDepartmentUser) {
+                Predicate sameDepartment = null;
+                if (normalizedDepartmentCode != null) {
+                    sameDepartment = cb.equal(cb.lower(root.get("departmentCode")), normalizedDepartmentCode);
+                }
+                Predicate assignedToMe = cb.equal(root.get("assignedTo"), currentUser);
+                if (sameDepartment != null) {
+                    predicates.add(cb.or(sameDepartment, assignedToMe));
+                } else {
+                    predicates.add(assignedToMe);
+                }
+            } else {
                 predicates.add(cb.equal(root.get("createdBy"), currentUser));
             }
             if (statusFilter != null) {
@@ -117,6 +141,11 @@ public class ConsultationServiceImpl implements ConsultationService {
             throw new BusinessException(ResultCode.FORBIDDEN, "当前账号无权发起咨询");
         }
 
+        ConsultationDepartmentOption department = departmentDirectory.findByCode(request.departmentCode())
+            .orElseThrow(() -> new BusinessException(ResultCode.BAD_REQUEST, "请选择有效的咨询部门"));
+
+        User departmentAssignee = resolveDepartmentAssignee(department);
+
         Consultation consultation = new Consultation();
         consultation.setSubject(request.subject());
         consultation.setCropType(request.cropType());
@@ -124,6 +153,10 @@ public class ConsultationServiceImpl implements ConsultationService {
         consultation.setPriority(defaultPriority(request.priority()));
         consultation.setStatus("pending");
         consultation.setCreatedBy(currentUser);
+        consultation.setDepartmentCode(department.code());
+        if (departmentAssignee != null) {
+            consultation.setAssignedTo(departmentAssignee);
+        }
         Consultation saved = consultationRepository.save(consultation);
 
         ConsultationParticipant participant = new ConsultationParticipant();
@@ -134,6 +167,16 @@ public class ConsultationServiceImpl implements ConsultationService {
         participant.setLastReadAt(LocalDateTime.now());
         participantRepository.save(participant);
         attachParticipant(saved, participant);
+
+        if (departmentAssignee != null) {
+            ConsultationParticipant deptParticipant = new ConsultationParticipant();
+            deptParticipant.setConsultation(saved);
+            deptParticipant.setUser(departmentAssignee);
+            deptParticipant.setRoleCode(ROLE_DEPT);
+            deptParticipant.setOwner(false);
+            participantRepository.save(deptParticipant);
+            attachParticipant(saved, deptParticipant);
+        }
 
         if (StringUtils.hasText(request.description())) {
             ConsultationMessage message = new ConsultationMessage();
@@ -266,6 +309,12 @@ public class ConsultationServiceImpl implements ConsultationService {
         return toSummary(updated, currentUser);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<ConsultationDepartmentOption> listDepartments() {
+        return departmentDirectory.listActiveDepartments();
+    }
+
     private ConsultationSummary toSummary(Consultation consultation, User currentUser) {
         ConsultationMessage lastMessage = messageRepository
             .findFirstByConsultationIdOrderByCreatedAtDesc(consultation.getId())
@@ -290,12 +339,17 @@ public class ConsultationServiceImpl implements ConsultationService {
             ? null
             : (StringUtils.hasText(assignee.getFullName()) ? assignee.getFullName() : assignee.getUsername());
         long messageCount = messageRepository.countByConsultationId(consultation.getId());
+        String departmentName = departmentDirectory.findByCode(consultation.getDepartmentCode())
+            .map(ConsultationDepartmentOption::name)
+            .orElse(null);
         return new ConsultationSummary(
             consultation.getId(),
             consultation.getSubject(),
             consultation.getCropType(),
             consultation.getStatus(),
             consultation.getPriority(),
+            consultation.getDepartmentCode(),
+            departmentName,
             consultation.getCreatedAt(),
             consultation.getUpdatedAt(),
             consultation.getClosedAt(),
@@ -343,12 +397,25 @@ public class ConsultationServiceImpl implements ConsultationService {
             .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "咨询不存在"));
         User currentUser = currentUserService.getCurrentUser();
         Set<String> roles = resolveRoles(currentUser);
-        if (!consultation.getCreatedBy().getId().equals(currentUser.getId())
-            && !roles.contains(ROLE_ADMIN)
-            && !roles.contains(ROLE_DEPT)) {
-            throw new BusinessException(ResultCode.FORBIDDEN, "没有访问该咨询的权限");
+        boolean isOwner = consultation.getCreatedBy().getId().equals(currentUser.getId());
+        if (isOwner) {
+            return consultation;
         }
-        return consultation;
+        if (roles.contains(ROLE_ADMIN)) {
+            return consultation;
+        }
+        if (roles.contains(ROLE_DEPT)) {
+            if (consultation.getAssignedTo() != null && consultation.getAssignedTo().getId().equals(currentUser.getId())) {
+                return consultation;
+            }
+            String userDepartment = currentUser.getDepartmentCode();
+            String consultationDepartment = consultation.getDepartmentCode();
+            if (StringUtils.hasText(userDepartment) && StringUtils.hasText(consultationDepartment)
+                && userDepartment.trim().equalsIgnoreCase(consultationDepartment.trim())) {
+                return consultation;
+            }
+        }
+        throw new BusinessException(ResultCode.FORBIDDEN, "没有访问该咨询的权限");
     }
 
     private long calculateUnreadCount(Long consultationId, Long currentUserId) {
@@ -357,6 +424,24 @@ public class ConsultationServiceImpl implements ConsultationService {
                 ? messageRepository.countByConsultationIdAndSenderIdNot(consultationId, currentUserId)
                 : messageRepository.countByConsultationIdAndCreatedAtAfterAndSenderIdNot(consultationId, participant.getLastReadAt(), currentUserId))
             .orElseGet(() -> messageRepository.countByConsultationIdAndSenderIdNot(consultationId, currentUserId));
+    }
+
+    private User resolveDepartmentAssignee(ConsultationDepartmentOption department) {
+        if (department == null) {
+            return null;
+        }
+        Long contactUserId = department.contactUserId();
+        if (contactUserId != null) {
+            return userRepository.findById(contactUserId).orElse(null);
+        }
+        String departmentCode = department.code();
+        if (!StringUtils.hasText(departmentCode)) {
+            return null;
+        }
+        return userRepository.findByRoleAndDepartment(ROLE_DEPT, departmentCode.trim())
+            .stream()
+            .findFirst()
+            .orElse(null);
     }
 
     private Set<String> resolveRoles(User user) {

@@ -56,9 +56,16 @@
                 {{ statusMeta[item.status].label }}
               </el-tag>
             </div>
+            <div class="item-department" v-if="item.departmentName">
+              <el-tag size="small" effect="dark" class="department-tag">{{ item.departmentName }}</el-tag>
+            </div>
             <div class="item-meta">
               <span class="item-crop" v-if="item.cropType">{{ item.cropType }}</span>
               <span class="item-time">{{ formatTime(item.updatedAt || item.createdAt) }}</span>
+            </div>
+            <div class="item-security" v-if="item.departmentName">
+              <el-icon class="security-icon"><Lock /></el-icon>
+              <span class="security-text">仅 {{ item.departmentName }} 可见</span>
             </div>
             <div class="item-preview">
               <el-badge :value="item.unreadCount" :hidden="!item.unreadCount" type="danger">
@@ -76,7 +83,7 @@
 
 <script setup>
 import { computed, ref } from 'vue'
-import { Plus, Search } from '@element-plus/icons-vue'
+import { Lock, Plus, Search } from '@element-plus/icons-vue'
 
 const props = defineProps({
   conversations: {
@@ -272,6 +279,31 @@ const formatTime = value => {
   gap: 8px;
   font-size: 12px;
   color: #78909c;
+}
+
+.item-security {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #2f4f40;
+  margin-top: 4px;
+}
+
+.security-icon {
+  color: #43a047;
+}
+
+.item-department {
+  margin-top: 2px;
+}
+
+.department-tag {
+  border: none;
+  background: linear-gradient(135deg, #2e7d32, #43a047);
+  color: #fff;
+  border-radius: 12px;
+  padding: 0 10px;
 }
 
 .item-preview {
