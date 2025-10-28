@@ -383,7 +383,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
 import Draggable from 'vuedraggable'
-import chinaGeoJson from '../assets/china-geo.json'
+import yunnanGeoJson from '../assets/maps/yunnan.json'
 import apiClient from '../services/http'
 
 const trendChartRef = ref(null)
@@ -554,26 +554,51 @@ const numberFormatters = {
 
 const colorPalette = ['#42a5f5', '#66bb6a', '#ffca28', '#ab47bc', '#ef5350', '#26a69a', '#8d6e63', '#29b6f6', '#9ccc65']
 
-const provinceNameSet = new Set(
-  Array.isArray(chinaGeoJson?.features)
-    ? chinaGeoJson.features
-        .map(feature => feature?.properties?.name)
-        .filter(name => typeof name === 'string' && name.trim().length)
-    : []
-)
+const prefectureProfiles = [
+  { name: '昆明市', short: '昆明', aliases: ['昆明'] },
+  { name: '曲靖市', short: '曲靖', aliases: ['曲靖'] },
+  { name: '玉溪市', short: '玉溪', aliases: ['玉溪'] },
+  { name: '保山市', short: '保山', aliases: ['保山'] },
+  { name: '昭通市', short: '昭通', aliases: ['昭通'] },
+  { name: '丽江市', short: '丽江', aliases: ['丽江'] },
+  { name: '普洱市', short: '普洱', aliases: ['普洱', '思茅', '思茅市'] },
+  { name: '临沧市', short: '临沧', aliases: ['临沧'] },
+  { name: '楚雄彝族自治州', short: '楚雄', aliases: ['楚雄州', '楚雄'] },
+  { name: '红河哈尼族彝族自治州', short: '红河', aliases: ['红河州', '红河'] },
+  { name: '文山壮族苗族自治州', short: '文山', aliases: ['文山州', '文山'] },
+  { name: '西双版纳傣族自治州', short: '西双版纳', aliases: ['西双版纳州', '西双版纳', '版纳'] },
+  { name: '大理白族自治州', short: '大理', aliases: ['大理州', '大理'] },
+  { name: '德宏傣族景颇族自治州', short: '德宏', aliases: ['德宏州', '德宏'] },
+  { name: '怒江傈僳族自治州', short: '怒江', aliases: ['怒江州', '怒江'] },
+  { name: '迪庆藏族自治州', short: '迪庆', aliases: ['迪庆州', '迪庆'] }
+]
 
-const aliasProvinceMap = {
-  '内蒙古': '内蒙古自治区',
-  '广西': '广西壮族自治区',
-  '宁夏': '宁夏回族自治区',
-  '新疆': '新疆维吾尔自治区',
-  '西藏': '西藏自治区',
-  '黑龙江': '黑龙江省',
-  '香港': '香港特别行政区',
-  '澳门': '澳门特别行政区'
+const prefectureNameSet = new Set(prefectureProfiles.map(item => item.name))
+const prefectureShortNameMap = new Map(prefectureProfiles.map(item => [item.name, item.short]))
+const prefectureOrderMap = new Map(prefectureProfiles.map((item, index) => [item.name, index]))
+
+const sanitizeRegionText = raw => {
+  if (!raw) return ''
+  return String(raw)
+    .trim()
+    .replace(/[\s、，,·]/g, '')
+    .replace(/^云南省?/, '')
+    .replace(/^云南/, '')
+    .replace(/^中国云南省?/, '')
 }
 
-const municipalitySet = new Set(['北京', '天津', '上海', '重庆'])
+const prefectureAliasTuples = prefectureProfiles.flatMap(item => {
+  const aliasSet = new Set([item.name, item.short, ...(item.aliases ?? [])])
+  aliasSet.add(`${item.short}市`)
+  aliasSet.add(`${item.short}州`)
+  aliasSet.add(`${item.short}自治州`)
+  return Array.from(aliasSet)
+    .map(alias => sanitizeRegionText(alias))
+    .filter(Boolean)
+    .map(alias => [alias, item.name])
+})
+
+const prefectureAliasMap = new Map(prefectureAliasTuples)
 
 const extractCoordinatesFromGeometry = geometry => {
   if (!geometry) return []
@@ -607,12 +632,12 @@ const computeCoordinateCentroid = points => {
   return [Number((x / count).toFixed(4)), Number((y / count).toFixed(4))]
 }
 
-const provinceCoordinateMap = (() => {
+const prefectureCoordinateMap = (() => {
   const map = new Map()
-  if (!chinaGeoJson?.features) {
+  if (!yunnanGeoJson?.features) {
     return map
   }
-  chinaGeoJson.features.forEach(feature => {
+  yunnanGeoJson.features.forEach(feature => {
     const name = feature?.properties?.name
     if (!name) return
     const centroid = computeCoordinateCentroid(extractCoordinatesFromGeometry(feature.geometry))
@@ -722,46 +747,29 @@ const hexToRgba = (hex, alpha) => {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
-const normalizeProvinceName = name => {
-  if (!name) return ''
-  const trimmed = String(name).trim()
-  if (!trimmed) return ''
-  if (provinceNameSet.has(trimmed)) {
-    return trimmed
+const normalizePrefectureName = name => {
+  const sanitized = sanitizeRegionText(name)
+  if (!sanitized) return ''
+  if (prefectureNameSet.has(sanitized)) {
+    return sanitized
   }
-  if (aliasProvinceMap[trimmed]) {
-    return aliasProvinceMap[trimmed]
+  const direct = prefectureAliasMap.get(sanitized)
+  if (direct) {
+    return direct
   }
-  if (municipalitySet.has(trimmed)) {
-    const candidate = `${trimmed}市`
-    return provinceNameSet.has(candidate) ? candidate : trimmed
-  }
-  if (trimmed.endsWith('省') || trimmed.endsWith('市') || trimmed.endsWith('自治区') || trimmed.endsWith('特别行政区')) {
-    return provinceNameSet.has(trimmed) ? trimmed : ''
-  }
-  const provinceIndex = trimmed.indexOf('省')
-  if (provinceIndex > 0) {
-    const candidate = trimmed.slice(0, provinceIndex + 1)
-    if (provinceNameSet.has(candidate)) {
-      return candidate
+  for (const [alias, canonical] of prefectureAliasMap.entries()) {
+    if (alias && sanitized.includes(alias)) {
+      return canonical
     }
   }
-  const autonomousIndex = trimmed.indexOf('自治区')
-  if (autonomousIndex > 0) {
-    const candidate = trimmed.slice(0, autonomousIndex + 3)
-    if (provinceNameSet.has(candidate)) {
-      return candidate
+  for (const profile of prefectureProfiles) {
+    if (!profile?.short) continue
+    const shortSanitized = sanitizeRegionText(profile.short)
+    if (shortSanitized && sanitized.includes(shortSanitized)) {
+      return profile.name
     }
   }
-  const cityIndex = trimmed.indexOf('市')
-  if (cityIndex > 0) {
-    const candidate = trimmed.slice(0, cityIndex + 1)
-    if (provinceNameSet.has(candidate)) {
-      return candidate
-    }
-  }
-  const fallback = `${trimmed}省`
-  return provinceNameSet.has(fallback) ? fallback : ''
+  return ''
 }
 
 const normalizedRecords = computed(() =>
@@ -809,7 +817,7 @@ const filteredRecords = computed(() => {
     records = records.filter(record => record.year === year)
   }
   if (selectedRegion.value !== ALL_REGIONS) {
-    records = records.filter(record => normalizeProvinceName(record?.regionName) === selectedRegion.value)
+    records = records.filter(record => normalizePrefectureName(record?.regionName) === selectedRegion.value)
   }
   return records
 })
@@ -982,18 +990,24 @@ const yearSelectOptions = computed(() => {
 const regionOptions = computed(() => {
   const counter = new Map()
   categoryFilteredRecords.value.forEach(record => {
-    const normalized = normalizeProvinceName(record?.regionName)
+    const normalized = normalizePrefectureName(record?.regionName)
     if (!normalized) return
     counter.set(normalized, (counter.get(normalized) ?? 0) + 1)
   })
   return Array.from(counter.entries())
     .sort((a, b) => {
-      if (b[1] === a[1]) {
+      const orderA = prefectureOrderMap.get(a[0]) ?? Number.POSITIVE_INFINITY
+      const orderB = prefectureOrderMap.get(b[0]) ?? Number.POSITIVE_INFINITY
+      if (orderA === orderB) {
         return a[0].localeCompare(b[0], 'zh-CN')
       }
-      return b[1] - a[1]
+      return orderA - orderB
     })
-    .map(([label, count]) => ({ label, value: label, count }))
+    .map(([label, count]) => {
+      const short = prefectureShortNameMap.get(label)
+      const displayLabel = short && short !== label ? `${label}（${short}）` : label
+      return { label, value: label, count, short, displayLabel }
+    })
 })
 
 const regionSelectOptions = computed(() => {
@@ -1011,7 +1025,7 @@ const regionSelectOptions = computed(() => {
     },
     ...regionOptions.value.map(option => ({
       ...option,
-      display: `${option.label} · ${formatNumber(option.count, 0)} 条记录`
+      display: `${option.displayLabel} · ${formatNumber(option.count, 0)} 条记录`
     }))
   ]
 })
@@ -1019,7 +1033,14 @@ const regionSelectOptions = computed(() => {
 const selectedCategoryLabel = computed(() => (selectedCategory.value === CATEGORY_ALL ? '全部类别' : selectedCategory.value))
 const selectedCropLabel = computed(() => (selectedCrop.value === ALL_CROPS ? '全部作物' : selectedCrop.value))
 const selectedYearLabel = computed(() => (selectedYear.value === ALL_YEARS ? '全部年份' : `${selectedYear.value}`))
-const selectedRegionLabel = computed(() => (selectedRegion.value === ALL_REGIONS ? '全部地区' : selectedRegion.value))
+const selectedRegionLabel = computed(() => {
+  if (selectedRegion.value === ALL_REGIONS) {
+    return '全部地区'
+  }
+  const value = selectedRegion.value
+  const short = prefectureShortNameMap.get(value)
+  return short && short !== value ? `${value}（${short}）` : value
+})
 
 const isAllCategorySelected = computed(() => selectedCategory.value === CATEGORY_ALL)
 const hasCropFilter = computed(() => selectedCrop.value !== ALL_CROPS)
@@ -1179,7 +1200,7 @@ const buildDrilldownRecords = filters => {
     if (year && record?.year !== year) {
       return false
     }
-    if (region && normalizeProvinceName(record?.regionName) !== region) {
+    if (region && normalizePrefectureName(record?.regionName) !== region) {
       return false
     }
     return true
@@ -1434,8 +1455,8 @@ const mapData = computed(() => {
   let excluded = 0
 
   records.forEach(record => {
-    const normalizedName = normalizeProvinceName(record?.regionName)
-    if (!normalizedName || !provinceNameSet.has(normalizedName)) {
+    const normalizedName = normalizePrefectureName(record?.regionName)
+    if (!normalizedName || !prefectureNameSet.has(normalizedName)) {
       excluded += 1
       return
     }
@@ -1444,10 +1465,19 @@ const mapData = computed(() => {
     regionMap.set(normalizedName, previous + value)
   })
 
-  const items = Array.from(regionMap.entries()).map(([name, value]) => ({
-    name,
-    value: Number(value.toFixed(2))
-  }))
+  const items = Array.from(regionMap.entries())
+    .sort((a, b) => {
+      const orderA = prefectureOrderMap.get(a[0]) ?? Number.POSITIVE_INFINITY
+      const orderB = prefectureOrderMap.get(b[0]) ?? Number.POSITIVE_INFINITY
+      if (orderA === orderB) {
+        return a[0].localeCompare(b[0], 'zh-CN')
+      }
+      return orderA - orderB
+    })
+    .map(([name, value]) => ({
+      name,
+      value: Number(value.toFixed(2))
+    }))
 
   const values = items.map(item => item.value)
   let min = values.length ? Math.min(...values) : 0
@@ -1559,20 +1589,20 @@ const structureSubtitle = computed(() => {
 
 const mapSubtitle = computed(() => {
   if (!datasetMetrics.value.totalRecords) {
-    return '导入省级产量数据后可查看区域热力。'
+    return '导入云南各地州的产量数据后可查看区域热力。'
   }
   if (hasAnySelection.value && !activeMetrics.value.totalRecords) {
-    return `${selectionSummaryText.value} 暂无省级分布数据，建议补充地区字段。`
+    return `${selectionSummaryText.value} 暂无地州分布数据，建议补充地区字段。`
   }
   const { items, excluded } = mapData.value
   if (!items.length) {
     return hasAnySelection.value
-      ? `${selectionSummaryText.value} 暂无匹配到省级行政区的数据，请完善地区信息。`
-      : '暂无匹配到省级行政区的数据，请完善地区信息。'
+      ? `${selectionSummaryText.value} 暂无匹配到地州行政区的数据，请完善地区信息。`
+      : '暂无匹配到地州行政区的数据，请完善地区信息。'
   }
-  const focus = selectionFocusLabel.value || (hasAnySelection.value ? selectionSummaryText.value : '按省份汇总产量')
-  const prefix = hasAnySelection.value ? `${focus} 省份产量分布` : '按省份汇总产量'
-  return `${prefix}，覆盖 ${items.length} 个省级地区${excluded ? `，忽略 ${excluded} 条缺少省级信息的记录` : ''}`
+  const focus = selectionFocusLabel.value || (hasAnySelection.value ? selectionSummaryText.value : '按地州汇总产量')
+  const prefix = hasAnySelection.value ? `${focus} 地州产量分布` : '按地州汇总产量'
+  return `${prefix}，覆盖 ${items.length} 个地州（市）${excluded ? `，忽略 ${excluded} 条缺少地州信息的记录` : ''}`
 })
 
 const trendSummaryText = computed(() => {
@@ -1619,12 +1649,12 @@ const mapSummaryText = computed(() => {
       return ''
     }
     return hasAnySelection.value
-      ? `${selectionSummaryText.value} 暂无匹配的省级信息，请检查导入数据的地区字段。`
-      : '请检查导入数据的地区字段，确保包含省级名称。'
+      ? `${selectionSummaryText.value} 暂无匹配的地州信息，请检查导入数据的地区字段。`
+      : '请检查导入数据的地区字段，确保包含地州名称（如大理州）。'
   }
   const focus = selectionFocusLabel.value || (hasAnySelection.value ? selectionSummaryText.value : '热力图已聚合')
   const prefix = hasAnySelection.value ? `${focus} 热力图已聚合` : '热力图已聚合'
-  return `${prefix} ${items.length} 个省级行政区${excluded ? `，${excluded} 条记录未匹配成功` : ''}`
+  return `${prefix} ${items.length} 个地州（市）${excluded ? `，${excluded} 条记录未匹配成功` : ''}`
 })
 
 const recommendedTrendType = computed(() => {
@@ -1703,8 +1733,8 @@ const chartRecommendationMessages = computed(() => {
   if (mapLabel) {
     const { items } = mapData.value
     const reason = items.length
-      ? `覆盖 ${formatNumber(items.length, 0)} 个省级行政区`
-      : '暂未匹配到省级行政区数据'
+      ? `覆盖 ${formatNumber(items.length, 0)} 个地州（市）`
+      : '暂未匹配到地州数据'
     messages.push(`区域分布推荐使用「${mapLabel}」，${reason}，突出区域冷热与重点区域。`)
   }
 
@@ -1747,7 +1777,7 @@ const insightTips = computed(() => {
   const regionTop = topRegion.value
   if (regionTop) {
     const context = hasAnySelection.value ? selectionSummaryText.value : '整体数据'
-    tips.push(`${regionTop.name} 是目前${context}中产量最高的省级地区，可结合物流能力进行重点调度。`)
+    tips.push(`${regionTop.name} 是目前${context}中产量最高的地州，可结合物流能力进行重点调度。`)
   }
   if (!smartRecommendationEnabled.value && tips.length < 3) {
     tips.unshift(...chartRecommendationMessages.value.slice(0, Math.max(0, 2 - tips.length)))
@@ -1768,8 +1798,8 @@ const initCharts = () => {
     structureChartInstance.value.on('click', handleStructureSliceClick)
   }
   if (mapChartRef.value && !mapChartInstance.value) {
-    if (!echarts.getMap('china')) {
-      echarts.registerMap('china', chinaGeoJson)
+    if (!echarts.getMap('yunnan')) {
+      echarts.registerMap('yunnan', yunnanGeoJson)
     }
     mapChartInstance.value = echarts.init(mapChartRef.value)
     mapChartInstance.value.on('click', handleMapRegionClick)
@@ -1995,7 +2025,7 @@ const handleStructureSliceClick = params => {
 }
 
 const handleMapRegionClick = params => {
-  const regionName = normalizeProvinceName(params?.name) || params?.name
+  const regionName = normalizePrefectureName(params?.name) || params?.name
   if (!regionName) {
     return
   }
@@ -2125,16 +2155,23 @@ const updateMapChart = (data, variant = resolvedMapType.value) => {
   }
   const chartVariant = variant || 'choropleth'
   const geoOption = {
-    map: 'china',
+    map: 'yunnan',
     roam: true,
-    emphasis: { itemStyle: { areaColor: '#ffcc80' } },
-    itemStyle: { borderColor: '#90caf9', borderWidth: 0.8 }
+    zoom: 1.05,
+    layoutCenter: ['50%', '55%'],
+    layoutSize: '90%',
+    label: { show: true, color: '#0b3c5d', fontWeight: 600, fontSize: 12 },
+    itemStyle: { borderColor: '#ffffff', borderWidth: 1, areaColor: '#e3f2fd' },
+    emphasis: {
+      label: { show: true, color: '#0b3c5d', fontWeight: 700 },
+      itemStyle: { areaColor: '#ffe082', shadowBlur: 18, shadowColor: 'rgba(255, 193, 7, 0.35)' }
+    }
   }
 
   if (chartVariant === 'heatmap') {
     const heatmapData = data.items
       .map(item => {
-        const coord = provinceCoordinateMap.get(item.name)
+        const coord = prefectureCoordinateMap.get(item.name)
         if (!coord) return null
         return { name: item.name, value: [...coord, item.value] }
       })
@@ -2155,12 +2192,12 @@ const updateMapChart = (data, variant = resolvedMapType.value) => {
         bottom: 20,
         text: ['高', '低'],
         calculable: true,
-        inRange: { color: ['#e3f2fd', '#64b5f6', '#1e88e5'] }
+        inRange: { color: ['#e8f8f5', '#76d7c4', '#1abc9c'] }
       },
       geo: geoOption,
       series: [
         {
-          name: '省级产量',
+          name: '地州产量',
           type: 'map',
           geoIndex: 0,
           data: data.items
@@ -2170,13 +2207,14 @@ const updateMapChart = (data, variant = resolvedMapType.value) => {
           type: 'heatmap',
           coordinateSystem: 'geo',
           data: heatmapData,
-          pointSize: 16,
-          blurSize: 30
-        }
-      ]
-    })
-    return
-  }
+          pointSize: 18,
+          blurSize: 32,
+          itemStyle: { opacity: 0.85 }
+      }
+    ]
+  })
+  return
+}
 
   mapChartInstance.value.setOption({
     tooltip: {
@@ -2190,12 +2228,12 @@ const updateMapChart = (data, variant = resolvedMapType.value) => {
       bottom: 20,
       text: ['高', '低'],
       calculable: true,
-      inRange: { color: ['#e3f2fd', '#64b5f6', '#1e88e5'] }
+      inRange: { color: ['#e8f8f5', '#76d7c4', '#1abc9c'] }
     },
     geo: geoOption,
     series: [
       {
-        name: '省级产量',
+        name: '地州产量',
         type: 'map',
         geoIndex: 0,
         data: data.items
