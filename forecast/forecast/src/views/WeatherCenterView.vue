@@ -117,52 +117,54 @@
             </li>
           </ul>
         </el-card>
-        <el-card class="insight-card">
+        <el-card
+          :class="['insight-card', 'insight-card--callout', keypointInfo.accentClass]"
+        >
           <template #header>
-            <div class="card-header">
-              <span>重点提示</span>
+            <div class="card-header card-header--callout">
+              <div class="card-icon">{{ keypointInfo.icon }}</div>
+              <div class="card-heading">
+                <span class="card-title">重点提示</span>
+                <span class="card-subtitle">{{ keypointInfo.subtitle }}</span>
+              </div>
+              <span v-if="keypointInfo.badge" class="card-badge">{{ keypointInfo.badge }}</span>
             </div>
           </template>
-          <div class="insight-body">
-            <p v-if="currentWeather.forecastKeypoint" class="insight-text">
-              {{ currentWeather.forecastKeypoint }}
-            </p>
-            <p v-else-if="currentWeather.precipitationDescription" class="insight-text">
-              {{ currentWeather.precipitationDescription }}
-            </p>
-            <p v-else class="insight-text">当前无特别天气提示，关注实时数据即可。</p>
+          <div class="insight-body callout-body">
+            <p class="insight-text">{{ keypointInfo.message }}</p>
+            <ul v-if="keypointInfo.actions.length" class="callout-actions">
+              <li v-for="action in keypointInfo.actions" :key="action">{{ action }}</li>
+            </ul>
           </div>
         </el-card>
-        <el-card class="insight-card">
+        <el-card
+          :class="['insight-card', 'insight-card--air', airQualitySummary.accentClass]"
+        >
           <template #header>
-            <div class="card-header">
-              <span>空气质量</span>
+            <div class="card-header card-header--air">
+              <div class="card-icon">🌫️</div>
+              <div class="card-heading">
+                <span class="card-title">空气质量</span>
+                <span class="card-subtitle">{{ airQualitySummary.subtitle }}</span>
+              </div>
+              <span v-if="airQualitySummary.badge" class="card-badge">{{ airQualitySummary.badge }}</span>
             </div>
           </template>
           <div class="insight-body air-quality">
-            <div class="aq-item">
-              <span class="aq-label">PM2.5</span>
-              <span class="aq-value">{{ formatNumber(currentWeather.airQuality?.pm25) }} μg/m³</span>
+            <div class="aq-overview">
+              <span class="aq-overview-value">{{ airQualitySummary.aqi }}</span>
+              <span class="aq-overview-label">AQI</span>
             </div>
-            <div class="aq-item">
-              <span class="aq-label">PM10</span>
-              <span class="aq-value">{{ formatNumber(currentWeather.airQuality?.pm10) }} μg/m³</span>
-            </div>
-            <div class="aq-item">
-              <span class="aq-label">O₃</span>
-              <span class="aq-value">{{ formatNumber(currentWeather.airQuality?.o3) }} μg/m³</span>
-            </div>
-            <div class="aq-item">
-              <span class="aq-label">SO₂</span>
-              <span class="aq-value">{{ formatNumber(currentWeather.airQuality?.so2) }} μg/m³</span>
-            </div>
-            <div class="aq-item">
-              <span class="aq-label">NO₂</span>
-              <span class="aq-value">{{ formatNumber(currentWeather.airQuality?.no2) }} μg/m³</span>
-            </div>
-            <div class="aq-item">
-              <span class="aq-label">CO</span>
-              <span class="aq-value">{{ formatNumber(currentWeather.airQuality?.co) }} mg/m³</span>
+            <div class="aq-metrics">
+              <div
+                v-for="metric in airQualitySummary.metrics"
+                :key="metric.label"
+                class="aq-pill"
+                :class="`aq-pill--${metric.severity}`"
+              >
+                <span class="aq-pill-label">{{ metric.label }}</span>
+                <span class="aq-pill-value">{{ metric.value }}</span>
+              </div>
             </div>
           </div>
         </el-card>
@@ -370,6 +372,116 @@ const farmingRecommendations = computed(() => [
   { icon: '🌱', title: '田间提醒', text: fieldReminder.value }
 ])
 
+const keypointInfo = computed(() => {
+  const weather = currentWeather.value
+  const precipitation = toFiniteNumber(weather?.precipitation?.localIntensity)
+  const windSpeedValue = toFiniteNumber(weather?.wind?.speed)
+  const temperatureValue = toFiniteNumber(weather?.temperature)
+  const humidityValue = toFiniteNumber(weather?.humidity)
+
+  let icon = '📡'
+  let badge = ''
+  let subtitle = '气象条件整体平稳'
+  let accentClass = 'insight-card--callout-mild'
+  const actions = []
+
+  if (precipitation !== null && precipitation > 0.3) {
+    icon = '🌧️'
+    badge = '降水关注'
+    subtitle = '注意当前的降水过程'
+    accentClass = 'insight-card--callout-rain'
+    actions.push('提前疏通排水沟渠', '适度推迟采收与喷药作业')
+  } else if (windSpeedValue !== null && windSpeedValue > 8) {
+    icon = '💨'
+    badge = '大风提醒'
+    subtitle = '风力较大，注意防护'
+    accentClass = 'insight-card--callout-wind'
+    actions.push('加固棚膜及遮阳网', '谨慎安排无人机等高空作业')
+  } else if (temperatureValue !== null && temperatureValue >= 34) {
+    icon = '🔥'
+    badge = '高温防护'
+    subtitle = '午后体感偏热'
+    accentClass = 'insight-card--callout-heat'
+    actions.push('避开午后高温时段', '及时补水降温')
+  } else if (temperatureValue !== null && temperatureValue <= 5) {
+    icon = '❄️'
+    badge = '低温防寒'
+    subtitle = '注意保温措施'
+    accentClass = 'insight-card--callout-cold'
+    actions.push('检查棚室保温设施', '加强幼苗防寒防冻')
+  } else if (humidityValue !== null && humidityValue >= 85) {
+    icon = '💧'
+    badge = '湿度偏高'
+    subtitle = '加强病害预防'
+    accentClass = 'insight-card--callout-humid'
+    actions.push('保持通风换气', '关注病虫害巡查')
+  }
+
+  const message =
+    weather?.forecastKeypoint ||
+    weather?.precipitationDescription ||
+    (badge
+      ? '结合以上提示及时调整田间管理，降低天气带来的影响。'
+      : '当前无特别天气提示，可结合实时数据安排日常作业。')
+
+  return {
+    icon,
+    badge,
+    subtitle,
+    message,
+    actions,
+    accentClass
+  }
+})
+
+const airQualitySummary = computed(() => {
+  const air = currentWeather.value?.airQuality || {}
+  const aqiValue = toFiniteNumber(air.aqi)
+  const descriptor = describeAqiLevel(aqiValue)
+
+  let accentClass = 'insight-card--air-clean'
+  if (aqiValue === null) {
+    accentClass = 'insight-card--air-unknown'
+  } else if (aqiValue > 200) {
+    accentClass = 'insight-card--air-poor'
+  } else if (aqiValue > 150) {
+    accentClass = 'insight-card--air-fair'
+  } else if (aqiValue > 100) {
+    accentClass = 'insight-card--air-moderate'
+  } else if (aqiValue > 50) {
+    accentClass = 'insight-card--air-light'
+  }
+
+  const metricsConfig = [
+    { key: 'pm25', label: 'PM2.5', unit: 'μg/m³' },
+    { key: 'pm10', label: 'PM10', unit: 'μg/m³' },
+    { key: 'o3', label: 'O₃', unit: 'μg/m³' },
+    { key: 'so2', label: 'SO₂', unit: 'μg/m³' },
+    { key: 'no2', label: 'NO₂', unit: 'μg/m³' },
+    { key: 'co', label: 'CO', unit: 'mg/m³' }
+  ]
+
+  const metrics = metricsConfig.map(item => {
+    const value = toFiniteNumber(air?.[item.key])
+    return {
+      label: item.label,
+      value: value === null ? '—' : `${formatNumber(value)} ${item.unit}`,
+      severity: describePollutantLevel(value, item.key)
+    }
+  })
+
+  return {
+    aqi: aqiValue === null ? '—' : formatNumber(aqiValue),
+    subtitle:
+      aqiValue === null
+        ? '暂无空气质量数据'
+        : descriptor?.label || '空气质量监测',
+    badge: descriptor?.badge || '',
+    metrics,
+    accentClass
+  }
+})
+
 const refreshWeather = () => {
   weatherStore.fetchWeather().catch(() => {})
 }
@@ -507,6 +619,34 @@ const describeAqiLevel = value => {
     return { badge: '中度', label: '减少户外活动' }
   }
   return { badge: '重度', label: '建议暂停户外' }
+}
+
+const describePollutantLevel = (value, key) => {
+  if (value === null) {
+    return 'unknown'
+  }
+
+  const thresholdsMap = {
+    pm25: [35, 75, 115],
+    pm10: [50, 150, 250],
+    o3: [160, 215, 265],
+    so2: [50, 150, 475],
+    no2: [100, 200, 700],
+    co: [4, 14, 24]
+  }
+
+  const [good, fair, moderate] = thresholdsMap[key] || [50, 150, 250]
+
+  if (value <= good) {
+    return 'good'
+  }
+  if (value <= fair) {
+    return 'fair'
+  }
+  if (value <= moderate) {
+    return 'moderate'
+  }
+  return 'poor'
 }
 </script>
 
@@ -852,17 +992,81 @@ const describeAqiLevel = value => {
 }
 
 .insight-card {
-  border-radius: 16px;
-  box-shadow: 0 12px 28px rgba(11, 61, 46, 0.12);
+  border-radius: 18px;
   overflow: hidden;
+  border: none;
+  box-shadow: 0 16px 36px rgba(11, 61, 46, 0.12);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(233, 246, 242, 0.92));
+}
+
+.insight-card :deep(.el-card__header) {
+  border-bottom: none;
+  padding: 18px 22px 12px;
+  background: transparent;
+}
+
+.insight-card :deep(.el-card__body) {
+  padding: 22px 24px 24px;
 }
 
 .insight-card--suggestion {
-  background: linear-gradient(135deg, rgba(15, 76, 58, 0.1), rgba(33, 150, 83, 0.08));
+  background: linear-gradient(140deg, rgba(15, 76, 58, 0.12), rgba(33, 150, 83, 0.08));
 }
 
 .insight-card--suggestion :deep(.el-card__body) {
-  padding: 20px 22px;
+  padding: 22px 24px;
+}
+
+.insight-card--callout :deep(.el-card__body) {
+  padding: 24px 26px;
+}
+
+.insight-card--callout-mild {
+  background: linear-gradient(150deg, rgba(224, 247, 250, 0.72), rgba(240, 255, 244, 0.92));
+}
+
+.insight-card--callout-rain {
+  background: linear-gradient(150deg, rgba(179, 229, 252, 0.75), rgba(232, 248, 255, 0.94));
+}
+
+.insight-card--callout-wind {
+  background: linear-gradient(150deg, rgba(213, 245, 255, 0.72), rgba(233, 246, 255, 0.92));
+}
+
+.insight-card--callout-heat {
+  background: linear-gradient(150deg, rgba(255, 224, 178, 0.74), rgba(255, 241, 213, 0.94));
+}
+
+.insight-card--callout-cold {
+  background: linear-gradient(150deg, rgba(207, 216, 255, 0.74), rgba(240, 247, 255, 0.94));
+}
+
+.insight-card--callout-humid {
+  background: linear-gradient(150deg, rgba(200, 230, 201, 0.72), rgba(232, 245, 233, 0.94));
+}
+
+.insight-card--air-clean {
+  background: linear-gradient(160deg, rgba(224, 255, 247, 0.78), rgba(240, 255, 250, 0.98));
+}
+
+.insight-card--air-light {
+  background: linear-gradient(160deg, rgba(224, 242, 255, 0.76), rgba(240, 248, 255, 0.95));
+}
+
+.insight-card--air-moderate {
+  background: linear-gradient(160deg, rgba(255, 243, 224, 0.8), rgba(255, 253, 243, 0.96));
+}
+
+.insight-card--air-fair {
+  background: linear-gradient(160deg, rgba(255, 224, 178, 0.78), rgba(255, 239, 213, 0.95));
+}
+
+.insight-card--air-poor {
+  background: linear-gradient(160deg, rgba(254, 228, 228, 0.82), rgba(255, 243, 243, 0.97));
+}
+
+.insight-card--air-unknown {
+  background: linear-gradient(160deg, rgba(236, 239, 241, 0.82), rgba(248, 250, 252, 0.96));
 }
 
 .suggestion-list {
@@ -904,43 +1108,179 @@ const describeAqiLevel = value => {
 }
 
 .card-header {
-  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 14px;
   color: #0b3d2e;
+}
+
+.card-header--callout,
+.card-header--air {
+  justify-content: flex-start;
+}
+
+.card-icon {
+  font-size: 28px;
+  line-height: 1;
+  filter: drop-shadow(0 10px 18px rgba(11, 61, 46, 0.16));
+}
+
+.card-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 auto;
+}
+
+.card-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #063a2b;
+}
+
+.card-subtitle {
+  font-size: 12px;
+  letter-spacing: 0.2px;
+  color: rgba(6, 58, 43, 0.75);
+}
+
+.card-badge {
+  margin-left: auto;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(6, 58, 43, 0.14);
+  color: #063a2b;
 }
 
 .insight-body {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
+}
+
+.callout-body {
+  gap: 18px;
 }
 
 .insight-text {
   font-size: 15px;
-  color: #455a64;
-  line-height: 1.7;
+  color: #29434e;
+  line-height: 1.75;
+  font-weight: 500;
+}
+
+.callout-actions {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13px;
+  color: #375a63;
+}
+
+.callout-actions li {
+  list-style: disc;
 }
 
 .air-quality {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 12px 16px;
+  grid-template-columns: minmax(120px, 160px) 1fr;
+  gap: 16px 20px;
+  align-items: stretch;
 }
 
-.aq-item {
+.aq-overview {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 16px 18px;
+  border-radius: 16px;
+  background: rgba(6, 58, 43, 0.1);
+  color: #063a2b;
+  min-height: 120px;
 }
 
-.aq-label {
+.aq-overview-value {
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.aq-overview-label {
   font-size: 13px;
-  color: #78909c;
+  margin-top: 6px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  opacity: 0.7;
 }
 
-.aq-value {
+.aq-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px 14px;
+}
+
+.aq-pill {
+  padding: 14px 16px;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid rgba(6, 58, 43, 0.08);
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.aq-pill-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: rgba(7, 54, 41, 0.65);
+}
+
+.aq-pill-value {
   font-size: 16px;
-  color: #0b3d2e;
-  font-weight: 500;
+  font-weight: 600;
+}
+
+.aq-pill--good {
+  background: rgba(33, 150, 83, 0.12);
+  color: #0f5132;
+}
+
+.aq-pill--fair {
+  background: rgba(255, 193, 7, 0.18);
+  color: #79590b;
+}
+
+.aq-pill--moderate {
+  background: rgba(255, 152, 0, 0.18);
+  color: #8a4f08;
+}
+
+.aq-pill--poor {
+  background: rgba(244, 67, 54, 0.16);
+  color: #b71c1c;
+}
+
+.aq-pill--unknown {
+  background: rgba(96, 125, 139, 0.16);
+  color: #37474f;
+}
+
+@media (max-width: 880px) {
+  .air-quality {
+    grid-template-columns: 1fr;
+  }
+
+  .aq-overview {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
 }
 
 @media (max-width: 768px) {
