@@ -20,6 +20,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.regex.Pattern;
 /**
  * 认证与账号模块的配置类，配置认证与账号相关的基础设施与框架行为。
@@ -57,7 +58,7 @@ public class AuthDataInitializer implements ApplicationRunner {
         ensureRole(SystemRole.AGRICULTURE_DEPT);
         ensureRole(SystemRole.FARMER);
 
-        ensureUserDepartmentColumnExists();
+        ensureDepartmentColumns();
         ensureExistingPasswordsEncrypted();
 
         userRepository.findWithRolesByUsername(DEFAULT_ADMIN_USERNAME)
@@ -85,24 +86,78 @@ public class AuthDataInitializer implements ApplicationRunner {
             });
     }
 
-    private void ensureUserDepartmentColumnExists() {
+    private void ensureDepartmentColumns() {
         try (Connection connection = dataSource.getConnection()) {
             DatabaseMetaData metaData = connection.getMetaData();
-            boolean columnExists = false;
-
-            try (ResultSet columns = metaData.getColumns(connection.getCatalog(), null, "sys_user", "department_code")) {
-                columnExists = columns.next();
-            }
-
-            if (!columnExists) {
-                try (Statement statement = connection.createStatement()) {
-                    statement.executeUpdate("ALTER TABLE sys_user ADD COLUMN department_code VARCHAR(64)");
-                    logger.info("已自动为 sys_user 表添加 department_code 列");
-                }
-            }
+            ensureColumnExists(connection, metaData,
+                "sys_user", "department_code",
+                "ALTER TABLE sys_user ADD COLUMN department_code VARCHAR(64)",
+                "已自动为 sys_user 表添加 department_code 列");
+            ensureColumnExists(connection, metaData,
+                "consultation", "department_code",
+                "ALTER TABLE consultation ADD COLUMN department_code VARCHAR(64)",
+                "已自动为 consultation 表添加 department_code 列");
         } catch (SQLException ex) {
-            logger.error("检查或创建 sys_user.department_code 列时发生异常", ex);
-            throw new IllegalStateException("无法初始化 sys_user.department_code 列", ex);
+            logger.error("检查或创建 department_code 列时发生异常", ex);
+            throw new IllegalStateException("无法初始化对话部门字段", ex);
+        }
+    }
+
+    private void ensureColumnExists(Connection connection,
+                                    DatabaseMetaData metaData,
+                                    String tableName,
+                                    String columnName,
+                                    String alterSql,
+                                    String successLog) throws SQLException {
+        if (!tableExists(metaData, connection, tableName)) {
+            logger.warn("检测到缺失的数据表 [{}]，跳过 {} 字段校验", tableName, columnName);
+            return;
+        }
+
+        if (columnExists(metaData, connection, tableName, columnName)) {
+            return;
+        }
+
+        try (Statement statement = connection.createStatement()) {
+            statement.executeUpdate(alterSql);
+            logger.info(successLog);
+        }
+    }
+
+    private boolean columnExists(DatabaseMetaData metaData,
+                                 Connection connection,
+                                 String tableName,
+                                 String columnName) throws SQLException {
+        if (hasColumn(metaData, connection, tableName, columnName)) {
+            return true;
+        }
+        return hasColumn(metaData, connection,
+            tableName.toUpperCase(Locale.ROOT), columnName.toUpperCase(Locale.ROOT));
+    }
+
+    private boolean tableExists(DatabaseMetaData metaData,
+                                 Connection connection,
+                                 String tableName) throws SQLException {
+        if (hasTable(metaData, connection, tableName)) {
+            return true;
+        }
+        return hasTable(metaData, connection, tableName.toUpperCase(Locale.ROOT));
+    }
+
+    private boolean hasTable(DatabaseMetaData metaData,
+                              Connection connection,
+                              String tableName) throws SQLException {
+        try (ResultSet tables = metaData.getTables(connection.getCatalog(), null, tableName, null)) {
+            return tables.next();
+        }
+    }
+
+    private boolean hasColumn(DatabaseMetaData metaData,
+                              Connection connection,
+                              String tableName,
+                              String columnName) throws SQLException {
+        try (ResultSet columns = metaData.getColumns(connection.getCatalog(), null, tableName, columnName)) {
+            return columns.next();
         }
     }
 
