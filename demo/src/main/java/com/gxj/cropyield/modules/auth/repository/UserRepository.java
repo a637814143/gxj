@@ -21,6 +21,16 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("select distinct u from User u join u.roles r where r.code = :roleCode and u.departmentCode = :departmentCode")
     List<User> findByRoleAndDepartment(@Param("roleCode") String roleCode, @Param("departmentCode") String departmentCode);
 
-    @Query("select distinct u from User u join u.roles r where r.code = :roleCode and u.departmentCode is not null and trim(u.departmentCode) <> '' order by u.departmentCode asc, u.id asc")
+    @Query("""
+        select distinct u from User u
+        join u.roles r
+        where r.code = :roleCode
+        order by
+            case when u.departmentCode is null or trim(u.departmentCode) = '' then 1 else 0 end,
+            u.departmentCode asc,
+            u.fullName asc,
+            u.username asc,
+            u.id asc
+        """)
     List<User> findDepartmentUsers(@Param("roleCode") String roleCode);
 }

@@ -87,9 +87,6 @@ public class ConsultationServiceImpl implements ConsultationService {
             ? currentUser.getDepartmentCode().trim().toLowerCase()
             : null;
 
-        if (isDepartmentUser && !isAdmin && normalizedDepartmentCode == null) {
-            return new ConsultationPageResponse(Collections.emptyList(), 0, pageIndex + 1, size);
-        }
         final String statusFilter = StringUtils.hasText(status) && !"all".equalsIgnoreCase(status)
             ? status.trim().toLowerCase()
             : null;
@@ -100,7 +97,16 @@ public class ConsultationServiceImpl implements ConsultationService {
             if (isAdmin) {
                 // 管理员可以查看全部会话
             } else if (isDepartmentUser) {
-                predicates.add(cb.equal(cb.lower(root.get("departmentCode")), normalizedDepartmentCode));
+                Predicate sameDepartment = null;
+                if (normalizedDepartmentCode != null) {
+                    sameDepartment = cb.equal(cb.lower(root.get("departmentCode")), normalizedDepartmentCode);
+                }
+                Predicate assignedToMe = cb.equal(root.get("assignedTo"), currentUser);
+                if (sameDepartment != null) {
+                    predicates.add(cb.or(sameDepartment, assignedToMe));
+                } else {
+                    predicates.add(assignedToMe);
+                }
             } else {
                 predicates.add(cb.equal(root.get("createdBy"), currentUser));
             }
@@ -138,7 +144,7 @@ public class ConsultationServiceImpl implements ConsultationService {
         ConsultationDepartmentOption department = departmentDirectory.findByCode(request.departmentCode())
             .orElseThrow(() -> new BusinessException(ResultCode.BAD_REQUEST, "请选择有效的咨询部门"));
 
-        User departmentAssignee = resolveDepartmentAssignee(department.code());
+        User departmentAssignee = resolveDepartmentAssignee(department);
 
         Consultation consultation = new Consultation();
         consultation.setSubject(request.subject());
@@ -399,6 +405,9 @@ public class ConsultationServiceImpl implements ConsultationService {
             return consultation;
         }
         if (roles.contains(ROLE_DEPT)) {
+            if (consultation.getAssignedTo() != null && consultation.getAssignedTo().getId().equals(currentUser.getId())) {
+                return consultation;
+            }
             String userDepartment = currentUser.getDepartmentCode();
             String consultationDepartment = consultation.getDepartmentCode();
             if (StringUtils.hasText(userDepartment) && StringUtils.hasText(consultationDepartment)
@@ -417,7 +426,15 @@ public class ConsultationServiceImpl implements ConsultationService {
             .orElseGet(() -> messageRepository.countByConsultationIdAndSenderIdNot(consultationId, currentUserId));
     }
 
-    private User resolveDepartmentAssignee(String departmentCode) {
+    private User resolveDepartmentAssignee(ConsultationDepartmentOption department) {
+        if (department == null) {
+            return null;
+        }
+        Long contactUserId = department.contactUserId();
+        if (contactUserId != null) {
+            return userRepository.findById(contactUserId).orElse(null);
+        }
+        String departmentCode = department.code();
         if (!StringUtils.hasText(departmentCode)) {
             return null;
         }
