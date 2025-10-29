@@ -879,7 +879,10 @@ public class DataImportService {
             for (Cell cell : headerRow) {
                 headers.add(getCellString(cell, workbook.getCreationHelper().createFormulaEvaluator()));
             }
-            HeaderMapping mapping = buildHeaderMapping(headers);
+            List<String> sanitizedHeaders = headers.stream()
+                    .map(this::sanitizeHeader)
+                    .toList();
+            HeaderMapping mapping = buildHeaderMapping(sanitizedHeaders);
 
             List<ParsedRecord> records = new ArrayList<>();
             FormulaEvaluator evaluator = workbook.getCreationHelper().createFormulaEvaluator();
@@ -1287,6 +1290,27 @@ public class DataImportService {
                 int month = Integer.parseInt(digitsOnly.substring(4, 6));
                 int day = Integer.parseInt(digitsOnly.substring(6, 8));
                 return LocalDate.of(year, month, day);
+            } catch (RuntimeException ignored) {
+            }
+        }
+        LocalDate excelDate = tryExcelSerialDate(normalized, trimmed);
+        if (excelDate != null) {
+            return excelDate;
+        }
+        return null;
+    }
+
+    private LocalDate tryExcelSerialDate(String normalized, String original) {
+        Double numeric = parseNumeric(normalized.replaceAll("[^0-9.+-]", ""));
+        if (numeric == null) {
+            numeric = parseNumeric(original);
+        }
+        if (numeric == null) {
+            return null;
+        }
+        if (numeric > 20000 && numeric < 60000) {
+            try {
+                return DateUtil.getLocalDateTime(numeric).toLocalDate();
             } catch (RuntimeException ignored) {
             }
         }
