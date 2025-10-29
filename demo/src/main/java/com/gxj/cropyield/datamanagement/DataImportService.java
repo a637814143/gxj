@@ -1280,6 +1280,16 @@ public class DataImportService {
             } catch (RuntimeException ignored) {
             }
         }
+        String digitsOnly = normalized.replaceAll("\\D", "");
+        if (digitsOnly.length() >= 8) {
+            try {
+                int year = Integer.parseInt(digitsOnly.substring(0, 4));
+                int month = Integer.parseInt(digitsOnly.substring(4, 6));
+                int day = Integer.parseInt(digitsOnly.substring(6, 8));
+                return LocalDate.of(year, month, day);
+            } catch (RuntimeException ignored) {
+            }
+        }
         return null;
     }
 
