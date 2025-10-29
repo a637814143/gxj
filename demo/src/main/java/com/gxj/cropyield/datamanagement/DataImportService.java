@@ -94,6 +94,7 @@ public class DataImportService {
             DateTimeFormatter.ofPattern("yyyy年M月d日")
     };
     private static final Pattern WEATHER_DATE_TOKEN = Pattern.compile("\\d{4}(?:[-/.年]\\d{1,2})(?:[-/.月]\\d{1,2})");
+    private static final Pattern WEATHER_DATE_COMPONENTS = Pattern.compile("(\\d{4})\\D*(\\d{1,2})\\D*(\\d{1,2})");
     private static final Map<String, List<String>> HEADER_SYNONYMS = createHeaderSynonyms();
     private static final JaroWinklerSimilarity SIMILARITY = new JaroWinklerSimilarity();
     private static final Pattern NUMBER_PATTERN = Pattern.compile("[-+]?\\d+(\\.\\d+)?");
@@ -1242,12 +1243,13 @@ public class DataImportService {
         if (trimmed == null) {
             return null;
         }
-        Matcher matcher = WEATHER_DATE_TOKEN.matcher(trimmed);
+        String normalized = Normalizer.normalize(trimmed, Normalizer.Form.NFKC);
+        Matcher matcher = WEATHER_DATE_TOKEN.matcher(normalized);
         String candidate;
         if (matcher.find()) {
             candidate = matcher.group();
         } else {
-            candidate = trimmed.split("\\s+", 2)[0];
+            candidate = normalized.split("\\s+", 2)[0];
         }
         candidate = candidate.replace("年", "-")
                 .replace("月", "-")
@@ -1261,10 +1263,23 @@ public class DataImportService {
         if (candidate.endsWith("-")) {
             candidate = candidate.substring(0, candidate.length() - 1);
         }
-        if (candidate.isEmpty()) {
-            return null;
+        if (!candidate.isEmpty()) {
+            LocalDate parsed = parseDate(candidate);
+            if (parsed != null) {
+                return parsed;
+            }
         }
-        return parseDate(candidate);
+        Matcher components = WEATHER_DATE_COMPONENTS.matcher(normalized);
+        if (components.find()) {
+            try {
+                int year = Integer.parseInt(components.group(1));
+                int month = Integer.parseInt(components.group(2));
+                int day = Integer.parseInt(components.group(3));
+                return LocalDate.of(year, month, day);
+            } catch (RuntimeException ignored) {
+            }
+        }
+        return null;
     }
 
     private Double parseTemperature(String value) {
