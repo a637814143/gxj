@@ -135,6 +135,26 @@ CREATE TABLE IF NOT EXISTS dataset_price_record (
     CONSTRAINT fk_price_region FOREIGN KEY (region_id) REFERENCES base_region (id) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '作物价格时间序列';
 
+CREATE TABLE IF NOT EXISTS dataset_weather_record (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    dataset_file_id BIGINT UNSIGNED,
+    region_id BIGINT UNSIGNED NOT NULL,
+    record_date DATE NOT NULL,
+    max_temperature DOUBLE,
+    min_temperature DOUBLE,
+    weather_text VARCHAR(128),
+    wind VARCHAR(128),
+    sunshine_hours DOUBLE,
+    data_source VARCHAR(256),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_weather_region_date (region_id, record_date),
+    KEY idx_weather_dataset_file (dataset_file_id),
+    KEY idx_weather_region (region_id),
+    CONSTRAINT fk_weather_dataset_file FOREIGN KEY (dataset_file_id) REFERENCES dataset_file (id) ON DELETE CASCADE,
+    CONSTRAINT fk_weather_region FOREIGN KEY (region_id) REFERENCES base_region (id) ON DELETE CASCADE
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '地区逐日气象记录';
+
 CREATE TABLE IF NOT EXISTS forecast_model (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(128) NOT NULL,
