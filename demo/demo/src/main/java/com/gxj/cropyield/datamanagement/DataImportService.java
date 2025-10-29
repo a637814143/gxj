@@ -95,6 +95,7 @@ public class DataImportService {
     };
     private static final Pattern WEATHER_DATE_TOKEN = Pattern.compile("\\d{4}(?:[-/.年]\\d{1,2})(?:[-/.月]\\d{1,2})");
     private static final Pattern WEATHER_DATE_COMPONENTS = Pattern.compile("(\\d{4})\\D*(\\d{1,2})\\D*(\\d{1,2})");
+    private static final Pattern INVISIBLE_CHARACTERS = Pattern.compile("[\\p{Cf}]");
     private static final Map<String, List<String>> HEADER_SYNONYMS = createHeaderSynonyms();
     private static final JaroWinklerSimilarity SIMILARITY = new JaroWinklerSimilarity();
     private static final Pattern NUMBER_PATTERN = Pattern.compile("[-+]?\\d+(\\.\\d+)?");
@@ -1244,6 +1245,7 @@ public class DataImportService {
             return null;
         }
         String normalized = Normalizer.normalize(trimmed, Normalizer.Form.NFKC);
+        normalized = INVISIBLE_CHARACTERS.matcher(normalized).replaceAll("");
         Matcher matcher = WEATHER_DATE_TOKEN.matcher(normalized);
         String candidate;
         if (matcher.find()) {
@@ -1321,7 +1323,7 @@ public class DataImportService {
         if (value == null) {
             return null;
         }
-        String cleaned = value.replace("\uFEFF", "");
+        String cleaned = INVISIBLE_CHARACTERS.matcher(value).replaceAll("");
         String trimmed = cleaned.trim();
         return trimmed.isEmpty() ? null : trimmed;
     }
@@ -1393,7 +1395,7 @@ public class DataImportService {
         if (header == null) {
             return null;
         }
-        String cleaned = header.replace("\uFEFF", "");
+        String cleaned = INVISIBLE_CHARACTERS.matcher(header).replaceAll("");
         return cleaned.trim();
     }
 
