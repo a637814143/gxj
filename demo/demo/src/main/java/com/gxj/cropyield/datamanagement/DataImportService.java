@@ -15,6 +15,7 @@ import com.gxj.cropyield.modules.base.entity.Region;
 import com.gxj.cropyield.modules.base.repository.CropRepository;
 import com.gxj.cropyield.modules.base.repository.RegionRepository;
 import com.gxj.cropyield.modules.dataset.dto.YieldRecordResponse;
+import com.gxj.cropyield.modules.dataset.dto.WeatherRecordImportPreview;
 import com.gxj.cropyield.modules.dataset.entity.DatasetFile;
 import com.gxj.cropyield.modules.dataset.entity.DatasetFile.DatasetType;
 import com.gxj.cropyield.modules.dataset.repository.DatasetFileRepository;
@@ -70,6 +71,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 /**
  * 数据导入模块的业务接口，定义数据导入相关的核心业务操作。
@@ -92,6 +95,7 @@ public class DataImportService {
     };
     private static final Map<String, List<String>> HEADER_SYNONYMS = createHeaderSynonyms();
     private static final JaroWinklerSimilarity SIMILARITY = new JaroWinklerSimilarity();
+    private static final Pattern NUMBER_PATTERN = Pattern.compile("[-+]?\\d+(\\.\\d+)?");
 
     private final CropRepository cropRepository;
     private final RegionRepository regionRepository;
@@ -181,7 +185,7 @@ public class DataImportService {
         DataImportJob job = jobRepository.findByTaskId(taskId)
                 .orElseThrow(() -> new IllegalArgumentException("未找到对应的导入任务"));
         List<String> warnings = readPayload(job.getWarningsPayload());
-        List<YieldRecordResponse> preview = readPreview(job.getPreviewPayload());
+        List<?> preview = readPreview(job.getPreviewPayload(), job.getDatasetType());
         List<DataImportErrorView> errors = job.getErrors().stream()
                 .sorted(Comparator.comparing(DataImportJobError::getRowNumber, Comparator.nullsLast(Integer::compareTo)))
                 .limit(20)
@@ -215,62 +219,28 @@ public class DataImportService {
             job.setMessage("正在进行数据校验与清洗");
             jobRepository.save(job);
 
-            List<String> warnings = new ArrayList<>();
-            List<DataImportJobError> errorEntities = new ArrayList<>();
-            List<ValidRecord> validRecords = new ArrayList<>();
-            List<YieldRecordResponse> preview = new ArrayList<>();
-
-            Map<String, Crop> cropCache = new HashMap<>();
-            Map<String, Region> regionCache = new HashMap<>();
-            AtomicInteger failedCounter = new AtomicInteger();
-
-            for (ParsedRecord record : parsedRecords) {
-                Optional<ValidRecord> validated = validateRecord(record, warnings, errorEntities, cropCache, regionCache, failedCounter);
-                if (validated.isPresent()) {
-                    ValidRecord valid = validated.get();
-                    validRecords.add(valid);
-                    if (preview.size() < PREVIEW_LIMIT) {
-                        preview.add(toPreview(valid));
-                    }
-                }
-            }
-
-            DatasetFile datasetFile = null;
-            int inserted = 0;
-            int updated = 0;
-            if (!validRecords.isEmpty()) {
-                datasetFile = ensureDatasetFile(job);
-                if (datasetFile != null) {
-                    job.setDatasetFileId(datasetFile.getId());
-                }
-                job.setMessage("正在批量写入数据库");
-                jobRepository.save(job);
-                UpsertResult result = upsertRecords(validRecords, datasetFile);
-                inserted = result.inserted();
-                updated = result.updated();
-            }
-
-            int processed = inserted + updated;
-            int failedRows = failedCounter.get();
-            int skippedRows = Math.max(job.getTotalRows() - processed - failedRows, 0);
+            ImportResult result = switch (job.getDatasetType()) {
+                case WEATHER -> processWeatherRecords(job, parsedRecords);
+                default -> processYieldRecords(job, parsedRecords);
+            };
 
             job.clearErrors();
-            errorEntities.stream().limit(MAX_ERROR_STORE).forEach(job::addError);
-            job.setProcessedRows(processed);
-            job.setInsertedRows(inserted);
-            job.setUpdatedRows(updated);
-            job.setFailedRows(failedRows);
-            job.setSkippedRows(skippedRows);
-            job.setWarningCount(warnings.size());
-            job.setWarningsPayload(writePayload(limitList(warnings, MAX_WARNING_STORE)));
-            job.setPreviewPayload(writePreview(preview));
+            result.errors().stream().limit(MAX_ERROR_STORE).forEach(job::addError);
+            job.setProcessedRows(result.inserted() + result.updated());
+            job.setInsertedRows(result.inserted());
+            job.setUpdatedRows(result.updated());
+            job.setFailedRows(result.failed());
+            job.setSkippedRows(result.skipped());
+            job.setWarningCount(result.warnings().size());
+            job.setWarningsPayload(writePayload(limitList(result.warnings(), MAX_WARNING_STORE)));
+            job.setPreviewPayload(writePreview(result.preview()));
             job.setFinishedAt(LocalDateTime.now());
             job.setStatus(DataImportJobStatus.SUCCEEDED);
             job.setMessage(buildCompletionMessage(job));
             jobRepository.save(job);
 
-            if (datasetFile != null) {
-                updateDatasetFileMetadata(datasetFile, job);
+            if (result.datasetFile() != null) {
+                updateDatasetFileMetadata(result.datasetFile(), job);
             }
         } catch (Exception exception) {
             job.setStatus(DataImportJobStatus.FAILED);
@@ -307,13 +277,98 @@ public class DataImportService {
         datasetFileRepository.save(datasetFile);
     }
 
-    private UpsertResult upsertRecords(List<ValidRecord> records, DatasetFile datasetFile) {
+    private ImportResult processYieldRecords(DataImportJob job, List<ParsedRecord> parsedRecords) {
+        List<String> warnings = new ArrayList<>();
+        List<DataImportJobError> errorEntities = new ArrayList<>();
+        List<ValidRecord> validRecords = new ArrayList<>();
+        List<YieldRecordResponse> preview = new ArrayList<>();
+
+        Map<String, Crop> cropCache = new HashMap<>();
+        Map<String, Region> regionCache = new HashMap<>();
+        AtomicInteger failedCounter = new AtomicInteger();
+
+        for (ParsedRecord record : parsedRecords) {
+            Optional<ValidRecord> validated = validateYieldRecord(record, warnings, errorEntities, cropCache, regionCache, failedCounter);
+            if (validated.isPresent()) {
+                ValidRecord valid = validated.get();
+                validRecords.add(valid);
+                if (preview.size() < PREVIEW_LIMIT) {
+                    preview.add(toYieldPreview(valid));
+                }
+            }
+        }
+
+        DatasetFile datasetFile = null;
+        int inserted = 0;
+        int updated = 0;
+        if (!validRecords.isEmpty()) {
+            datasetFile = ensureDatasetFile(job);
+            if (datasetFile != null) {
+                job.setDatasetFileId(datasetFile.getId());
+            }
+            job.setMessage("正在批量写入数据库");
+            jobRepository.save(job);
+            UpsertResult result = upsertYieldRecords(validRecords, datasetFile);
+            inserted = result.inserted();
+            updated = result.updated();
+        }
+
+        int processed = inserted + updated;
+        int failedRows = failedCounter.get();
+        int skippedRows = Math.max(job.getTotalRows() - processed - failedRows, 0);
+
+        return new ImportResult(inserted, updated, failedRows, skippedRows, warnings, errorEntities, new ArrayList<>(preview), datasetFile);
+    }
+
+    private ImportResult processWeatherRecords(DataImportJob job, List<ParsedRecord> parsedRecords) {
+        List<String> warnings = new ArrayList<>();
+        List<DataImportJobError> errorEntities = new ArrayList<>();
+        List<ValidWeatherRecord> validRecords = new ArrayList<>();
+        List<WeatherRecordImportPreview> preview = new ArrayList<>();
+
+        Map<String, Region> regionCache = new HashMap<>();
+        AtomicInteger failedCounter = new AtomicInteger();
+
+        for (ParsedRecord record : parsedRecords) {
+            Optional<ValidWeatherRecord> validated = validateWeatherRecord(record, warnings, errorEntities, regionCache, failedCounter);
+            if (validated.isPresent()) {
+                ValidWeatherRecord valid = validated.get();
+                validRecords.add(valid);
+                if (preview.size() < PREVIEW_LIMIT) {
+                    preview.add(toWeatherPreview(valid));
+                }
+            }
+        }
+
+        DatasetFile datasetFile = null;
+        int inserted = 0;
+        int updated = 0;
+        if (!validRecords.isEmpty()) {
+            datasetFile = ensureDatasetFile(job);
+            if (datasetFile != null) {
+                job.setDatasetFileId(datasetFile.getId());
+            }
+            job.setMessage("正在批量写入数据库");
+            jobRepository.save(job);
+            UpsertResult result = upsertWeatherRecords(validRecords, datasetFile);
+            inserted = result.inserted();
+            updated = result.updated();
+        }
+
+        int processed = inserted + updated;
+        int failedRows = failedCounter.get();
+        int skippedRows = Math.max(job.getTotalRows() - processed - failedRows, 0);
+
+        return new ImportResult(inserted, updated, failedRows, skippedRows, warnings, errorEntities, new ArrayList<>(preview), datasetFile);
+    }
+
+    private UpsertResult upsertYieldRecords(List<ValidRecord> records, DatasetFile datasetFile) {
         int batchSize = 500;
         int inserted = 0;
         int updated = 0;
         for (int i = 0; i < records.size(); i += batchSize) {
             List<ValidRecord> batch = records.subList(i, Math.min(i + batchSize, records.size()));
-            Set<RowKey> existing = fetchExistingKeys(batch);
+            Set<YieldRowKey> existing = fetchExistingYieldKeys(batch);
             String sql = """
                     INSERT INTO dataset_yield_record (dataset_file_id, crop_id, region_id, year, sown_area, production, yield_per_hectare, average_price, data_source, collected_at, created_at, updated_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
@@ -349,7 +404,7 @@ public class DataImportService {
             }
 
             for (ValidRecord record : batch) {
-                RowKey key = new RowKey(record.crop().getId(), record.region().getId(), record.year());
+                YieldRowKey key = new YieldRowKey(record.crop().getId(), record.region().getId(), record.year());
                 if (existing.contains(key)) {
                     updated++;
                 } else {
@@ -360,7 +415,59 @@ public class DataImportService {
         return new UpsertResult(inserted, updated);
     }
 
-    private Set<RowKey> fetchExistingKeys(List<ValidRecord> batch) {
+    private UpsertResult upsertWeatherRecords(List<ValidWeatherRecord> records, DatasetFile datasetFile) {
+        int batchSize = 500;
+        int inserted = 0;
+        int updated = 0;
+        for (int i = 0; i < records.size(); i += batchSize) {
+            List<ValidWeatherRecord> batch = records.subList(i, Math.min(i + batchSize, records.size()));
+            Set<WeatherRowKey> existing = fetchExistingWeatherKeys(batch);
+            String sql = """
+                    INSERT INTO dataset_weather_record (dataset_file_id, region_id, record_date, max_temperature, min_temperature, weather_text, wind, sunshine_hours, data_source, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+                    ON DUPLICATE KEY UPDATE
+                        dataset_file_id = VALUES(dataset_file_id),
+                        max_temperature = VALUES(max_temperature),
+                        min_temperature = VALUES(min_temperature),
+                        weather_text = VALUES(weather_text),
+                        wind = VALUES(wind),
+                        sunshine_hours = VALUES(sunshine_hours),
+                        data_source = VALUES(data_source),
+                        updated_at = NOW()
+                    """;
+            try {
+                jdbcTemplate.batchUpdate(sql, batch, batch.size(), (preparedStatement, record) -> {
+                    if (datasetFile != null) {
+                        preparedStatement.setLong(1, datasetFile.getId());
+                    } else {
+                        preparedStatement.setObject(1, null);
+                    }
+                    preparedStatement.setLong(2, record.region().getId());
+                    preparedStatement.setObject(3, java.sql.Date.valueOf(record.recordDate()));
+                    setNullableDouble(preparedStatement, 4, record.maxTemperature());
+                    setNullableDouble(preparedStatement, 5, record.minTemperature());
+                    preparedStatement.setString(6, record.weatherText());
+                    preparedStatement.setString(7, record.wind());
+                    setNullableDouble(preparedStatement, 8, record.sunshineHours());
+                    preparedStatement.setString(9, record.dataSource());
+                });
+            } catch (DataAccessException exception) {
+                throw new IllegalStateException("写入数据库失败", exception);
+            }
+
+            for (ValidWeatherRecord record : batch) {
+                WeatherRowKey key = new WeatherRowKey(record.region().getId(), record.recordDate());
+                if (existing.contains(key)) {
+                    updated++;
+                } else {
+                    inserted++;
+                }
+            }
+        }
+        return new UpsertResult(inserted, updated);
+    }
+
+    private Set<YieldRowKey> fetchExistingYieldKeys(List<ValidRecord> batch) {
         if (batch.isEmpty()) {
             return Collections.emptySet();
         }
@@ -375,7 +482,7 @@ public class DataImportService {
             params[index++] = record.region().getId();
             params[index++] = record.year();
         }
-        List<RowKey> keys = jdbcTemplate.query(sql, params, (resultSet, rowNum) -> new RowKey(
+        List<YieldRowKey> keys = jdbcTemplate.query(sql, params, (resultSet, rowNum) -> new YieldRowKey(
                 resultSet.getLong("crop_id"),
                 resultSet.getLong("region_id"),
                 resultSet.getInt("year")
@@ -383,12 +490,33 @@ public class DataImportService {
         return new HashSet<>(keys);
     }
 
-    private Optional<ValidRecord> validateRecord(ParsedRecord record,
-                                                 List<String> warnings,
-                                                 List<DataImportJobError> errors,
-                                                 Map<String, Crop> cropCache,
-                                                 Map<String, Region> regionCache,
-                                                 AtomicInteger failedCounter) {
+    private Set<WeatherRowKey> fetchExistingWeatherKeys(List<ValidWeatherRecord> batch) {
+        if (batch.isEmpty()) {
+            return Collections.emptySet();
+        }
+        String placeholders = batch.stream()
+                .map(record -> "(?, ?)")
+                .collect(Collectors.joining(","));
+        String sql = "SELECT region_id, record_date FROM dataset_weather_record WHERE (region_id, record_date) IN (" + placeholders + ")";
+        Object[] params = new Object[batch.size() * 2];
+        int index = 0;
+        for (ValidWeatherRecord record : batch) {
+            params[index++] = record.region().getId();
+            params[index++] = java.sql.Date.valueOf(record.recordDate());
+        }
+        List<WeatherRowKey> keys = jdbcTemplate.query(sql, params, (resultSet, rowNum) -> new WeatherRowKey(
+                resultSet.getLong("region_id"),
+                resultSet.getDate("record_date").toLocalDate()
+        ));
+        return new HashSet<>(keys);
+    }
+
+    private Optional<ValidRecord> validateYieldRecord(ParsedRecord record,
+                                                      List<String> warnings,
+                                                      List<DataImportJobError> errors,
+                                                      Map<String, Crop> cropCache,
+                                                      Map<String, Region> regionCache,
+                                                      AtomicInteger failedCounter) {
         Map<String, String> values = record.values();
         Map<String, Function<Double, Double>> converters = record.converters();
 
@@ -470,6 +598,68 @@ public class DataImportService {
         return Optional.of(validRecord);
     }
 
+    private Optional<ValidWeatherRecord> validateWeatherRecord(ParsedRecord record,
+                                                               List<String> warnings,
+                                                               List<DataImportJobError> errors,
+                                                               Map<String, Region> regionCache,
+                                                               AtomicInteger failedCounter) {
+        Map<String, String> values = record.values();
+
+        String regionName = trimToNull(values.get("regionName"));
+        if (regionName == null) {
+            recordError(errors, record.rowNumber(), "REQUIRED", "缺少地区信息", null);
+            failedCounter.incrementAndGet();
+            return Optional.empty();
+        }
+
+        LocalDate recordDate = parseWeatherDate(values.get("recordDate"));
+        if (recordDate == null) {
+            recordError(errors, record.rowNumber(), "DATE", "日期不是有效格式", values.get("recordDate"));
+            failedCounter.incrementAndGet();
+            return Optional.empty();
+        }
+
+        Double maxTemperature = parseTemperature(values.get("maxTemperature"));
+        Double minTemperature = parseTemperature(values.get("minTemperature"));
+
+        if (maxTemperature == null && minTemperature == null) {
+            recordError(errors, record.rowNumber(), "TEMPERATURE", "最高温或最低温缺失", values.get("maxTemperature"));
+            failedCounter.incrementAndGet();
+            return Optional.empty();
+        }
+
+        if (maxTemperature != null && minTemperature != null && maxTemperature < minTemperature) {
+            warnings.add(String.format(Locale.CHINA, "第%d行：最高温%.2f低于最低温%.2f，已自动互换", record.rowNumber(), maxTemperature, minTemperature));
+            double temp = maxTemperature;
+            maxTemperature = minTemperature;
+            minTemperature = temp;
+        }
+
+        Double sunshineHours = parseSunshineHours(values.get("sunshineHours"));
+        if (sunshineHours != null && sunshineHours < 0) {
+            warnings.add("第" + record.rowNumber() + "行：日照时长出现负值，已置空");
+            sunshineHours = null;
+        }
+
+        Region region = resolveRegion(regionName, null, null, null, regionCache, warnings, record.rowNumber());
+        String weatherText = trimToNull(values.get("weatherText"));
+        String wind = trimToNull(values.get("wind"));
+        String dataSource = trimToNull(values.get("dataSource"));
+
+        ValidWeatherRecord validRecord = new ValidWeatherRecord(
+                record.rowNumber(),
+                region,
+                recordDate,
+                round(maxTemperature),
+                round(minTemperature),
+                weatherText,
+                wind,
+                round(sunshineHours),
+                dataSource
+        );
+        return Optional.of(validRecord);
+    }
+
     private Crop resolveCrop(String cropName,
                              String cropCategory,
                              String cropDescription,
@@ -528,7 +718,7 @@ public class DataImportService {
                 .orElse(null);
     }
 
-    private YieldRecordResponse toPreview(ValidRecord record) {
+    private YieldRecordResponse toYieldPreview(ValidRecord record) {
         Double revenue = null;
         if (record.production() != null && record.averagePrice() != null) {
             revenue = record.production() * record.averagePrice() * 0.1;
@@ -547,6 +737,19 @@ public class DataImportService {
                 revenue,
                 record.dataSource(),
                 record.collectedAt()
+        );
+    }
+
+    private WeatherRecordImportPreview toWeatherPreview(ValidWeatherRecord record) {
+        return new WeatherRecordImportPreview(
+                record.region().getName(),
+                record.recordDate(),
+                record.maxTemperature(),
+                record.minTemperature(),
+                record.weatherText(),
+                record.wind(),
+                record.sunshineHours(),
+                record.dataSource()
         );
     }
 
@@ -876,12 +1079,15 @@ public class DataImportService {
         }
     }
 
-    private List<YieldRecordResponse> readPreview(String payload) {
+    private List<?> readPreview(String payload, DatasetType datasetType) {
         if (payload == null || payload.isBlank()) {
             return List.of();
         }
         try {
-            return objectMapper.readValue(payload, objectMapper.getTypeFactory().constructCollectionType(List.class, YieldRecordResponse.class));
+            return switch (datasetType) {
+                case WEATHER -> objectMapper.readValue(payload, objectMapper.getTypeFactory().constructCollectionType(List.class, WeatherRecordImportPreview.class));
+                default -> objectMapper.readValue(payload, objectMapper.getTypeFactory().constructCollectionType(List.class, YieldRecordResponse.class));
+            };
         } catch (JsonProcessingException exception) {
             return List.of();
         }
@@ -895,7 +1101,7 @@ public class DataImportService {
         }
     }
 
-    private String writePreview(List<YieldRecordResponse> preview) {
+    private String writePreview(List<?> preview) {
         try {
             return objectMapper.writeValueAsString(preview);
         } catch (JsonProcessingException exception) {
@@ -1030,6 +1236,47 @@ public class DataImportService {
         return null;
     }
 
+    private LocalDate parseWeatherDate(String value) {
+        String trimmed = trimToNull(value);
+        if (trimmed == null) {
+            return null;
+        }
+        int spaceIndex = trimmed.indexOf(' ');
+        if (spaceIndex > 0) {
+            trimmed = trimmed.substring(0, spaceIndex);
+        }
+        trimmed = trimmed.replace("年", "-")
+                .replace("月", "-")
+                .replace("日", "")
+                .replace('/', '-')
+                .replace('.', '-');
+        return parseDate(trimmed);
+    }
+
+    private Double parseTemperature(String value) {
+        return parseWeatherNumeric(value);
+    }
+
+    private Double parseSunshineHours(String value) {
+        return parseWeatherNumeric(value);
+    }
+
+    private Double parseWeatherNumeric(String value) {
+        String trimmed = trimToNull(value);
+        if (trimmed == null) {
+            return null;
+        }
+        String normalized = trimmed.replace('，', ',');
+        Matcher matcher = NUMBER_PATTERN.matcher(normalized);
+        if (matcher.find()) {
+            try {
+                return Double.parseDouble(matcher.group());
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return null;
+    }
+
     private Double round(Double value) {
         if (value == null) {
             return null;
@@ -1137,6 +1384,12 @@ public class DataImportService {
         mapping.put("averagePrice", List.of("averageprice", "平均价格", "均价", "价格"));
         mapping.put("dataSource", List.of("datasource", "数据来源", "来源", "采集来源"));
         mapping.put("collectedAt", List.of("collectedat", "采集日期", "收集日期", "统计日期"));
+        mapping.put("recordDate", List.of("recorddate", "date", "日期", "观测日期", "记录日期"));
+        mapping.put("maxTemperature", List.of("maxtemperature", "maxtemp", "最高温", "最高温度", "最高气温"));
+        mapping.put("minTemperature", List.of("mintemperature", "mintemp", "最低温", "最低温度", "最低气温"));
+        mapping.put("weatherText", List.of("weather", "weathertext", "天气", "天气状况", "天气描述"));
+        mapping.put("wind", List.of("wind", "风力风向", "风力", "风向", "风速"));
+        mapping.put("sunshineHours", List.of("sunshine", "sunshinehours", "日照时长", "日照时间", "日照小时", "光照时数"));
         return mapping.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().stream()
                         .map(value -> Normalizer.normalize(value, Normalizer.Form.NFKC)
@@ -1162,7 +1415,10 @@ public class DataImportService {
     private record HeaderMapping(Map<Integer, ColumnMatch> matches, Map<String, Function<Double, Double>> converterMap) {
     }
 
-    private record RowKey(Long cropId, Long regionId, Integer year) {
+    private record YieldRowKey(Long cropId, Long regionId, Integer year) {
+    }
+
+    private record WeatherRowKey(Long regionId, LocalDate recordDate) {
     }
 
     private record ValidRecord(int rowNumber,
@@ -1177,7 +1433,28 @@ public class DataImportService {
                                LocalDate collectedAt) {
     }
 
+    private record ValidWeatherRecord(int rowNumber,
+                                      Region region,
+                                      LocalDate recordDate,
+                                      Double maxTemperature,
+                                      Double minTemperature,
+                                      String weatherText,
+                                      String wind,
+                                      Double sunshineHours,
+                                      String dataSource) {
+    }
+
     private record UpsertResult(int inserted, int updated) {
+    }
+
+    private record ImportResult(int inserted,
+                                int updated,
+                                int failed,
+                                int skipped,
+                                List<String> warnings,
+                                List<DataImportJobError> errors,
+                                List<?> preview,
+                                DatasetFile datasetFile) {
     }
 
     private static final class BigDecimalUtil {

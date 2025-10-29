@@ -113,7 +113,8 @@ ON DUPLICATE KEY UPDATE
 INSERT INTO dataset_file (id, name, type, storage_path, description)
 VALUES
     (1, '云南小麦历年产量', 'YIELD', '/data/demo/yield-yunnan-wheat.csv', '报告中心示例数据：2019-2023 年云南小麦产量'),
-    (2, '云南小麦月度价格', 'PRICE', '/data/demo/price-yunnan-wheat.csv', '报告中心示例数据：近两年市场价格')
+    (2, '云南小麦月度价格', 'PRICE', '/data/demo/price-yunnan-wheat.csv', '报告中心示例数据：近两年市场价格'),
+    (3, '昆明逐日气象监测', 'WEATHER', '/data/demo/weather-kunming.csv', '示例气象数据：昆明地区逐日天气统计')
 ON DUPLICATE KEY UPDATE
     storage_path = VALUES(storage_path),
     description = VALUES(description);
@@ -143,6 +144,21 @@ VALUES
     (6, 1, 2, 2, '2024-04-01', 2525)
 ON DUPLICATE KEY UPDATE
     price = VALUES(price);
+
+INSERT INTO dataset_weather_record (id, region_id, dataset_file_id, record_date, max_temperature, min_temperature, weather_text, wind, sunshine_hours, data_source)
+VALUES
+    (1, 2, 3, '2009-01-01', 10.4, 5.6, '阴', '南风3级', 0.1, '示例数据'),
+    (2, 2, 3, '2009-01-02', 12.1, 6.0, '多云', '北风2级', 0.0, '示例数据'),
+    (3, 2, 3, '2009-01-03', 11.5, 4.8, '小雨', '东北风3级', 0.5, '示例数据'),
+    (4, 2, 3, '2009-01-04', 9.6, 3.9, '阴', '东风2级', 0.2, '示例数据'),
+    (5, 2, 3, '2009-01-05', 8.8, 2.5, '多云', '西南风2级', 1.4, '示例数据')
+ON DUPLICATE KEY UPDATE
+    max_temperature = VALUES(max_temperature),
+    min_temperature = VALUES(min_temperature),
+    weather_text = VALUES(weather_text),
+    wind = VALUES(wind),
+    sunshine_hours = VALUES(sunshine_hours),
+    data_source = VALUES(data_source);
 
 -- 初始化示例在线咨询数据
 INSERT INTO consultation (id, subject, crop_type, description, status, priority, department_code, created_by, assigned_to, last_message_at, created_at, updated_at)
