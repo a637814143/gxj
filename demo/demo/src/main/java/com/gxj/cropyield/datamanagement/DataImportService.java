@@ -93,6 +93,7 @@ public class DataImportService {
             DateTimeFormatter.ofPattern("yyyy.MM.dd"),
             DateTimeFormatter.ofPattern("yyyy年M月d日")
     };
+    private static final Pattern WEATHER_DATE_TOKEN = Pattern.compile("\\d{4}(?:[-/.年]\\d{1,2})(?:[-/.月]\\d{1,2})");
     private static final Map<String, List<String>> HEADER_SYNONYMS = createHeaderSynonyms();
     private static final JaroWinklerSimilarity SIMILARITY = new JaroWinklerSimilarity();
     private static final Pattern NUMBER_PATTERN = Pattern.compile("[-+]?\\d+(\\.\\d+)?");
@@ -614,7 +615,7 @@ public class DataImportService {
 
         LocalDate recordDate = parseWeatherDate(values.get("recordDate"));
         if (recordDate == null) {
-            recordError(errors, record.rowNumber(), "DATE", "日期不是有效格式", values.get("recordDate"));
+            recordError(errors, record.rowNumber(), "DATE", "日期不是有效格式（示例：2009-01-01）", values.get("recordDate"));
             failedCounter.incrementAndGet();
             return Optional.empty();
         }
@@ -1241,16 +1242,29 @@ public class DataImportService {
         if (trimmed == null) {
             return null;
         }
-        int spaceIndex = trimmed.indexOf(' ');
-        if (spaceIndex > 0) {
-            trimmed = trimmed.substring(0, spaceIndex);
+        Matcher matcher = WEATHER_DATE_TOKEN.matcher(trimmed);
+        String candidate;
+        if (matcher.find()) {
+            candidate = matcher.group();
+        } else {
+            candidate = trimmed.split("\\s+", 2)[0];
         }
-        trimmed = trimmed.replace("年", "-")
+        candidate = candidate.replace("年", "-")
                 .replace("月", "-")
                 .replace("日", "")
                 .replace('/', '-')
                 .replace('.', '-');
-        return parseDate(trimmed);
+        candidate = candidate.replaceAll("-+", "-").trim();
+        if (candidate.startsWith("-")) {
+            candidate = candidate.substring(1);
+        }
+        if (candidate.endsWith("-")) {
+            candidate = candidate.substring(0, candidate.length() - 1);
+        }
+        if (candidate.isEmpty()) {
+            return null;
+        }
+        return parseDate(candidate);
     }
 
     private Double parseTemperature(String value) {
