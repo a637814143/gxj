@@ -940,7 +940,14 @@ public class DataImportService {
         String normalized = normalizeKey(header);
         for (Map.Entry<String, List<String>> entry : HEADER_SYNONYMS.entrySet()) {
             for (String alias : entry.getValue()) {
-                if (normalized.equals(alias) || normalized.contains(alias) || alias.contains(normalized)) {
+                if (normalized.equals(alias)) {
+                    return new ColumnMatch(entry.getKey(), resolveConverter(header, entry.getKey()));
+                }
+            }
+        }
+        for (Map.Entry<String, List<String>> entry : HEADER_SYNONYMS.entrySet()) {
+            for (String alias : entry.getValue()) {
+                if (normalized.contains(alias) || alias.contains(normalized)) {
                     return new ColumnMatch(entry.getKey(), resolveConverter(header, entry.getKey()));
                 }
             }
