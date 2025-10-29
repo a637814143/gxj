@@ -94,7 +94,9 @@ public class DataImportService {
             DateTimeFormatter.ofPattern("yyyy年M月d日")
     };
     private static final Pattern WEATHER_DATE_TOKEN = Pattern.compile("\\d{4}(?:[-/.年]\\d{1,2})(?:[-/.月]\\d{1,2})");
-    private static final Pattern WEATHER_DATE_COMPONENTS = Pattern.compile("(\\d{4})\\D*(\\d{1,2})\\D*(\\d{1,2})");
+    private static final Pattern WEATHER_DATE_COMPONENTS = Pattern.compile("(\\d{1,4})\\D*(\\d{1,2})\\D*(\\d{1,2})");
+    private static final Pattern WEATHER_WEEKDAY_PATTERN = Pattern.compile("(?i)(?:星期|周)[\\p{IsHan}\\d]*|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*");
+    private static final Pattern INTEGER_PATTERN = Pattern.compile("\\d+");
     private static final Pattern INVISIBLE_CHARACTERS = Pattern.compile("[\\p{Cf}]");
     private static final Map<String, List<String>> HEADER_SYNONYMS = createHeaderSynonyms();
     private static final JaroWinklerSimilarity SIMILARITY = new JaroWinklerSimilarity();
@@ -1248,12 +1250,16 @@ public class DataImportService {
             return null;
         }
         String normalized = normalizeUnicode(trimmed);
-        Matcher matcher = WEATHER_DATE_TOKEN.matcher(normalized);
+        String sanitized = WEATHER_WEEKDAY_PATTERN.matcher(normalized).replaceAll(" ");
+        sanitized = sanitized.replaceAll("[()（）\\[\\]]", " ");
+
+        Matcher matcher = WEATHER_DATE_TOKEN.matcher(sanitized);
         String candidate;
         if (matcher.find()) {
             candidate = matcher.group();
         } else {
-            candidate = normalized.split("\\s+", 2)[0];
+            String[] parts = sanitized.split("\\s+", 2);
+            candidate = parts.length > 0 ? parts[0] : sanitized;
         }
         candidate = candidate.replace("年", "-")
                 .replace("月", "-")
@@ -1272,32 +1278,76 @@ public class DataImportService {
             if (parsed != null) {
                 return parsed;
             }
-        }
-        Matcher components = WEATHER_DATE_COMPONENTS.matcher(normalized);
-        if (components.find()) {
             try {
-                int year = Integer.parseInt(components.group(1));
-                int month = Integer.parseInt(components.group(2));
-                int day = Integer.parseInt(components.group(3));
-                return LocalDate.of(year, month, day);
-            } catch (RuntimeException ignored) {
+                return LocalDate.parse(candidate);
+            } catch (DateTimeParseException ignored) {
             }
         }
-        String digitsOnly = normalized.replaceAll("\\D", "");
+
+        Matcher components = WEATHER_DATE_COMPONENTS.matcher(sanitized);
+        if (components.find()) {
+            LocalDate componentDate = buildDateFromParts(components.group(1), components.group(2), components.group(3));
+            if (componentDate != null) {
+                return componentDate;
+            }
+        }
+
+        String digitsOnly = sanitized.replaceAll("\\D", "");
         if (digitsOnly.length() >= 8) {
             try {
-                int year = Integer.parseInt(digitsOnly.substring(0, 4));
-                int month = Integer.parseInt(digitsOnly.substring(4, 6));
-                int day = Integer.parseInt(digitsOnly.substring(6, 8));
-                return LocalDate.of(year, month, day);
+                LocalDate digitsDate = buildDateFromParts(
+                        digitsOnly.substring(0, 4),
+                        digitsOnly.substring(4, 6),
+                        digitsOnly.substring(6, 8)
+                );
+                if (digitsDate != null) {
+                    return digitsDate;
+                }
             } catch (RuntimeException ignored) {
             }
         }
-        LocalDate excelDate = tryExcelSerialDate(normalized, trimmed);
+
+        LocalDate tokenDate = parseWeatherTokens(sanitized);
+        if (tokenDate != null) {
+            return tokenDate;
+        }
+
+        LocalDate excelDate = tryExcelSerialDate(sanitized, trimmed);
         if (excelDate != null) {
             return excelDate;
         }
         return null;
+    }
+
+    private LocalDate parseWeatherTokens(String value) {
+        Matcher matcher = INTEGER_PATTERN.matcher(value);
+        List<String> tokens = new ArrayList<>();
+        while (matcher.find()) {
+            tokens.add(matcher.group());
+        }
+        for (int i = 0; i + 2 < tokens.size(); i++) {
+            LocalDate candidate = buildDateFromParts(tokens.get(i), tokens.get(i + 1), tokens.get(i + 2));
+            if (candidate != null) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private LocalDate buildDateFromParts(String yearText, String monthText, String dayText) {
+        try {
+            int year = Integer.parseInt(yearText);
+            if (yearText.length() <= 2) {
+                year += year >= 50 ? 1900 : 2000;
+            } else if (year < 1000) {
+                return null;
+            }
+            int month = Integer.parseInt(monthText);
+            int day = Integer.parseInt(dayText);
+            return LocalDate.of(year, month, day);
+        } catch (RuntimeException ignored) {
+            return null;
+        }
     }
 
     private LocalDate tryExcelSerialDate(String normalized, String original) {
