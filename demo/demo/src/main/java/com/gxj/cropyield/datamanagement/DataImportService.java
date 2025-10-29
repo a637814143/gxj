@@ -1244,8 +1244,7 @@ public class DataImportService {
         if (trimmed == null) {
             return null;
         }
-        String normalized = Normalizer.normalize(trimmed, Normalizer.Form.NFKC);
-        normalized = INVISIBLE_CHARACTERS.matcher(normalized).replaceAll("");
+        String normalized = normalizeUnicode(trimmed);
         Matcher matcher = WEATHER_DATE_TOKEN.matcher(normalized);
         String candidate;
         if (matcher.find()) {
@@ -1323,9 +1322,12 @@ public class DataImportService {
         if (value == null) {
             return null;
         }
-        String cleaned = INVISIBLE_CHARACTERS.matcher(value).replaceAll("");
-        String trimmed = cleaned.trim();
-        return trimmed.isEmpty() ? null : trimmed;
+        String cleaned = normalizeUnicode(value);
+        if (cleaned == null) {
+            return null;
+        }
+        String stripped = cleaned.strip();
+        return stripped.isEmpty() ? null : stripped;
     }
 
     private String normalizeRegionLevel(String value) {
@@ -1395,8 +1397,28 @@ public class DataImportService {
         if (header == null) {
             return null;
         }
-        String cleaned = INVISIBLE_CHARACTERS.matcher(header).replaceAll("");
-        return cleaned.trim();
+        String cleaned = normalizeUnicode(header);
+        return cleaned == null ? null : cleaned.strip();
+    }
+
+    private String normalizeUnicode(String input) {
+        if (input == null) {
+            return null;
+        }
+        String normalized = Normalizer.normalize(input, Normalizer.Form.NFKC);
+        StringBuilder builder = new StringBuilder(normalized.length());
+        normalized.codePoints().forEach(codePoint -> {
+            int type = Character.getType(codePoint);
+            if (type == Character.FORMAT) {
+                return;
+            }
+            if (Character.isWhitespace(codePoint)) {
+                builder.append(' ');
+            } else {
+                builder.appendCodePoint(codePoint);
+            }
+        });
+        return builder.toString();
     }
 
     private static Map<String, List<String>> createHeaderSynonyms() {
