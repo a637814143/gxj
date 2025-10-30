@@ -15,10 +15,8 @@ import jakarta.persistence.Table;
 public class ForecastModel extends BaseEntity {
 
     public enum ModelType {
-        ARIMA,
         LSTM,
-        RANDOM_FOREST,
-        PROPHET
+        WEATHER_REGRESSION
     }
 
     @Column(nullable = false, length = 128)

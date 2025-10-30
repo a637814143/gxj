@@ -6,11 +6,13 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 /**
@@ -54,25 +56,30 @@ public class LocalForecastEngine {
         }
     }
 
-    private interface ForecastComputation {
-        List<Double> forecast(List<Double> historyValues, int periods);
+    private final Dl4jLstmForecaster lstmForecaster = new Dl4jLstmForecaster();
+    private static final class WeatherRegressionResult {
+        private final List<Double> forecast;
+        private final ForecastEngineResponse.EvaluationMetrics metrics;
+
+        private WeatherRegressionResult(List<Double> forecast,
+                                        ForecastEngineResponse.EvaluationMetrics metrics) {
+            this.forecast = forecast;
+            this.metrics = metrics;
+        }
     }
 
-    private final Map<ForecastModel.ModelType, ForecastComputation> computations = new EnumMap<>(ForecastModel.ModelType.class);
-    private final Dl4jLstmForecaster lstmForecaster = new Dl4jLstmForecaster();
-    private final SmileHoltWintersForecaster holtWintersForecaster = new SmileHoltWintersForecaster();
+    private static final class FeatureTrend {
+        private final double intercept;
+        private final double slope;
+        private final Double lastKnown;
+        private final int count;
 
-    public LocalForecastEngine() {
-        computations.put(ForecastModel.ModelType.ARIMA, this::linearTrendForecast);
-        computations.put(ForecastModel.ModelType.LSTM, (historyValues, periods) ->
-            lstmForecaster.forecast(historyValues, periods)
-                .orElseGet(() -> exponentialSmoothingForecast(historyValues, periods))
-        );
-        computations.put(ForecastModel.ModelType.RANDOM_FOREST, this::rollingWindowForecast);
-        computations.put(ForecastModel.ModelType.PROPHET, (historyValues, periods) ->
-            holtWintersForecaster.forecast(historyValues, periods)
-                .orElseGet(() -> seasonalProjectionForecast(historyValues, periods))
-        );
+        private FeatureTrend(double intercept, double slope, Double lastKnown, int count) {
+            this.intercept = intercept;
+            this.slope = slope;
+            this.lastKnown = lastKnown;
+            this.count = count;
+        }
     }
 
     public ForecastEngineResponse forecast(ForecastEngineRequest request) {
@@ -88,25 +95,29 @@ public class LocalForecastEngine {
         }
 
         List<ForecastEngineRequest.HistoryPoint> sanitizedHistory = sanitizeHistory(historyPoints);
+        ForecastModel.ModelType modelType = resolveModelType(request.modelCode());
+        int forecastPeriods = Math.max(1, Math.min(request.forecastPeriods(), 3));
+
         List<Double> historyValues = sanitizedHistory.stream()
             .map(ForecastEngineRequest.HistoryPoint::value)
             .toList();
 
-        ForecastModel.ModelType modelType = resolveModelType(request.modelCode());
-        int forecastPeriods = Math.max(1, Math.min(request.forecastPeriods(), 3));
-
-        DoubleExponentialModel optimizedModel = null;
         List<Double> rawForecast;
-        if (modelType == ForecastModel.ModelType.ARIMA) {
-            optimizedModel = fitDoubleExponentialModel(historyValues);
-            if (optimizedModel != null) {
-                rawForecast = projectDoubleExponential(optimizedModel, forecastPeriods);
-            } else {
-                rawForecast = linearTrendForecast(historyValues, forecastPeriods);
-            }
+        ForecastEngineResponse.EvaluationMetrics metrics;
+        if (modelType == ForecastModel.ModelType.WEATHER_REGRESSION) {
+            WeatherRegressionResult regressionResult = weatherRegressionForecast(
+                sanitizedHistory,
+                historyValues,
+                forecastPeriods
+            );
+            rawForecast = regressionResult.forecast;
+            metrics = regressionResult.metrics != null
+                ? regressionResult.metrics
+                : buildBaselineMetrics(historyValues);
         } else {
-            ForecastComputation computation = computations.getOrDefault(modelType, this::linearTrendForecast);
-            rawForecast = computation.forecast(historyValues, forecastPeriods);
+            rawForecast = lstmForecaster.forecast(historyValues, forecastPeriods)
+                .orElseGet(() -> exponentialSmoothingForecast(historyValues, forecastPeriods));
+            metrics = buildBaselineMetrics(historyValues);
         }
         List<String> nextPeriods = buildNextPeriods(sanitizedHistory, request.frequency(), rawForecast.size());
 
@@ -124,18 +135,17 @@ public class LocalForecastEngine {
             ));
         }
 
-        ForecastEngineResponse.EvaluationMetrics metrics = buildMetrics(historyValues, optimizedModel);
         return new ForecastEngineResponse(generateRequestId(), points, metrics);
     }
 
     private ForecastModel.ModelType resolveModelType(String code) {
         if (code == null) {
-            return ForecastModel.ModelType.ARIMA;
+            return ForecastModel.ModelType.LSTM;
         }
         try {
             return ForecastModel.ModelType.valueOf(code.toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException ex) {
-            return ForecastModel.ModelType.ARIMA;
+            return ForecastModel.ModelType.LSTM;
         }
     }
 
@@ -148,7 +158,7 @@ public class LocalForecastEngine {
                 continue;
             }
             lastValue = value;
-            sanitized.add(new ForecastEngineRequest.HistoryPoint(point.period(), value));
+            sanitized.add(new ForecastEngineRequest.HistoryPoint(point.period(), value, point.features()));
         }
         return sanitized.isEmpty() ? history : sanitized;
     }
@@ -199,6 +209,265 @@ public class LocalForecastEngine {
             results.add(forecast);
         }
         return results;
+    }
+
+    private WeatherRegressionResult weatherRegressionForecast(List<ForecastEngineRequest.HistoryPoint> history,
+                                                               List<Double> historyValues,
+                                                               int periods) {
+        List<ForecastEngineRequest.HistoryPoint> usable = new ArrayList<>();
+        List<Integer> years = new ArrayList<>();
+        for (ForecastEngineRequest.HistoryPoint point : history) {
+            if (point.value() == null || point.features() == null || point.features().isEmpty()) {
+                continue;
+            }
+            Optional<Integer> year = parseYear(point.period());
+            if (year.isEmpty()) {
+                continue;
+            }
+            usable.add(point);
+            years.add(year.get());
+        }
+
+        if (usable.size() < 2) {
+            return new WeatherRegressionResult(
+                linearTrendForecast(historyValues, periods),
+                buildBaselineMetrics(historyValues)
+            );
+        }
+
+        Set<String> featureNames = new TreeSet<>();
+        for (ForecastEngineRequest.HistoryPoint point : usable) {
+            featureNames.addAll(point.features().keySet());
+        }
+        if (featureNames.isEmpty()) {
+            return new WeatherRegressionResult(
+                linearTrendForecast(historyValues, periods),
+                buildBaselineMetrics(historyValues)
+            );
+        }
+
+        List<String> featureKeys = new ArrayList<>(featureNames);
+        Map<String, Double> featureMeans = new HashMap<>();
+        for (String key : featureKeys) {
+            double sum = 0d;
+            int count = 0;
+            for (ForecastEngineRequest.HistoryPoint point : usable) {
+                Double value = point.features().get(key);
+                if (value != null) {
+                    sum += value;
+                    count++;
+                }
+            }
+            featureMeans.put(key, count > 0 ? sum / count : 0d);
+        }
+
+        int samples = usable.size();
+        int columns = featureKeys.size() + 1;
+        double[][] design = new double[samples][columns];
+        double[] outputs = new double[samples];
+        for (int i = 0; i < samples; i++) {
+            design[i][0] = 1d;
+            ForecastEngineRequest.HistoryPoint point = usable.get(i);
+            outputs[i] = point.value();
+            for (int j = 0; j < featureKeys.size(); j++) {
+                String key = featureKeys.get(j);
+                Double value = point.features().get(key);
+                design[i][j + 1] = value != null ? value : featureMeans.getOrDefault(key, 0d);
+            }
+        }
+
+        double[] coefficients = solveNormalEquation(design, outputs);
+        if (coefficients == null) {
+            return new WeatherRegressionResult(
+                linearTrendForecast(historyValues, periods),
+                buildBaselineMetrics(historyValues)
+            );
+        }
+
+        double[] fitted = new double[samples];
+        for (int i = 0; i < samples; i++) {
+            double estimate = 0d;
+            for (int j = 0; j < coefficients.length; j++) {
+                estimate += design[i][j] * coefficients[j];
+            }
+            fitted[i] = estimate;
+        }
+
+        Map<String, FeatureTrend> featureTrends = computeFeatureTrends(usable, years, featureKeys);
+        Map<String, Double> lastKnown = new HashMap<>();
+        for (ForecastEngineRequest.HistoryPoint point : usable) {
+            for (String key : featureKeys) {
+                Double value = point.features().get(key);
+                if (value != null) {
+                    lastKnown.put(key, value);
+                }
+            }
+        }
+
+        int lastYear = years.get(years.size() - 1);
+        List<Double> forecast = new ArrayList<>();
+        for (int step = 1; step <= periods; step++) {
+            int targetYear = lastYear + step;
+            double prediction = coefficients[0];
+            for (int j = 0; j < featureKeys.size(); j++) {
+                String key = featureKeys.get(j);
+                FeatureTrend trend = featureTrends.get(key);
+                double projected;
+                if (trend != null && trend.count >= 2) {
+                    projected = trend.intercept + trend.slope * targetYear;
+                } else if (trend != null && trend.lastKnown != null) {
+                    projected = trend.lastKnown;
+                } else {
+                    projected = featureMeans.getOrDefault(key, lastKnown.getOrDefault(key, 0d));
+                }
+                prediction += coefficients[j + 1] * projected;
+            }
+            if (!historyValues.isEmpty() && prediction <= 0) {
+                prediction = Math.max(historyValues.get(historyValues.size() - 1) * 0.9, 0d);
+            }
+            forecast.add(prediction);
+        }
+
+        ForecastEngineResponse.EvaluationMetrics metrics = buildRegressionMetrics(outputs, fitted);
+        return new WeatherRegressionResult(forecast, metrics);
+    }
+
+    private double[] solveNormalEquation(double[][] designMatrix, double[] outputs) {
+        if (designMatrix.length == 0) {
+            return null;
+        }
+        int columns = designMatrix[0].length;
+        double[][] xtx = new double[columns][columns];
+        double[] xty = new double[columns];
+        for (int i = 0; i < designMatrix.length; i++) {
+            for (int j = 0; j < columns; j++) {
+                xty[j] += designMatrix[i][j] * outputs[i];
+                for (int k = 0; k < columns; k++) {
+                    xtx[j][k] += designMatrix[i][j] * designMatrix[i][k];
+                }
+            }
+        }
+        return gaussianElimination(xtx, xty);
+    }
+
+    private double[] gaussianElimination(double[][] matrix, double[] vector) {
+        int n = vector.length;
+        double[][] augmented = new double[n][n + 1];
+        for (int i = 0; i < n; i++) {
+            System.arraycopy(matrix[i], 0, augmented[i], 0, n);
+            augmented[i][n] = vector[i];
+        }
+        for (int pivot = 0; pivot < n; pivot++) {
+            int maxRow = pivot;
+            double maxValue = Math.abs(augmented[pivot][pivot]);
+            for (int row = pivot + 1; row < n; row++) {
+                double value = Math.abs(augmented[row][pivot]);
+                if (value > maxValue) {
+                    maxValue = value;
+                    maxRow = row;
+                }
+            }
+            if (maxValue < 1e-9) {
+                return null;
+            }
+            if (maxRow != pivot) {
+                double[] temp = augmented[pivot];
+                augmented[pivot] = augmented[maxRow];
+                augmented[maxRow] = temp;
+            }
+            double pivotValue = augmented[pivot][pivot];
+            for (int col = pivot; col <= n; col++) {
+                augmented[pivot][col] /= pivotValue;
+            }
+            for (int row = 0; row < n; row++) {
+                if (row == pivot) {
+                    continue;
+                }
+                double factor = augmented[row][pivot];
+                for (int col = pivot; col <= n; col++) {
+                    augmented[row][col] -= factor * augmented[pivot][col];
+                }
+            }
+        }
+        double[] solution = new double[n];
+        for (int i = 0; i < n; i++) {
+            solution[i] = augmented[i][n];
+        }
+        return solution;
+    }
+
+    private Map<String, FeatureTrend> computeFeatureTrends(List<ForecastEngineRequest.HistoryPoint> history,
+                                                           List<Integer> years,
+                                                           List<String> featureKeys) {
+        Map<String, FeatureTrend> trends = new HashMap<>();
+        for (String key : featureKeys) {
+            double sumX = 0d;
+            double sumY = 0d;
+            double sumXY = 0d;
+            double sumXX = 0d;
+            int count = 0;
+            Double lastKnown = null;
+            for (int i = 0; i < history.size(); i++) {
+                Double value = history.get(i).features().get(key);
+                if (value == null) {
+                    continue;
+                }
+                int year = years.get(i);
+                sumX += year;
+                sumY += value;
+                sumXY += year * value;
+                sumXX += year * year;
+                lastKnown = value;
+                count++;
+            }
+            if (count >= 2) {
+                double denominator = count * sumXX - sumX * sumX;
+                double slope = denominator == 0 ? 0 : (count * sumXY - sumX * sumY) / denominator;
+                double intercept = (sumY - slope * sumX) / count;
+                trends.put(key, new FeatureTrend(intercept, slope, lastKnown, count));
+            } else if (count == 1) {
+                trends.put(key, new FeatureTrend(0, 0, lastKnown, count));
+            } else {
+                trends.put(key, new FeatureTrend(0, 0, null, 0));
+            }
+        }
+        return trends;
+    }
+
+    private ForecastEngineResponse.EvaluationMetrics buildRegressionMetrics(double[] actual,
+                                                                            double[] predicted) {
+        if (actual.length == 0) {
+            return new ForecastEngineResponse.EvaluationMetrics(null, null, null, null);
+        }
+        double sumAbs = 0d;
+        double sumSq = 0d;
+        double sumPct = 0d;
+        double sumActual = 0d;
+        for (int i = 0; i < actual.length; i++) {
+            double error = actual[i] - predicted[i];
+            sumAbs += Math.abs(error);
+            sumSq += error * error;
+            if (Math.abs(actual[i]) > 1e-9) {
+                sumPct += Math.abs(error / actual[i]);
+            }
+            sumActual += actual[i];
+        }
+        double mae = sumAbs / actual.length;
+        double rmse = Math.sqrt(sumSq / actual.length);
+        double mean = sumActual / actual.length;
+        double sst = 0d;
+        for (double v : actual) {
+            double diff = v - mean;
+            sst += diff * diff;
+        }
+        Double r2 = sst == 0 ? null : 1 - (sumSq / Math.max(sst, 1e-9));
+        double mape = (sumPct / actual.length) * 100;
+        return new ForecastEngineResponse.EvaluationMetrics(
+            round(mae),
+            round(rmse),
+            round(mape),
+            r2 != null ? round(r2) : null
+        );
     }
 
     private List<Double> rollingWindowForecast(List<Double> historyValues, int periods) {
