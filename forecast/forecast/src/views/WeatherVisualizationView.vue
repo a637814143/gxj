@@ -61,7 +61,7 @@
 
       <el-card shadow="hover" class="table-card">
         <template #header>逐日气象记录</template>
-        <el-table :data="records" border :header-cell-style="tableHeaderStyle" empty-text="暂无数据">
+        <el-table :data="pagedRecords" border :header-cell-style="tableHeaderStyle" empty-text="暂无数据">
           <el-table-column prop="recordDate" label="日期" width="140">
             <template #default="{ row }">{{ formatDate(row.recordDate) }}</template>
           </el-table-column>
@@ -79,6 +79,16 @@
           </el-table-column>
           <el-table-column prop="dataSource" label="数据来源" min-width="200" show-overflow-tooltip />
         </el-table>
+        <div v-if="records.length" class="table-pagination">
+          <el-pagination
+            v-model:current-page="currentPage"
+            :page-size="pageSize"
+            layout="prev, pager, next"
+            :total="records.length"
+            hide-on-single-page
+            @current-change="handlePageChange"
+          />
+        </div>
       </el-card>
     </template>
   </div>
@@ -100,6 +110,13 @@ const records = ref([])
 const summary = ref(null)
 const suppressRangeWatch = ref(false)
 const userCustomizedRange = ref(false)
+const currentPage = ref(1)
+const pageSize = 10
+
+const pagedRecords = computed(() => {
+  const start = (currentPage.value - 1) * pageSize
+  return records.value.slice(start, start + pageSize)
+})
 
 const tableHeaderStyle = () => ({
   background: '#f4f7fb',
@@ -301,11 +318,16 @@ const loadWeatherData = async () => {
           recordDate: item.recordDate
         }))
       : []
+    currentPage.value = 1
   } catch (error) {
     ElMessage.error(error?.response?.data?.message || '获取气象数据失败')
   } finally {
     loading.value = false
   }
+}
+
+const handlePageChange = page => {
+  currentPage.value = page
 }
 
 watch(selectedRegionId, newValue => {
@@ -400,6 +422,12 @@ onMounted(async () => {
 .chart-card {
   border-radius: 12px;
   min-height: 360px;
+}
+
+.table-pagination {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .table-card {
