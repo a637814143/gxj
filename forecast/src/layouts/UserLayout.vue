@@ -78,6 +78,7 @@ const rawMenuItems = [
   { label: '数据可视化', name: 'visualization', path: '/visualization' },
   { label: '预测中心', name: 'forecast', path: '/forecast' },
   { label: '天气监测', name: 'weather', path: '/weather' },
+  { label: '气象分析', name: 'weatherAnalytics', path: '/weather-analytics' },
   { label: '在线咨询', name: 'consultation', path: '/consultation' },
   { label: '报告中心', name: 'report', path: '/report' },
   { label: '个人中心', name: 'profile', path: '/profile' }
@@ -90,6 +91,7 @@ const quickActionConfigs = computed(() => [
   { key: 'data', label: '数据中心', icon: '🗄️', type: 'route', name: 'data', accent: 'coral' },
   { key: 'visualization', label: '数据可视化', icon: '📈', type: 'route', name: 'visualization', accent: 'violet' },
   { key: 'forecast', label: '预测中心', icon: '🚀', type: 'route', name: 'forecast', accent: 'sunset' },
+  { key: 'weather-analytics', label: '气象分析', icon: '🌤️', type: 'route', name: 'weatherAnalytics', accent: 'lagoon' },
   { key: 'consultation', label: '在线咨询', icon: '💬', type: 'route', name: 'consultation', accent: 'lagoon' },
   { key: 'weather', label: '天气监测', icon: '☀️', type: 'route', name: 'weather', accent: 'sky' },
   { key: 'report', label: '报告中心', icon: '📄', type: 'route', name: 'report', accent: 'ocean' },
@@ -121,6 +123,7 @@ const titles = {
   visualization: '数据可视化洞察',
   forecast: '预测建模与任务',
   weather: '实时天气监测',
+  weatherAnalytics: '气象数据分析',
   consultation: '在线咨询与专家建议',
   report: '报告输出与分享',
   profile: '个人资料与安全设置'

@@ -106,37 +106,70 @@
           <div class="summary-value">{{ item.value }}</div>
         </div>
       </div>
-      <el-table
-        v-if="importPreview.length"
-        :data="importPreview"
-        :header-cell-style="tableHeaderStyle"
-        empty-text="本次导入暂无可预览记录"
-      >
-        <el-table-column prop="year" label="年份" width="90" />
-        <el-table-column prop="regionName" label="地区" min-width="160" />
-        <el-table-column prop="cropName" label="作物" min-width="140" />
-        <el-table-column prop="production" label="总产量 (吨)" width="150">
-          <template #default="{ row }">
-            {{ formatNumber(row.production) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="yieldPerHectare" label="单产 (吨/公顷)" width="170">
-          <template #default="{ row }">
-            {{ formatNumber(row.yieldPerHectare) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="averagePrice" label="平均价格 (元/公斤)" width="190">
-          <template #default="{ row }">
-            {{ formatNumber(row.averagePrice) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="collectedAt" label="采集日期" width="180">
-          <template #default="{ row }">
-            {{ formatDate(row.collectedAt) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="dataSource" label="数据来源" min-width="180" show-overflow-tooltip />
-      </el-table>
+      <template v-if="importPreview.length">
+        <el-table
+          v-if="lastImportDatasetType === 'WEATHER'"
+          :data="importPreview"
+          :header-cell-style="tableHeaderStyle"
+          empty-text="本次导入暂无可预览记录"
+        >
+          <el-table-column prop="recordDate" label="日期" width="140">
+            <template #default="{ row }">
+              {{ formatDate(row.recordDate) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="regionName" label="地区" min-width="180" />
+          <el-table-column prop="maxTemperature" label="最高温 (℃)" width="150">
+            <template #default="{ row }">
+              {{ formatNumber(row.maxTemperature) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="minTemperature" label="最低温 (℃)" width="150">
+            <template #default="{ row }">
+              {{ formatNumber(row.minTemperature) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="weatherText" label="天气" min-width="160" />
+          <el-table-column prop="wind" label="风力风向" min-width="160" />
+          <el-table-column prop="sunshineHours" label="日照 (小时)" width="160">
+            <template #default="{ row }">
+              {{ formatNumber(row.sunshineHours) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="dataSource" label="数据来源" min-width="200" show-overflow-tooltip />
+        </el-table>
+        <el-table
+          v-else
+          :data="importPreview"
+          :header-cell-style="tableHeaderStyle"
+          empty-text="本次导入暂无可预览记录"
+        >
+          <el-table-column prop="year" label="年份" width="90" />
+          <el-table-column prop="regionName" label="地区" min-width="160" />
+          <el-table-column prop="cropName" label="作物" min-width="140" />
+          <el-table-column prop="production" label="总产量 (吨)" width="150">
+            <template #default="{ row }">
+              {{ formatNumber(row.production) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="yieldPerHectare" label="单产 (吨/公顷)" width="170">
+            <template #default="{ row }">
+              {{ formatNumber(row.yieldPerHectare) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="averagePrice" label="平均价格 (元/公斤)" width="190">
+            <template #default="{ row }">
+              {{ formatNumber(row.averagePrice) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="collectedAt" label="采集日期" width="180">
+            <template #default="{ row }">
+              {{ formatDate(row.collectedAt) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="dataSource" label="数据来源" min-width="180" show-overflow-tooltip />
+        </el-table>
+      </template>
       <div v-else class="import-preview-empty">本次导入数据已完成清洗并入库，未发现可展示的预览记录。</div>
     </el-card>
 
@@ -336,6 +369,7 @@
                 <ul class="upload-tip-list">
                   <li>CSV 将自动检测逗号、制表符、分号或竖线分隔。</li>
                   <li>请保留模板中的字段名称（如“作物”“地区”“年份”等），便于系统匹配。</li>
+                  <li>气象数据可直接通过此处导入，示例字段包括“日期”“最高温”“最低温”“风力风向”“日照时长”等。</li>
                 </ul>
               </template>
             </el-upload>
@@ -453,6 +487,20 @@ const selectedTaskDetail = ref(null)
 const importWarnings = ref([])
 const importPreview = ref([])
 const lastImportStats = ref(null)
+const lastImportDatasetType = computed(() => {
+  const summaryType = selectedTaskDetail.value?.summary?.datasetType
+  if (summaryType) {
+    return summaryType
+  }
+  return lastImportStats.value?.datasetType ?? null
+})
+const lastImportDatasetLabel = computed(() => {
+  const type = lastImportDatasetType.value
+  if (!type) {
+    return '-'
+  }
+  return datasetTypeMap[type] ?? type
+})
 
 const datasetTypeMap = {
   YIELD: '产量',
@@ -604,6 +652,7 @@ const importSummaryBadges = computed(() => {
   }
   const summary = lastImportStats.value
   return [
+    { label: '数据类型', value: lastImportDatasetLabel.value },
     { label: '识别总行数', value: `${summary.totalRows ?? 0} 行` },
     { label: '已处理', value: `${summary.processedRows ?? 0} 条` },
     { label: '新增入库', value: `${summary.insertedRows ?? 0} 条` },
@@ -616,6 +665,7 @@ const importSummaryBadges = computed(() => {
 const reminders = [
   '建议每周核对一次数据来源与口径',
   '导入前请确保文件格式符合模板要求',
+  '气象、土壤等外部数据也请通过数据中心导入，便于统一治理',
   '完成导入后及时通知模型团队更新训练集'
 ]
 
@@ -705,6 +755,8 @@ const fetchTaskDetail = async (taskId, silent = false) => {
       lastImportStats.value = {
         status: summary.status,
         progress: summary.progress,
+        datasetType: summary.datasetType,
+        datasetName: summary.datasetName,
         totalRows: Number(summary.totalRows ?? 0),
         processedRows: Number(summary.processedRows ?? 0),
         insertedRows: Number(summary.insertedRows ?? 0),
