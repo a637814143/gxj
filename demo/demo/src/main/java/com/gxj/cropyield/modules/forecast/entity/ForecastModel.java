@@ -18,8 +18,7 @@ public class ForecastModel extends BaseEntity {
         ARIMA,
         LSTM,
         RANDOM_FOREST,
-        PROPHET,
-        WEATHER_REGRESSION
+        PROPHET
     }
 
     @Column(nullable = false, length = 128)
