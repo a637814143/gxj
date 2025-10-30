@@ -38,6 +38,11 @@ public class ForecastModelDataInitializer implements ApplicationRunner {
                 ForecastModel.ModelType.PROPHET,
                 "基于 Smile 库 Holt-Winters 平滑算法的季节性模型，支持趋势与季节性叠加预测。"
         );
+        ensureDefaultModel(
+                "天气因子多元回归模型",
+                ForecastModel.ModelType.WEATHER_REGRESSION,
+                "基于年度气象特征与历史产量的多元线性回归模型，结合天气趋势推演未来产量。"
+        );
     }
 
     private void ensureDefaultModel(String name, ForecastModel.ModelType type, String description) {
