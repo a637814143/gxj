@@ -6,7 +6,9 @@ import com.gxj.cropyield.modules.base.entity.Crop;
 import com.gxj.cropyield.modules.base.entity.Region;
 import com.gxj.cropyield.modules.base.repository.CropRepository;
 import com.gxj.cropyield.modules.base.repository.RegionRepository;
+import com.gxj.cropyield.modules.dataset.entity.WeatherRecord;
 import com.gxj.cropyield.modules.dataset.entity.YieldRecord;
+import com.gxj.cropyield.modules.dataset.repository.WeatherRecordRepository;
 import com.gxj.cropyield.modules.dataset.repository.YieldRecordRepository;
 import com.gxj.cropyield.modules.forecast.dto.ForecastExecutionRequest;
 import com.gxj.cropyield.modules.forecast.dto.ForecastExecutionResponse;
@@ -32,14 +34,19 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.stream.Collectors;
+import java.util.OptionalDouble;
+import java.util.Set;
 /**
  * 预测管理模块的业务实现类，负责落实预测管理领域的业务处理逻辑。
  * <p>核心方法：runForecast、persistForecastResults、resolveForecastTask、updateTaskFromRun、createTaskFromRun、buildTaskParameters、buildEvaluationSummary、formatMetricValue。</p>
@@ -60,6 +67,7 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
     private final ForecastTaskRepository forecastTaskRepository;
     private final ForecastResultRepository forecastResultRepository;
     private final ForecastEngineClient forecastEngineClient;
+    private final WeatherRecordRepository weatherRecordRepository;
 
     public ForecastExecutionServiceImpl(RegionRepository regionRepository,
                                         CropRepository cropRepository,
@@ -70,7 +78,8 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
                                         ForecastSnapshotRepository forecastSnapshotRepository,
                                         ForecastTaskRepository forecastTaskRepository,
                                         ForecastResultRepository forecastResultRepository,
-                                        ForecastEngineClient forecastEngineClient) {
+                                        ForecastEngineClient forecastEngineClient,
+                                        WeatherRecordRepository weatherRecordRepository) {
         this.regionRepository = regionRepository;
         this.cropRepository = cropRepository;
         this.forecastModelRepository = forecastModelRepository;
@@ -81,6 +90,7 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         this.forecastTaskRepository = forecastTaskRepository;
         this.forecastResultRepository = forecastResultRepository;
         this.forecastEngineClient = forecastEngineClient;
+        this.weatherRecordRepository = weatherRecordRepository;
     }
 
     @Override
@@ -99,7 +109,7 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         List<HistoryObservation> usableHistory = historyRecords.stream()
             .map(record -> mapObservation(record, measurementType))
             .filter(Objects::nonNull)
-            .collect(Collectors.toList());
+            .toList();
 
         if (usableHistory.isEmpty()) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "缺少历史产量数据，无法生成预测");
@@ -111,7 +121,21 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         List<HistoryObservation> limitedHistory = usableHistory.stream()
             .sorted(Comparator.comparingInt(obs -> obs.record().getYear()))
             .skip(Math.max(usableHistory.size() - historyLimit, 0))
-            .collect(Collectors.toList());
+            .toList();
+
+        Map<Integer, Map<String, Double>> weatherFeatures = Collections.emptyMap();
+        if (model.getType() == ForecastModel.ModelType.WEATHER_REGRESSION) {
+            Map<Integer, Map<String, Double>> computedFeatures = buildWeatherFeatures(region.getId(), limitedHistory);
+            long coveredYears = limitedHistory.stream()
+                .map(observation -> observation.record().getYear())
+                .filter(year -> computedFeatures.containsKey(year))
+                .distinct()
+                .count();
+            if (coveredYears < 2) {
+                throw new BusinessException(ResultCode.BAD_REQUEST, "所选地区缺少至少两年的天气数据，无法生成预测");
+            }
+            weatherFeatures = computedFeatures;
+        }
 
         int requestedForecastPeriods = request.forecastPeriods() != null ? request.forecastPeriods() : 3;
         int forecastPeriods = Math.max(1, Math.min(requestedForecastPeriods, 3));
@@ -128,7 +152,7 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         run.setMeasurementUnit(measurementType.valueUnit());
         forecastRunRepository.save(run);
 
-        ForecastEngineResponse response = invokeEngine(limitedHistory, run);
+        ForecastEngineResponse response = invokeEngine(limitedHistory, run, weatherFeatures);
 
         run.setStatus(ForecastRun.RunStatus.SUCCESS);
         run.setExternalRequestId(response.requestId());
@@ -375,6 +399,68 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         return production * averagePrice * 0.1d;
     }
 
+    private Map<Integer, Map<String, Double>> buildWeatherFeatures(Long regionId,
+                                                                   List<HistoryObservation> history) {
+        if (history.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Set<Integer> historyYears = new HashSet<>();
+        int minYear = Integer.MAX_VALUE;
+        int maxYear = Integer.MIN_VALUE;
+        for (HistoryObservation observation : history) {
+            int year = observation.record().getYear();
+            historyYears.add(year);
+            if (year < minYear) {
+                minYear = year;
+            }
+            if (year > maxYear) {
+                maxYear = year;
+            }
+        }
+        if (historyYears.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        LocalDate startDate = LocalDate.of(minYear, 1, 1);
+        LocalDate endDate = LocalDate.of(maxYear, 12, 31);
+        List<WeatherRecord> records = weatherRecordRepository
+            .findByRegionIdAndRecordDateBetween(regionId, startDate, endDate);
+        if (records.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<Integer, WeatherStats> statsByYear = new HashMap<>();
+        for (WeatherRecord record : records) {
+            if (record.getRecordDate() == null) {
+                continue;
+            }
+            int year = record.getRecordDate().getYear();
+            if (!historyYears.contains(year)) {
+                continue;
+            }
+            WeatherStats stats = statsByYear.computeIfAbsent(year, key -> new WeatherStats());
+            stats.accept(record);
+        }
+        Map<Integer, Map<String, Double>> features = new HashMap<>();
+        for (Integer year : historyYears) {
+            WeatherStats stats = statsByYear.get(year);
+            if (stats == null) {
+                continue;
+            }
+            Map<String, Double> featureMap = new LinkedHashMap<>();
+            stats.averageMax().ifPresent(value -> featureMap.put("avgMaxTemperature", roundFeature(value)));
+            stats.averageMin().ifPresent(value -> featureMap.put("avgMinTemperature", roundFeature(value)));
+            stats.temperatureRange().ifPresent(value -> featureMap.put("avgDiurnalRange", roundFeature(value)));
+            stats.totalSunshine().ifPresent(value -> featureMap.put("totalSunshineHours", roundFeature(value)));
+            if (!featureMap.isEmpty()) {
+                features.put(year, featureMap);
+            }
+        }
+        return features;
+    }
+
+    private double roundFeature(double value) {
+        return Math.round(value * 100.0) / 100.0;
+    }
+
     private Integer parseYear(String period) {
         if (period == null) {
             return null;
@@ -397,17 +483,68 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         }
     }
 
+    private static final class WeatherStats {
+        private double maxSum;
+        private int maxCount;
+        private double minSum;
+        private int minCount;
+        private double sunshineSum;
+        private int sunshineCount;
+        private double rangeSum;
+        private int rangeCount;
+
+        void accept(WeatherRecord record) {
+            if (record.getMaxTemperature() != null) {
+                maxSum += record.getMaxTemperature();
+                maxCount++;
+            }
+            if (record.getMinTemperature() != null) {
+                minSum += record.getMinTemperature();
+                minCount++;
+            }
+            if (record.getSunshineHours() != null) {
+                sunshineSum += record.getSunshineHours();
+                sunshineCount++;
+            }
+            if (record.getMaxTemperature() != null && record.getMinTemperature() != null) {
+                rangeSum += record.getMaxTemperature() - record.getMinTemperature();
+                rangeCount++;
+            }
+        }
+
+        OptionalDouble averageMax() {
+            return maxCount > 0 ? OptionalDouble.of(maxSum / maxCount) : OptionalDouble.empty();
+        }
+
+        OptionalDouble averageMin() {
+            return minCount > 0 ? OptionalDouble.of(minSum / minCount) : OptionalDouble.empty();
+        }
+
+        OptionalDouble totalSunshine() {
+            return sunshineCount > 0 ? OptionalDouble.of(sunshineSum) : OptionalDouble.empty();
+        }
+
+        OptionalDouble temperatureRange() {
+            return rangeCount > 0 ? OptionalDouble.of(rangeSum / rangeCount) : OptionalDouble.empty();
+        }
+    }
+
     private ForecastEngineResponse invokeEngine(List<HistoryObservation> history,
-                                                ForecastRun run) {
+                                                ForecastRun run,
+                                                Map<Integer, Map<String, Double>> weatherFeatures) {
         Map<String, Object> parameters = new HashMap<>();
         parameters.put("historyYears", run.getHistoryYears());
         parameters.put("frequency", run.getFrequency());
 
         List<ForecastEngineRequest.HistoryPoint> historyPoints = history.stream()
-            .map(item -> new ForecastEngineRequest.HistoryPoint(
-                String.valueOf(item.record().getYear()),
-                item.value()
-            ))
+            .map(item -> {
+                Map<String, Double> features = weatherFeatures.get(item.record().getYear());
+                return new ForecastEngineRequest.HistoryPoint(
+                    String.valueOf(item.record().getYear()),
+                    item.value(),
+                    features != null ? new LinkedHashMap<>(features) : null
+                );
+            })
             .toList();
 
         ForecastEngineRequest engineRequest = new ForecastEngineRequest(
