@@ -3,11 +3,14 @@ package com.gxj.cropyield.modules.forecast.service.impl;
 import com.gxj.cropyield.common.exception.BusinessException;
 import com.gxj.cropyield.common.response.ResultCode;
 import com.gxj.cropyield.modules.base.entity.Crop;
+import com.gxj.cropyield.modules.base.enums.HarvestSeason;
 import com.gxj.cropyield.modules.base.entity.Region;
 import com.gxj.cropyield.modules.base.repository.CropRepository;
 import com.gxj.cropyield.modules.base.repository.RegionRepository;
 import com.gxj.cropyield.modules.dataset.entity.YieldRecord;
+import com.gxj.cropyield.modules.dataset.entity.WeatherRecord;
 import com.gxj.cropyield.modules.dataset.repository.YieldRecordRepository;
+import com.gxj.cropyield.modules.dataset.repository.WeatherRecordRepository;
 import com.gxj.cropyield.modules.forecast.dto.ForecastExecutionRequest;
 import com.gxj.cropyield.modules.forecast.dto.ForecastExecutionResponse;
 import com.gxj.cropyield.modules.forecast.engine.ForecastEngineClient;
@@ -32,14 +35,18 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.stream.Collectors;
+import java.util.Set;
 /**
  * 预测管理模块的业务实现类，负责落实预测管理领域的业务处理逻辑。
  * <p>核心方法：runForecast、persistForecastResults、resolveForecastTask、updateTaskFromRun、createTaskFromRun、buildTaskParameters、buildEvaluationSummary、formatMetricValue。</p>
@@ -60,6 +67,7 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
     private final ForecastTaskRepository forecastTaskRepository;
     private final ForecastResultRepository forecastResultRepository;
     private final ForecastEngineClient forecastEngineClient;
+    private final WeatherRecordRepository weatherRecordRepository;
 
     public ForecastExecutionServiceImpl(RegionRepository regionRepository,
                                         CropRepository cropRepository,
@@ -70,7 +78,8 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
                                         ForecastSnapshotRepository forecastSnapshotRepository,
                                         ForecastTaskRepository forecastTaskRepository,
                                         ForecastResultRepository forecastResultRepository,
-                                        ForecastEngineClient forecastEngineClient) {
+                                        ForecastEngineClient forecastEngineClient,
+                                        WeatherRecordRepository weatherRecordRepository) {
         this.regionRepository = regionRepository;
         this.cropRepository = cropRepository;
         this.forecastModelRepository = forecastModelRepository;
@@ -81,6 +90,7 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         this.forecastTaskRepository = forecastTaskRepository;
         this.forecastResultRepository = forecastResultRepository;
         this.forecastEngineClient = forecastEngineClient;
+        this.weatherRecordRepository = weatherRecordRepository;
     }
 
     @Override
@@ -99,7 +109,7 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         List<HistoryObservation> usableHistory = historyRecords.stream()
             .map(record -> mapObservation(record, measurementType))
             .filter(Objects::nonNull)
-            .collect(Collectors.toList());
+            .toList();
 
         if (usableHistory.isEmpty()) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "缺少历史产量数据，无法生成预测");
@@ -111,7 +121,7 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         List<HistoryObservation> limitedHistory = usableHistory.stream()
             .sorted(Comparator.comparingInt(obs -> obs.record().getYear()))
             .skip(Math.max(usableHistory.size() - historyLimit, 0))
-            .collect(Collectors.toList());
+            .toList();
 
         int requestedForecastPeriods = request.forecastPeriods() != null ? request.forecastPeriods() : 3;
         int forecastPeriods = Math.max(1, Math.min(requestedForecastPeriods, 3));
@@ -403,11 +413,22 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         parameters.put("historyYears", run.getHistoryYears());
         parameters.put("frequency", run.getFrequency());
 
+        Map<Integer, Map<String, Double>> weatherFeatures = Collections.emptyMap();
+        if (run.getModel() != null && run.getModel().getType() == ForecastModel.ModelType.WEATHER_REGRESSION) {
+            Long regionId = run.getRegion() != null ? run.getRegion().getId() : null;
+            weatherFeatures = buildWeatherFeatureMap(regionId, run.getCrop(), history);
+        }
+
+        Map<Integer, Map<String, Double>> finalWeatherFeatures = weatherFeatures;
         List<ForecastEngineRequest.HistoryPoint> historyPoints = history.stream()
-            .map(item -> new ForecastEngineRequest.HistoryPoint(
-                String.valueOf(item.record().getYear()),
-                item.value()
-            ))
+            .map(item -> {
+                Map<String, Double> features = finalWeatherFeatures.get(item.record().getYear());
+                return new ForecastEngineRequest.HistoryPoint(
+                    String.valueOf(item.record().getYear()),
+                    item.value(),
+                    features != null && !features.isEmpty() ? features : null
+                );
+            })
             .toList();
 
         ForecastEngineRequest engineRequest = new ForecastEngineRequest(
@@ -424,6 +445,198 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
             run.setErrorMessage(ex.getMessage());
             forecastRunRepository.save(run);
             throw new BusinessException(ResultCode.SERVER_ERROR, "预测引擎调用失败: " + ex.getMessage());
+        }
+    }
+
+    private Map<Integer, Map<String, Double>> buildWeatherFeatureMap(Long regionId,
+                                                                      Crop crop,
+                                                                      List<HistoryObservation> history) {
+        if (regionId == null || history.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Set<Integer> targetYears = new LinkedHashSet<>();
+        for (HistoryObservation observation : history) {
+            targetYears.add(observation.record().getYear());
+        }
+        if (targetYears.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        List<WeatherRecord> weatherRecords = weatherRecordRepository.findByRegionId(regionId);
+        if (weatherRecords.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        HarvestSeason season = crop != null && crop.getHarvestSeason() != null
+            ? crop.getHarvestSeason()
+            : HarvestSeason.ANNUAL;
+        Map<Integer, List<WeatherRecord>> grouped = new HashMap<>();
+        for (WeatherRecord record : weatherRecords) {
+            LocalDate date = record.getRecordDate();
+            if (date == null) {
+                continue;
+            }
+            Integer targetYear = resolveWeatherTargetYear(date, season);
+            if (targetYear == null || !targetYears.contains(targetYear)) {
+                continue;
+            }
+            grouped.computeIfAbsent(targetYear, key -> new ArrayList<>()).add(record);
+        }
+        if (grouped.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        Map<Integer, Map<String, Double>> result = new HashMap<>();
+        for (Map.Entry<Integer, List<WeatherRecord>> entry : grouped.entrySet()) {
+            Map<String, Double> features = summarizeWeatherFeatures(entry.getValue(), season);
+            if (!features.isEmpty()) {
+                result.put(entry.getKey(), features);
+            }
+        }
+        return result;
+    }
+
+    private Integer resolveWeatherTargetYear(LocalDate recordDate, HarvestSeason season) {
+        int year = recordDate.getYear();
+        if (season == HarvestSeason.SUMMER_GRAIN && recordDate.getMonthValue() >= 10) {
+            return year + 1;
+        }
+        return year;
+    }
+
+    private Map<String, Double> summarizeWeatherFeatures(List<WeatherRecord> records, HarvestSeason season) {
+        if (records == null || records.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        WeatherAccumulator overall = new WeatherAccumulator();
+        WeatherAccumulator winterDormancy = season == HarvestSeason.SUMMER_GRAIN ? new WeatherAccumulator() : null;
+        WeatherAccumulator springRipening = season == HarvestSeason.SUMMER_GRAIN ? new WeatherAccumulator() : null;
+        WeatherAccumulator springSowing = season == HarvestSeason.AUTUMN_GRAIN ? new WeatherAccumulator() : null;
+        WeatherAccumulator summerAutumnGrowth = season == HarvestSeason.AUTUMN_GRAIN ? new WeatherAccumulator() : null;
+
+        for (WeatherRecord record : records) {
+            overall.add(record);
+            String window = classifyWeatherWindow(record.getRecordDate(), season);
+            if (window == null) {
+                continue;
+            }
+            switch (window) {
+                case "winterDormancy" -> {
+                    if (winterDormancy != null) {
+                        winterDormancy.add(record);
+                    }
+                }
+                case "springRipening" -> {
+                    if (springRipening != null) {
+                        springRipening.add(record);
+                    }
+                }
+                case "springSowing" -> {
+                    if (springSowing != null) {
+                        springSowing.add(record);
+                    }
+                }
+                case "summerAutumnGrowth" -> {
+                    if (summerAutumnGrowth != null) {
+                        summerAutumnGrowth.add(record);
+                    }
+                }
+                default -> {
+                }
+            }
+        }
+
+        Map<String, Double> features = new LinkedHashMap<>();
+        overall.writeTo(features, "");
+        if (winterDormancy != null && springRipening != null) {
+            winterDormancy.writeTo(features, "winterDormancy");
+            springRipening.writeTo(features, "springRipening");
+        }
+        if (springSowing != null && summerAutumnGrowth != null) {
+            springSowing.writeTo(features, "springSowing");
+            summerAutumnGrowth.writeTo(features, "summerAutumnGrowth");
+        }
+        features.values().removeIf(value -> value == null || value.isNaN() || value.isInfinite());
+        return features;
+    }
+
+    private String classifyWeatherWindow(LocalDate date, HarvestSeason season) {
+        if (date == null) {
+            return null;
+        }
+        int month = date.getMonthValue();
+        if (season == HarvestSeason.SUMMER_GRAIN) {
+            if (month >= 10 || month <= 2) {
+                return "winterDormancy";
+            }
+            if (month >= 3 && month <= 7) {
+                return "springRipening";
+            }
+        } else if (season == HarvestSeason.AUTUMN_GRAIN) {
+            if (month >= 3 && month <= 5) {
+                return "springSowing";
+            }
+            if (month >= 6 && month <= 10) {
+                return "summerAutumnGrowth";
+            }
+        }
+        return null;
+    }
+
+    private static final class WeatherAccumulator {
+        private double sumMax;
+        private int countMax;
+        private double sumMin;
+        private int countMin;
+        private double sumDiurnal;
+        private int countDiurnal;
+        private double sumSunshine;
+        private int countSunshine;
+
+        private void add(WeatherRecord record) {
+            if (record.getMaxTemperature() != null) {
+                sumMax += record.getMaxTemperature();
+                countMax++;
+            }
+            if (record.getMinTemperature() != null) {
+                sumMin += record.getMinTemperature();
+                countMin++;
+            }
+            if (record.getMaxTemperature() != null && record.getMinTemperature() != null) {
+                sumDiurnal += record.getMaxTemperature() - record.getMinTemperature();
+                countDiurnal++;
+            }
+            if (record.getSunshineHours() != null) {
+                sumSunshine += record.getSunshineHours();
+                countSunshine++;
+            }
+        }
+
+        private void writeTo(Map<String, Double> target, String prefix) {
+            Double avgMax = countMax > 0 ? sumMax / countMax : null;
+            Double avgMin = countMin > 0 ? sumMin / countMin : null;
+            Double avgDiurnal = countDiurnal > 0 ? sumDiurnal / countDiurnal : null;
+            Double totalSunshine = countSunshine > 0 ? sumSunshine : null;
+
+            String base = prefix == null ? "" : prefix;
+            if (base.isEmpty()) {
+                target.put("avgMaxTemperature", roundStatic(avgMax));
+                target.put("avgMinTemperature", roundStatic(avgMin));
+                target.put("avgDiurnalRange", roundStatic(avgDiurnal));
+                target.put("totalSunshineHours", roundStatic(totalSunshine));
+            } else {
+                target.put(base + "AvgMaxTemperature", roundStatic(avgMax));
+                target.put(base + "AvgMinTemperature", roundStatic(avgMin));
+                target.put(base + "AvgDiurnalRange", roundStatic(avgDiurnal));
+                target.put(base + "TotalSunshineHours", roundStatic(totalSunshine));
+            }
+        }
+
+        private Double roundStatic(Double value) {
+            if (value == null) {
+                return null;
+            }
+            return Math.round(value * 100d) / 100d;
         }
     }
 
