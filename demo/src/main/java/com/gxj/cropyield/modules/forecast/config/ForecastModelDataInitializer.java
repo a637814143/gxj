@@ -34,14 +34,9 @@ public class ForecastModelDataInitializer implements ApplicationRunner {
                 "使用 DeepLearning4j 训练的 LSTM 神经网络，根据历史时间序列生成逐期产量预测。"
         );
         ensureDefaultModel(
-                "Smile Holt-Winters 季节模型",
-                ForecastModel.ModelType.PROPHET,
-                "基于 Smile 库 Holt-Winters 平滑算法的季节性模型，支持趋势与季节性叠加预测。"
-        );
-        ensureDefaultModel(
                 "天气因子多元回归模型",
                 ForecastModel.ModelType.WEATHER_REGRESSION,
-                "基于年度与关键生育期气象特征的多元线性回归模型，可区分夏收/秋收作物并结合天气趋势推演未来产量。"
+                "结合逐年气象特征与历史产量进行多元线性回归，量化天气变化对产量的影响。"
         );
     }
 
