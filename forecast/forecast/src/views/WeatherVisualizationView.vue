@@ -98,6 +98,8 @@ const recordLimit = ref(120)
 const loading = ref(false)
 const records = ref([])
 const summary = ref(null)
+const suppressRangeWatch = ref(false)
+const userCustomizedRange = ref(false)
 
 const tableHeaderStyle = () => ({
   background: '#f4f7fb',
@@ -114,6 +116,10 @@ const summaryCards = computed(() => {
   }
   const info = summary.value
   return [
+    {
+      label: '数据覆盖范围',
+      value: formatCoverage(info.firstRecordDate, info.lastRecordDate)
+    },
     {
       label: '平均最高温',
       value: formatMetric(info.averageMaxTemperature, '℃')
@@ -223,6 +229,16 @@ function formatMetric(value, unit) {
   return `${formatNumber(value)} ${unit}`
 }
 
+function formatCoverage(start, end) {
+  if (!start && !end) {
+    return '—'
+  }
+  if (start && end) {
+    return `${formatDate(start)} 至 ${formatDate(end)}`
+  }
+  return formatDate(start || end)
+}
+
 function formatDate(value) {
   if (!value) return '-'
   const date = new Date(value)
@@ -249,6 +265,7 @@ const fetchRegions = async () => {
     const payload = Array.isArray(data?.data) ? data.data : []
     regionOptions.value = payload.map(item => ({ id: item.id, label: item.name }))
     if (!selectedRegionId.value && regionOptions.value.length) {
+      userCustomizedRange.value = false
       selectedRegionId.value = regionOptions.value[0].id
     }
   } catch (error) {
@@ -270,6 +287,14 @@ const loadWeatherData = async () => {
     const { data } = await fetchWeatherDataset(params)
     const payload = data?.data
     summary.value = payload?.summary || null
+    if (!userCustomizedRange.value && summary.value?.firstRecordDate && summary.value?.lastRecordDate) {
+      const coverageRange = [summary.value.firstRecordDate, summary.value.lastRecordDate]
+      const currentRange = Array.isArray(dateRange.value) ? dateRange.value : []
+      if (currentRange[0] !== coverageRange[0] || currentRange[1] !== coverageRange[1]) {
+        suppressRangeWatch.value = true
+        dateRange.value = coverageRange
+      }
+    }
     records.value = Array.isArray(payload?.records)
       ? payload.records.map(item => ({
           ...item,
@@ -283,23 +308,28 @@ const loadWeatherData = async () => {
   }
 }
 
-watch(selectedRegionId, () => {
-  if (selectedRegionId.value) {
+watch(selectedRegionId, newValue => {
+  if (newValue) {
+    userCustomizedRange.value = false
     loadWeatherData()
+  } else {
+    records.value = []
+    summary.value = null
   }
 })
 
 watch(dateRange, () => {
+  if (suppressRangeWatch.value) {
+    suppressRangeWatch.value = false
+    return
+  }
+  userCustomizedRange.value = true
   if (selectedRegionId.value) {
     loadWeatherData()
   }
 })
 
 onMounted(async () => {
-  const today = new Date()
-  const start = new Date(today)
-  start.setMonth(start.getMonth() - 3)
-  dateRange.value = [start.toISOString().slice(0, 10), today.toISOString().slice(0, 10)]
   await fetchRegions()
   if (selectedRegionId.value) {
     loadWeatherData()

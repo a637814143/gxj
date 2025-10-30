@@ -16,6 +16,8 @@ public record WeatherDatasetSummary(
         Double totalSunshineHours,
         Double averageSunshineHours,
         String dominantWeather,
-        Double dominantWeatherRatio
+        Double dominantWeatherRatio,
+        LocalDate firstRecordDate,
+        LocalDate lastRecordDate
 ) {
 }
