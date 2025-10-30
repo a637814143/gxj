@@ -26,11 +26,9 @@ public class ForecastModelSchemaMigrator implements ApplicationRunner {
     public void run(ApplicationArguments args) {
         try {
             int removed = jdbcTemplate.update(
-                    "DELETE FROM forecast_model WHERE type NOT IN (?, ?, ?, ?)",
-                    "ARIMA",
+                    "DELETE FROM forecast_model WHERE type NOT IN (?, ?)",
                     "LSTM",
-                    "RANDOM_FOREST",
-                    "PROPHET"
+                    "WEATHER_REGRESSION"
             );
             if (removed > 0) {
                 log.info("Removed {} forecast models with deprecated types", removed);
