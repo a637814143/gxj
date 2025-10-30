@@ -100,6 +100,18 @@ public class WeatherRecordServiceImpl implements WeatherRecordService {
                 .map(entry -> round((double) entry.getValue() / total))
                 .orElse(null);
 
+        LocalDate firstRecordDate = records.stream()
+                .map(WeatherRecord::getRecordDate)
+                .filter(Objects::nonNull)
+                .min(LocalDate::compareTo)
+                .orElse(null);
+
+        LocalDate lastRecordDate = records.stream()
+                .map(WeatherRecord::getRecordDate)
+                .filter(Objects::nonNull)
+                .max(LocalDate::compareTo)
+                .orElse(null);
+
         return new WeatherDatasetSummary(
                 total,
                 avgMax,
@@ -111,7 +123,9 @@ public class WeatherRecordServiceImpl implements WeatherRecordService {
                 totalSunshine,
                 avgSunshine,
                 dominantWeather.map(Map.Entry::getKey).orElse(null),
-                dominantRatio
+                dominantRatio,
+                firstRecordDate,
+                lastRecordDate
         );
     }
 
