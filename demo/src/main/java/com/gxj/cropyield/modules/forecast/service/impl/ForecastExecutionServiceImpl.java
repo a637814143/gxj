@@ -3,6 +3,7 @@ package com.gxj.cropyield.modules.forecast.service.impl;
 import com.gxj.cropyield.common.exception.BusinessException;
 import com.gxj.cropyield.common.response.ResultCode;
 import com.gxj.cropyield.modules.base.entity.Crop;
+import com.gxj.cropyield.modules.base.enums.HarvestSeason;
 import com.gxj.cropyield.modules.base.entity.Region;
 import com.gxj.cropyield.modules.base.repository.CropRepository;
 import com.gxj.cropyield.modules.base.repository.RegionRepository;
@@ -39,8 +40,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -125,7 +126,7 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
 
         Map<Integer, Map<String, Double>> weatherFeatures = Collections.emptyMap();
         if (model.getType() == ForecastModel.ModelType.WEATHER_REGRESSION) {
-            Map<Integer, Map<String, Double>> computedFeatures = buildWeatherFeatures(region.getId(), limitedHistory);
+            Map<Integer, Map<String, Double>> computedFeatures = buildWeatherFeatures(region.getId(), crop, limitedHistory);
             long coveredYears = limitedHistory.stream()
                 .map(observation -> observation.record().getYear())
                 .filter(year -> computedFeatures.containsKey(year))
@@ -400,11 +401,12 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
     }
 
     private Map<Integer, Map<String, Double>> buildWeatherFeatures(Long regionId,
+                                                                   Crop crop,
                                                                    List<HistoryObservation> history) {
         if (history.isEmpty()) {
             return Collections.emptyMap();
         }
-        Set<Integer> historyYears = new HashSet<>();
+        Set<Integer> historyYears = new LinkedHashSet<>();
         int minYear = Integer.MAX_VALUE;
         int maxYear = Integer.MIN_VALUE;
         for (HistoryObservation observation : history) {
@@ -420,41 +422,117 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         if (historyYears.isEmpty()) {
             return Collections.emptyMap();
         }
-        LocalDate startDate = LocalDate.of(minYear, 1, 1);
-        LocalDate endDate = LocalDate.of(maxYear, 12, 31);
+
+        HarvestSeason season = crop != null && crop.getHarvestSeason() != null
+            ? crop.getHarvestSeason()
+            : HarvestSeason.ANNUAL;
+        SeasonalDefinition definition = SeasonalDefinition.of(season);
+
+        LocalDate queryStart = definition.computeQueryStart(minYear);
+        LocalDate queryEnd = definition.computeQueryEnd(maxYear);
         List<WeatherRecord> records = weatherRecordRepository
-            .findByRegionIdAndRecordDateBetween(regionId, startDate, endDate);
+            .findByRegionIdAndRecordDateBetween(regionId, queryStart, queryEnd);
         if (records.isEmpty()) {
             return Collections.emptyMap();
         }
-        Map<Integer, WeatherStats> statsByYear = new HashMap<>();
-        for (WeatherRecord record : records) {
-            if (record.getRecordDate() == null) {
-                continue;
-            }
-            int year = record.getRecordDate().getYear();
-            if (!historyYears.contains(year)) {
-                continue;
-            }
-            WeatherStats stats = statsByYear.computeIfAbsent(year, key -> new WeatherStats());
-            stats.accept(record);
-        }
-        Map<Integer, Map<String, Double>> features = new HashMap<>();
+
+        Map<Integer, Map<String, WeatherStats>> statsByYear = new HashMap<>();
         for (Integer year : historyYears) {
-            WeatherStats stats = statsByYear.get(year);
-            if (stats == null) {
+            Map<String, WeatherStats> windows = new LinkedHashMap<>();
+            windows.put("season", new WeatherStats());
+            for (String prefix : definition.windowPrefixes()) {
+                windows.put(prefix, new WeatherStats());
+            }
+            statsByYear.put(year, windows);
+        }
+
+        for (WeatherRecord record : records) {
+            LocalDate date = record.getRecordDate();
+            if (date == null) {
                 continue;
             }
-            Map<String, Double> featureMap = new LinkedHashMap<>();
-            stats.averageMax().ifPresent(value -> featureMap.put("avgMaxTemperature", roundFeature(value)));
-            stats.averageMin().ifPresent(value -> featureMap.put("avgMinTemperature", roundFeature(value)));
-            stats.temperatureRange().ifPresent(value -> featureMap.put("avgDiurnalRange", roundFeature(value)));
-            stats.totalSunshine().ifPresent(value -> featureMap.put("totalSunshineHours", roundFeature(value)));
-            if (!featureMap.isEmpty()) {
-                features.put(year, featureMap);
+            Integer targetYear = definition.resolveTargetYear(date);
+            if (targetYear == null || !historyYears.contains(targetYear)) {
+                continue;
+            }
+            Map<String, WeatherStats> windows = statsByYear.get(targetYear);
+            if (windows == null) {
+                continue;
+            }
+            WeatherStats seasonStats = windows.get("season");
+            if (seasonStats == null) {
+                seasonStats = new WeatherStats();
+                windows.put("season", seasonStats);
+            }
+            seasonStats.accept(record);
+            String windowKey = definition.resolveWindowKey(date);
+            if (windowKey != null) {
+                windows.computeIfAbsent(windowKey, key -> new WeatherStats()).accept(record);
             }
         }
-        return features;
+
+        Map<Integer, Map<String, Double>> prepared = new HashMap<>();
+        Set<String> commonKeys = null;
+        for (Map.Entry<Integer, Map<String, WeatherStats>> entry : statsByYear.entrySet()) {
+            Map<String, Double> featureMap = new LinkedHashMap<>();
+            for (Map.Entry<String, WeatherStats> windowEntry : entry.getValue().entrySet()) {
+                appendWeatherFeatures(featureMap, windowEntry.getKey(), windowEntry.getValue());
+            }
+            if (!featureMap.isEmpty()) {
+                prepared.put(entry.getKey(), featureMap);
+                if (commonKeys == null) {
+                    commonKeys = new LinkedHashSet<>(featureMap.keySet());
+                } else {
+                    commonKeys.retainAll(featureMap.keySet());
+                }
+            }
+        }
+
+        if (prepared.isEmpty() || commonKeys == null || commonKeys.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        Map<Integer, Map<String, Double>> aligned = new HashMap<>();
+        for (Map.Entry<Integer, Map<String, Double>> entry : prepared.entrySet()) {
+            Map<String, Double> filtered = new LinkedHashMap<>();
+            boolean complete = true;
+            for (String key : commonKeys) {
+                Double value = entry.getValue().get(key);
+                if (value == null) {
+                    complete = false;
+                    break;
+                }
+                filtered.put(key, value);
+            }
+            if (complete) {
+                aligned.put(entry.getKey(), filtered);
+            }
+        }
+        return aligned;
+    }
+
+    private void appendWeatherFeatures(Map<String, Double> featureMap,
+                                       String prefix,
+                                       WeatherStats stats) {
+        if (stats == null) {
+            return;
+        }
+        String effectivePrefix = "season".equals(prefix) ? "" : prefix;
+        stats.averageMax()
+            .ifPresent(value -> featureMap.put(composeFeatureName(effectivePrefix, "AvgMaxTemperature"), roundFeature(value)));
+        stats.averageMin()
+            .ifPresent(value -> featureMap.put(composeFeatureName(effectivePrefix, "AvgMinTemperature"), roundFeature(value)));
+        stats.temperatureRange()
+            .ifPresent(value -> featureMap.put(composeFeatureName(effectivePrefix, "AvgDiurnalRange"), roundFeature(value)));
+        stats.totalSunshine()
+            .ifPresent(value -> featureMap.put(composeFeatureName(effectivePrefix, "TotalSunshineHours"), roundFeature(value)));
+    }
+
+    private String composeFeatureName(String prefix, String suffix) {
+        if (prefix == null || prefix.isEmpty()) {
+            return Character.toLowerCase(suffix.charAt(0)) + suffix.substring(1);
+        }
+        return prefix + suffix;
     }
 
     private double roundFeature(double value) {
@@ -526,6 +604,92 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
 
         OptionalDouble temperatureRange() {
             return rangeCount > 0 ? OptionalDouble.of(rangeSum / rangeCount) : OptionalDouble.empty();
+        }
+    }
+
+    private static final class SeasonalDefinition {
+        private final HarvestSeason season;
+        private final List<String> windowPrefixes;
+
+        private SeasonalDefinition(HarvestSeason season, List<String> windowPrefixes) {
+            this.season = season;
+            this.windowPrefixes = windowPrefixes;
+        }
+
+        static SeasonalDefinition of(HarvestSeason season) {
+            HarvestSeason resolved = season != null ? season : HarvestSeason.ANNUAL;
+            return switch (resolved) {
+                case SUMMER_GRAIN -> new SeasonalDefinition(resolved, List.of("winterDormancy", "springRipening"));
+                case AUTUMN_GRAIN -> new SeasonalDefinition(resolved, List.of("sowingEstablishment", "grainFill"));
+                default -> new SeasonalDefinition(resolved, List.of());
+            };
+        }
+
+        LocalDate computeQueryStart(int year) {
+            return switch (season) {
+                case SUMMER_GRAIN -> LocalDate.of(year - 1, 10, 1);
+                case AUTUMN_GRAIN -> LocalDate.of(year, 3, 1);
+                default -> LocalDate.of(year, 1, 1);
+            };
+        }
+
+        LocalDate computeQueryEnd(int year) {
+            return switch (season) {
+                case SUMMER_GRAIN -> LocalDate.of(year, 7, 31);
+                case AUTUMN_GRAIN -> LocalDate.of(year, 11, 30);
+                default -> LocalDate.of(year, 12, 31);
+            };
+        }
+
+        Integer resolveTargetYear(LocalDate date) {
+            int month = date.getMonthValue();
+            return switch (season) {
+                case SUMMER_GRAIN -> {
+                    if (month >= 10) {
+                        yield date.getYear() + 1;
+                    }
+                    if (month <= 7) {
+                        yield date.getYear();
+                    }
+                    yield null;
+                }
+                case AUTUMN_GRAIN -> {
+                    if (month >= 3 && month <= 11) {
+                        yield date.getYear();
+                    }
+                    yield null;
+                }
+                default -> date.getYear();
+            };
+        }
+
+        String resolveWindowKey(LocalDate date) {
+            int month = date.getMonthValue();
+            return switch (season) {
+                case SUMMER_GRAIN -> {
+                    if (month >= 10 || month <= 2) {
+                        yield "winterDormancy";
+                    }
+                    if (month >= 3 && month <= 7) {
+                        yield "springRipening";
+                    }
+                    yield null;
+                }
+                case AUTUMN_GRAIN -> {
+                    if (month >= 3 && month <= 6) {
+                        yield "sowingEstablishment";
+                    }
+                    if (month >= 7 && month <= 11) {
+                        yield "grainFill";
+                    }
+                    yield null;
+                }
+                default -> null;
+            };
+        }
+
+        List<String> windowPrefixes() {
+            return windowPrefixes;
         }
     }
 

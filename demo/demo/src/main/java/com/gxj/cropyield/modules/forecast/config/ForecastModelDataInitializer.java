@@ -41,7 +41,7 @@ public class ForecastModelDataInitializer implements ApplicationRunner {
         ensureDefaultModel(
                 "天气因子多元回归模型",
                 ForecastModel.ModelType.WEATHER_REGRESSION,
-                "基于年度气象特征与历史产量的多元线性回归模型，结合天气趋势推演未来产量。"
+                "基于年度与关键生育期气象特征的多元线性回归模型，可区分夏收/秋收作物并结合天气趋势推演未来产量。"
         );
     }
 

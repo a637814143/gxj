@@ -11,13 +11,14 @@ ON DUPLICATE KEY UPDATE
     description = VALUES(description);
 
 -- 初始化基础农作物信息
-INSERT INTO base_crop (id, code, name, category, description)
+INSERT INTO base_crop (id, code, name, category, harvest_season, description)
 VALUES
-    (1, 'WHEAT', '小麦', '粮食作物', '冬小麦是预测模型的主要示例作物。'),
-    (2, 'CORN', '玉米', '粮食作物', '夏玉米用于演示多作物对比场景。')
+    (1, 'WHEAT', '小麦', '粮食作物', 'SUMMER_GRAIN', '冬小麦是预测模型的主要示例作物。'),
+    (2, 'CORN', '玉米', '粮食作物', 'AUTUMN_GRAIN', '夏玉米用于演示多作物对比场景。')
 ON DUPLICATE KEY UPDATE
     name = VALUES(name),
     category = VALUES(category),
+    harvest_season = VALUES(harvest_season),
     description = VALUES(description);
 
 -- 初始化系统权限
