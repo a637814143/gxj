@@ -14,6 +14,6 @@ public record ForecastEngineRequest(
     Map<String, Object> parameters
 ) {
 
-    public record HistoryPoint(String period, Double value) {
+    public record HistoryPoint(String period, Double value, Map<String, Double> features) {
     }
 }
