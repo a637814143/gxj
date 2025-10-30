@@ -1,5 +1,16 @@
 <template>
   <div class="weather-analytics-page">
+    <div v-if="showWeatherNavigation" class="weather-type-bar">
+      <el-tabs v-model="selectedWeatherType" class="weather-type-tabs">
+        <el-tab-pane label="全部天气" name="ALL" />
+        <el-tab-pane
+          v-for="option in weatherTypeOptions"
+          :key="option.value"
+          :label="option.label"
+          :name="option.value"
+        />
+      </el-tabs>
+    </div>
     <el-card class="filter-card" shadow="hover">
       <div class="filter-row">
         <el-select v-model="selectedRegionId" placeholder="选择地区" class="filter-select">
@@ -61,7 +72,7 @@
 
       <el-card shadow="hover" class="table-card">
         <template #header>逐日气象记录</template>
-        <el-table :data="records" border :header-cell-style="tableHeaderStyle" empty-text="暂无数据">
+        <el-table :data="pagedRecords" border :header-cell-style="tableHeaderStyle" empty-text="暂无数据">
           <el-table-column prop="recordDate" label="日期" width="140">
             <template #default="{ row }">{{ formatDate(row.recordDate) }}</template>
           </el-table-column>
@@ -79,6 +90,16 @@
           </el-table-column>
           <el-table-column prop="dataSource" label="数据来源" min-width="200" show-overflow-tooltip />
         </el-table>
+        <div v-if="records.length" class="table-pagination">
+          <el-pagination
+            v-model:current-page="currentPage"
+            :page-size="pageSize"
+            layout="prev, pager, next"
+            :total="records.length"
+            hide-on-single-page
+            @current-change="handlePageChange"
+          />
+        </div>
       </el-card>
     </template>
   </div>
@@ -90,6 +111,7 @@ import { ElMessage } from 'element-plus'
 import BaseChart from '@/components/charts/BaseChart.vue'
 import apiClient from '@/services/http'
 import { fetchWeatherDataset } from '@/services/weather'
+import { useAuthStore } from '@/stores/auth'
 
 const regionOptions = ref([])
 const selectedRegionId = ref(null)
@@ -100,6 +122,61 @@ const records = ref([])
 const summary = ref(null)
 const suppressRangeWatch = ref(false)
 const userCustomizedRange = ref(false)
+const currentPage = ref(1)
+const pageSize = 10
+const selectedWeatherType = ref('ALL')
+
+const authStore = useAuthStore()
+
+const isAdminExperience = computed(() => {
+  const roles = authStore.user?.roles
+  if (!roles) {
+    return false
+  }
+  if (Array.isArray(roles)) {
+    return roles.includes('ADMIN')
+  }
+  return roles === 'ADMIN'
+})
+
+const normalizeWeather = text => {
+  if (!text || !String(text).trim()) {
+    return '未标注'
+  }
+  return String(text).trim()
+}
+
+const weatherTypeOptions = computed(() => {
+  const unique = new Map()
+  records.value.forEach(record => {
+    const normalized = normalizeWeather(record.weatherText)
+    if (!unique.has(normalized)) {
+      unique.set(normalized, {
+        value: normalized,
+        label: normalized
+      })
+    }
+  })
+  return Array.from(unique.values())
+})
+
+const showWeatherNavigation = computed(
+  () => !isAdminExperience.value && weatherTypeOptions.value.length > 0
+)
+
+const filteredRecords = computed(() => {
+  if (selectedWeatherType.value === 'ALL') {
+    return records.value
+  }
+  return records.value.filter(
+    record => normalizeWeather(record.weatherText) === selectedWeatherType.value
+  )
+})
+
+const pagedRecords = computed(() => {
+  const start = (currentPage.value - 1) * pageSize
+  return filteredRecords.value.slice(start, start + pageSize)
+})
 
 const tableHeaderStyle = () => ({
   background: '#f4f7fb',
@@ -108,7 +185,9 @@ const tableHeaderStyle = () => ({
   fontSize: '13px'
 })
 
-const hasData = computed(() => Array.isArray(records.value) && records.value.length > 0)
+const hasData = computed(
+  () => Array.isArray(filteredRecords.value) && filteredRecords.value.length > 0
+)
 
 const summaryCards = computed(() => {
   if (!summary.value) {
@@ -143,10 +222,18 @@ const summaryCards = computed(() => {
   ]
 })
 
-const temperatureCategories = computed(() => records.value.map(record => formatDate(record.recordDate)))
-const maxTemperatureSeries = computed(() => records.value.map(record => record.maxTemperature ?? null))
-const minTemperatureSeries = computed(() => records.value.map(record => record.minTemperature ?? null))
-const sunshineSeries = computed(() => records.value.map(record => record.sunshineHours ?? 0))
+const temperatureCategories = computed(() =>
+  filteredRecords.value.map(record => formatDate(record.recordDate))
+)
+const maxTemperatureSeries = computed(() =>
+  filteredRecords.value.map(record => record.maxTemperature ?? null)
+)
+const minTemperatureSeries = computed(() =>
+  filteredRecords.value.map(record => record.minTemperature ?? null)
+)
+const sunshineSeries = computed(() =>
+  filteredRecords.value.map(record => record.sunshineHours ?? 0)
+)
 
 const temperatureOption = computed(() => ({
   tooltip: { trigger: 'axis' },
@@ -180,7 +267,7 @@ const weatherFrequencyOption = computed(() => {
       series: [{ type: 'pie', data: [] }]
     }
   }
-  const counts = records.value.reduce((acc, record) => {
+  const counts = filteredRecords.value.reduce((acc, record) => {
     const key = record.weatherText || '未标注'
     acc[key] = (acc[key] || 0) + 1
     return acc
@@ -209,7 +296,7 @@ const temperatureGapOption = computed(() => ({
       name: '日均温差',
       type: 'line',
       smooth: true,
-      data: records.value.map(record => {
+      data: filteredRecords.value.map(record => {
         if (record.maxTemperature == null || record.minTemperature == null) {
           return null
         }
@@ -301,11 +388,17 @@ const loadWeatherData = async () => {
           recordDate: item.recordDate
         }))
       : []
+    selectedWeatherType.value = 'ALL'
+    currentPage.value = 1
   } catch (error) {
     ElMessage.error(error?.response?.data?.message || '获取气象数据失败')
   } finally {
     loading.value = false
   }
+}
+
+const handlePageChange = page => {
+  currentPage.value = page
 }
 
 watch(selectedRegionId, newValue => {
@@ -329,6 +422,19 @@ watch(dateRange, () => {
   }
 })
 
+watch(selectedWeatherType, () => {
+  currentPage.value = 1
+})
+
+watch(weatherTypeOptions, options => {
+  if (
+    selectedWeatherType.value !== 'ALL' &&
+    !options.some(option => option.value === selectedWeatherType.value)
+  ) {
+    selectedWeatherType.value = 'ALL'
+  }
+})
+
 onMounted(async () => {
   await fetchRegions()
   if (selectedRegionId.value) {
@@ -342,6 +448,24 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.weather-type-bar {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 4px 16px 0;
+}
+
+.weather-type-tabs :deep(.el-tabs__header) {
+  margin: 0;
+}
+
+.weather-type-tabs :deep(.el-tabs__nav-wrap) {
+  padding: 4px 0;
+}
+
+.weather-type-tabs :deep(.el-tabs__nav) {
+  gap: 12px;
 }
 
 .filter-card {
@@ -400,6 +524,12 @@ onMounted(async () => {
 .chart-card {
   border-radius: 12px;
   min-height: 360px;
+}
+
+.table-pagination {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .table-card {
