@@ -20,8 +20,13 @@ public record RegisterRequest(
     String fullName,
 
     @Email(message = "邮箱格式不正确")
+    @NotBlank(message = "邮箱不能为空")
     @Size(max = 128, message = "邮箱长度不能超过128位")
     String email,
+
+    @NotBlank(message = "邮箱验证码不能为空")
+    @Size(max = 16, message = "邮箱验证码长度不能超过16位")
+    String emailCode,
 
     String roleCode
 ) {

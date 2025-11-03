@@ -11,6 +11,18 @@ spring:
     username: root
     password: 123456
     driver-class-name: com.mysql.cj.jdbc.Driver
+  mail:
+    host: smtp.example.com
+    port: 587
+    username: your_username
+    password: your_password
+    from: no-reply@cropyield.local
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
   sql:
     init:
       mode: always
