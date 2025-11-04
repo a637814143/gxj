@@ -32,10 +32,12 @@ public class EmailSender {
                        @Value("${spring.mail.from:}") String configuredFrom,
                        @Value("${spring.mail.username:}") String mailUsername) {
         this.mailSender = mailSender;
-        if (StringUtils.hasText(configuredFrom)) {
-            this.defaultFrom = configuredFrom;
-        } else if (StringUtils.hasText(mailUsername)) {
-            this.defaultFrom = mailUsername;
+        String normalizedFrom = StringUtils.trimWhitespace(configuredFrom);
+        String normalizedUsername = StringUtils.trimWhitespace(mailUsername);
+        if (StringUtils.hasText(normalizedFrom)) {
+            this.defaultFrom = normalizedFrom;
+        } else if (StringUtils.hasText(normalizedUsername)) {
+            this.defaultFrom = normalizedUsername;
         } else {
             this.defaultFrom = "no-reply@cropyield.local";
         }
