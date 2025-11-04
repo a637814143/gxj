@@ -63,17 +63,29 @@
           </el-form-item>
         </div>
         <div class="form-grid">
-          <el-form-item label="邮箱" :error="errors.email">
-            <el-input
-              v-model.trim="form.email"
-              placeholder="请输入邮箱（选填）"
-              autocomplete="email"
-              clearable
-            >
-              <template #prefix>
-                <el-icon><Message /></el-icon>
-              </template>
-            </el-input>
+          <el-form-item label="邮箱" :error="errors.email" class="email-item">
+            <div class="email-input-group">
+              <el-input
+                v-model.trim="form.email"
+                placeholder="请输入邮箱"
+                autocomplete="email"
+                clearable
+              >
+                <template #prefix>
+                  <el-icon><Message /></el-icon>
+                </template>
+              </el-input>
+              <el-button
+                class="send-code-button"
+                type="primary"
+                :loading="codeSending"
+                :disabled="codeSending || sendCountdown > 0"
+                @click="handleSendCode"
+              >
+                <template v-if="sendCountdown > 0">{{ sendCountdown }}s后重试</template>
+                <template v-else>获取验证码</template>
+              </el-button>
+            </div>
           </el-form-item>
           <el-form-item label="用户类型">
             <el-select v-model="form.roleCode" placeholder="请选择用户类型">
@@ -84,6 +96,31 @@
                 :value="role.value"
               />
             </el-select>
+          </el-form-item>
+        </div>
+        <div class="form-grid">
+          <el-form-item label="图形验证码" :error="errors.captchaCode" class="captcha-item">
+            <el-input v-model.trim="form.captchaCode" placeholder="请输入图形验证码" maxlength="8">
+              <template #prefix>
+                <el-icon><Picture /></el-icon>
+              </template>
+            </el-input>
+            <div class="captcha-image" @click="refreshCaptcha" role="button">
+              <img v-if="captchaImage" :src="captchaImage" alt="验证码" />
+              <span v-else>点击刷新</span>
+            </div>
+          </el-form-item>
+          <el-form-item label="邮箱验证码" :error="errors.emailCode">
+            <el-input
+              v-model.trim="form.emailCode"
+              placeholder="请输入邮箱验证码"
+              maxlength="8"
+              clearable
+            >
+              <template #prefix>
+                <el-icon><Message /></el-icon>
+              </template>
+            </el-input>
           </el-form-item>
         </div>
         <div class="form-footer">
@@ -102,11 +139,12 @@
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue'
+import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { User, Lock, UserFilled, Message } from '@element-plus/icons-vue'
+import { User, Lock, UserFilled, Message, Picture } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/auth'
+import apiClient from '../services/http'
 
 const router = useRouter()
 const route = useRoute()
@@ -123,6 +161,8 @@ const form = reactive({
   confirmPassword: '',
   fullName: '',
   email: '',
+  emailCode: '',
+  captchaCode: '',
   roleCode: roles[0].value,
   rememberMe: true
 })
@@ -131,16 +171,56 @@ const errors = reactive({
   username: '',
   password: '',
   confirmPassword: '',
-  email: ''
+  email: '',
+  emailCode: '',
+  captchaCode: ''
 })
 
 const loading = ref(false)
+const codeSending = ref(false)
+const sendCountdown = ref(0)
+const captchaId = ref('')
+const captchaImage = ref('')
+let countdownTimer = null
+
+const clearCountdown = () => {
+  if (countdownTimer) {
+    window.clearInterval(countdownTimer)
+    countdownTimer = null
+  }
+}
+
+const startCountdown = seconds => {
+  clearCountdown()
+  sendCountdown.value = seconds
+  countdownTimer = window.setInterval(() => {
+    if (sendCountdown.value > 0) {
+      sendCountdown.value -= 1
+    }
+    if (sendCountdown.value <= 0) {
+      clearCountdown()
+    }
+  }, 1000)
+}
+
+const refreshCaptcha = async () => {
+  try {
+    const { data } = await apiClient.get('/api/auth/captcha', { params: { ts: Date.now() } })
+    const payload = data?.data
+    captchaId.value = payload?.captchaId || ''
+    captchaImage.value = payload?.imageBase64 || ''
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.message || '获取图形验证码失败')
+  }
+}
 
 const validateForm = () => {
   errors.username = ''
   errors.password = ''
   errors.confirmPassword = ''
   errors.email = ''
+  errors.emailCode = ''
+  errors.captchaCode = ''
 
   if (!form.username) {
     errors.username = '请输入用户名'
@@ -155,11 +235,79 @@ const validateForm = () => {
   } else if (form.password !== form.confirmPassword) {
     errors.confirmPassword = '两次输入的密码不一致'
   }
-  if (form.email && !/^\S+@\S+\.\S+$/.test(form.email)) {
+  if (!form.email) {
+    errors.email = '请输入邮箱'
+  } else if (!/^\S+@\S+\.\S+$/.test(form.email)) {
     errors.email = '请输入正确的邮箱地址'
   }
+  if (!form.emailCode) {
+    errors.emailCode = '请输入邮箱验证码'
+  }
 
-  return !errors.username && !errors.password && !errors.confirmPassword && !errors.email
+  return (
+    !errors.username &&
+    !errors.password &&
+    !errors.confirmPassword &&
+    !errors.email &&
+    !errors.emailCode
+  )
+}
+
+const validateEmailForCode = () => {
+  errors.email = ''
+  errors.captchaCode = ''
+
+  if (!form.email) {
+    errors.email = '请输入邮箱'
+    return false
+  }
+  if (!/^\S+@\S+\.\S+$/.test(form.email)) {
+    errors.email = '请输入正确的邮箱地址'
+    return false
+  }
+  if (!form.captchaCode) {
+    errors.captchaCode = '请输入图形验证码'
+    return false
+  }
+  return true
+}
+
+const handleSendCode = async () => {
+  if (sendCountdown.value > 0 || codeSending.value) {
+    return
+  }
+  if (!validateEmailForCode()) {
+    if (!captchaId.value) {
+      await refreshCaptcha()
+    }
+    return
+  }
+
+  if (!captchaId.value) {
+    await refreshCaptcha()
+    if (!captchaId.value) {
+      return
+    }
+  }
+
+  codeSending.value = true
+  try {
+    await apiClient.post('/api/auth/email-code', {
+      email: form.email,
+      captchaCode: form.captchaCode,
+      captchaId: captchaId.value
+    })
+    ElMessage.success('验证码已发送，请查收邮箱')
+    startCountdown(60)
+    form.captchaCode = ''
+    await refreshCaptcha()
+  } catch (error) {
+    const message = error?.response?.data?.message || error.message || '发送验证码失败，请稍后再试'
+    ElMessage.error(message)
+    await refreshCaptcha()
+  } finally {
+    codeSending.value = false
+  }
 }
 
 const handleSubmit = async () => {
@@ -173,6 +321,7 @@ const handleSubmit = async () => {
       password: form.password,
       fullName: form.fullName || undefined,
       email: form.email || undefined,
+      emailCode: form.emailCode,
       roleCode: form.roleCode,
       rememberMe: form.rememberMe
     })
@@ -191,6 +340,14 @@ const goToLogin = () => {
   const redirect = route.query.redirect
   router.push({ name: 'login', ...(redirect ? { query: { redirect } } : {}) })
 }
+
+onMounted(() => {
+  refreshCaptcha()
+})
+
+onBeforeUnmount(() => {
+  clearCountdown()
+})
 </script>
 
 <style scoped>
@@ -238,6 +395,44 @@ const goToLogin = () => {
   display: grid;
   gap: 20px;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.email-item .email-input-group {
+  display: flex;
+  gap: 12px;
+}
+
+.send-code-button {
+  white-space: nowrap;
+}
+
+.captcha-item {
+  display: flex;
+  gap: 12px;
+}
+
+.captcha-item .el-input {
+  flex: 1;
+}
+
+.captcha-image {
+  width: 120px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+  background-color: #f5f7fa;
+}
+
+.captcha-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 4px;
 }
 
 .form-footer {

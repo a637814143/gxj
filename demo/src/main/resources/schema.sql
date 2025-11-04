@@ -658,6 +658,20 @@ CREATE TABLE IF NOT EXISTS sys_refresh_token (
     CONSTRAINT fk_refresh_user FOREIGN KEY (user_id) REFERENCES sys_user (id) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '刷新令牌';
 
+CREATE TABLE IF NOT EXISTS auth_email_verification_code (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(128) NOT NULL,
+    code VARCHAR(16) NOT NULL,
+    expires_at DATETIME NOT NULL,
+    used TINYINT(1) NOT NULL DEFAULT 0,
+    requested_ip VARCHAR(64),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_auth_email (email),
+    KEY idx_auth_ip_created (requested_ip, created_at),
+    KEY idx_auth_expires (expires_at)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '邮箱验证码记录';
+
 CREATE TABLE IF NOT EXISTS sys_user_role (
     user_id BIGINT UNSIGNED NOT NULL,
     role_id BIGINT UNSIGNED NOT NULL,

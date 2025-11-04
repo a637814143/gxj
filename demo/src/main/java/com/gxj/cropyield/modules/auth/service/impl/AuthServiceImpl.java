@@ -16,6 +16,7 @@ import com.gxj.cropyield.modules.auth.repository.RoleRepository;
 import com.gxj.cropyield.modules.auth.repository.UserRepository;
 import com.gxj.cropyield.modules.auth.service.AuthService;
 import com.gxj.cropyield.modules.auth.service.CaptchaService;
+import com.gxj.cropyield.modules.auth.service.EmailVerificationService;
 import com.gxj.cropyield.modules.auth.service.LoginLogService;
 import com.gxj.cropyield.modules.auth.service.RefreshTokenService;
 import com.gxj.cropyield.modules.auth.constant.SystemRole;
@@ -51,6 +52,7 @@ public class AuthServiceImpl implements AuthService {
     private final JwtProperties jwtProperties;
     private final CaptchaService captchaService;
     private final RefreshTokenService refreshTokenService;
+    private final EmailVerificationService emailVerificationService;
     private final LoginLogService loginLogService;
     private final PasswordEncoder passwordEncoder;
     private final ConsultationDepartmentDirectory departmentDirectory;
@@ -62,6 +64,7 @@ public class AuthServiceImpl implements AuthService {
                            JwtProperties jwtProperties,
                            CaptchaService captchaService,
                            RefreshTokenService refreshTokenService,
+                           EmailVerificationService emailVerificationService,
                            LoginLogService loginLogService,
                            PasswordEncoder passwordEncoder,
                            ConsultationDepartmentDirectory departmentDirectory) {
@@ -72,6 +75,7 @@ public class AuthServiceImpl implements AuthService {
         this.jwtProperties = jwtProperties;
         this.captchaService = captchaService;
         this.refreshTokenService = refreshTokenService;
+        this.emailVerificationService = emailVerificationService;
         this.loginLogService = loginLogService;
         this.passwordEncoder = passwordEncoder;
         this.departmentDirectory = departmentDirectory;
@@ -116,6 +120,8 @@ public class AuthServiceImpl implements AuthService {
             .ifPresent(user -> {
                 throw new BusinessException(ResultCode.BAD_REQUEST, "用户名已存在");
             });
+
+        emailVerificationService.validateAndConsume(request.email(), request.emailCode());
 
         Role role = resolveRole(request.roleCode());
 
