@@ -11,20 +11,20 @@ spring:
     username: root
     password: 123456
     driver-class-name: com.mysql.cj.jdbc.Driver
-
   mail:
-    host: ${MAIL_HOST:smtp.qq.com}
-    port: ${MAIL_PORT:465}
-    username: ${MAIL_USERNAME:3056045684@qq.com}
-    password: ${MAIL_PASSWORD}
-    from: ${MAIL_FROM:${MAIL_USERNAME}}
+    host: smtp.qq.com
+    port: 465
+    username: 3056045684@qq.com
+    password: ${PWD}
+    from: 3056045684@qq.com
     properties:
       mail:
         smtp:
           auth: true
           ssl:
             enable: true
-
+          starttls:
+            enable: false
   sql:
     init:
       mode: always
