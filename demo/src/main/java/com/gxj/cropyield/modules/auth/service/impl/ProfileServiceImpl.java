@@ -9,6 +9,7 @@ import com.gxj.cropyield.modules.auth.dto.RoleSummary;
 import com.gxj.cropyield.modules.auth.entity.Role;
 import com.gxj.cropyield.modules.auth.entity.User;
 import com.gxj.cropyield.modules.auth.repository.UserRepository;
+import com.gxj.cropyield.modules.auth.service.PasswordPolicyValidator;
 import com.gxj.cropyield.modules.auth.service.ProfileService;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -31,10 +32,14 @@ public class ProfileServiceImpl implements ProfileService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final PasswordPolicyValidator passwordPolicyValidator;
 
-    public ProfileServiceImpl(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public ProfileServiceImpl(UserRepository userRepository,
+                              PasswordEncoder passwordEncoder,
+                              PasswordPolicyValidator passwordPolicyValidator) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.passwordPolicyValidator = passwordPolicyValidator;
     }
 
     @Override
@@ -72,6 +77,7 @@ public class ProfileServiceImpl implements ProfileService {
             throw new BusinessException(ResultCode.BAD_REQUEST, "原密码不正确");
         }
 
+        passwordPolicyValidator.validate(request.newPassword());
         user.setPassword(passwordEncoder.encode(request.newPassword()));
         userRepository.save(user);
     }
