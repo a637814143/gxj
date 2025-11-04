@@ -4,6 +4,7 @@ import com.gxj.cropyield.common.exception.BusinessException;
 import com.gxj.cropyield.common.response.ApiResponse;
 import com.gxj.cropyield.modules.auth.dto.AuthTokens;
 import com.gxj.cropyield.modules.auth.dto.CaptchaResponse;
+import com.gxj.cropyield.modules.auth.dto.EmailCodeRequest;
 import com.gxj.cropyield.modules.auth.dto.LoginRequest;
 import com.gxj.cropyield.modules.auth.dto.LoginResponse;
 import com.gxj.cropyield.modules.auth.dto.RefreshTokenRequest;
@@ -11,6 +12,7 @@ import com.gxj.cropyield.modules.auth.dto.RegisterRequest;
 import com.gxj.cropyield.modules.auth.dto.UserInfo;
 import com.gxj.cropyield.modules.auth.service.AuthService;
 import com.gxj.cropyield.modules.auth.service.CaptchaService;
+import com.gxj.cropyield.modules.auth.service.EmailVerificationService;
 import com.gxj.cropyield.modules.auth.service.LoginLogService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -31,17 +33,29 @@ public class AuthController {
 
     private final AuthService authService;
     private final CaptchaService captchaService;
+    private final EmailVerificationService emailVerificationService;
     private final LoginLogService loginLogService;
 
-    public AuthController(AuthService authService, CaptchaService captchaService, LoginLogService loginLogService) {
+    public AuthController(AuthService authService,
+                          CaptchaService captchaService,
+                          EmailVerificationService emailVerificationService,
+                          LoginLogService loginLogService) {
         this.authService = authService;
         this.captchaService = captchaService;
+        this.emailVerificationService = emailVerificationService;
         this.loginLogService = loginLogService;
     }
 
     @GetMapping("/captcha")
     public ApiResponse<CaptchaResponse> captcha() {
         return ApiResponse.success(captchaService.createCaptcha());
+    }
+
+    @PostMapping("/email-code")
+    public ApiResponse<Void> emailCode(@Valid @RequestBody EmailCodeRequest request, HttpServletRequest httpRequest) {
+        String ipAddress = resolveClientIp(httpRequest);
+        emailVerificationService.sendVerificationCode(request.email(), request.captchaId(), request.captchaCode(), ipAddress);
+        return ApiResponse.success();
     }
 
     @PostMapping("/register")
