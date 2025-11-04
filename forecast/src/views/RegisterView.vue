@@ -32,6 +32,27 @@
                 <el-icon><Lock /></el-icon>
               </template>
             </el-input>
+            <div class="password-strength">
+              <span class="strength-label">密码强度：</span>
+              <div class="strength-bars">
+                <span
+                  v-for="n in 3"
+                  :key="n"
+                  :class="[
+                    'strength-bar',
+                    {
+                      active: n <= passwordStrength.score,
+                      'level-weak': n <= passwordStrength.score && passwordStrength.level === 'weak',
+                      'level-medium': n <= passwordStrength.score && passwordStrength.level === 'medium',
+                      'level-strong': n <= passwordStrength.score && passwordStrength.level === 'strong'
+                    }
+                  ]"
+                />
+              </div>
+              <span class="strength-text" :class="`level-${passwordStrength.level}`">
+                {{ passwordStrength.label }}
+              </span>
+            </div>
           </el-form-item>
         </div>
         <div class="form-grid">
@@ -139,12 +160,13 @@
 </template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Lock, UserFilled, Message, Picture } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/auth'
 import apiClient from '../services/http'
+import { getPasswordStrength, validatePasswordPolicy } from '../utils/password'
 
 const router = useRouter()
 const route = useRoute()
@@ -182,6 +204,8 @@ const sendCountdown = ref(0)
 const captchaId = ref('')
 const captchaImage = ref('')
 let countdownTimer = null
+
+const passwordStrength = computed(() => getPasswordStrength(form.password))
 
 const clearCountdown = () => {
   if (countdownTimer) {
@@ -225,10 +249,9 @@ const validateForm = () => {
   if (!form.username) {
     errors.username = '请输入用户名'
   }
-  if (!form.password) {
-    errors.password = '请输入密码'
-  } else if (form.password.length < 6) {
-    errors.password = '密码长度至少为6位'
+  const passwordError = validatePasswordPolicy(form.password)
+  if (passwordError) {
+    errors.password = passwordError
   }
   if (!form.confirmPassword) {
     errors.confirmPassword = '请确认密码'
@@ -452,5 +475,63 @@ onBeforeUnmount(() => {
 
 .switch-auth .el-link {
   margin-left: 6px;
+}
+
+.password-strength {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #607d8b;
+}
+
+.password-strength .strength-label {
+  flex-shrink: 0;
+}
+
+.strength-bars {
+  display: flex;
+  gap: 4px;
+}
+
+.strength-bar {
+  width: 32px;
+  height: 4px;
+  border-radius: 2px;
+  background-color: #dcdfe6;
+  transition: background-color 0.3s ease;
+}
+
+.strength-bar.active.level-weak {
+  background-color: #f56c6c;
+}
+
+.strength-bar.active.level-medium {
+  background-color: #e6a23c;
+}
+
+.strength-bar.active.level-strong {
+  background-color: #67c23a;
+}
+
+.strength-text {
+  font-weight: 600;
+}
+
+.strength-text.level-weak {
+  color: #f56c6c;
+}
+
+.strength-text.level-medium {
+  color: #e6a23c;
+}
+
+.strength-text.level-strong {
+  color: #67c23a;
+}
+
+.strength-text.level-none {
+  color: #909399;
 }
 </style>

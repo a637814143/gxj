@@ -7,6 +7,8 @@ import com.gxj.cropyield.modules.auth.dto.CaptchaResponse;
 import com.gxj.cropyield.modules.auth.dto.EmailCodeRequest;
 import com.gxj.cropyield.modules.auth.dto.LoginRequest;
 import com.gxj.cropyield.modules.auth.dto.LoginResponse;
+import com.gxj.cropyield.modules.auth.dto.PasswordResetCodeRequest;
+import com.gxj.cropyield.modules.auth.dto.PasswordResetRequest;
 import com.gxj.cropyield.modules.auth.dto.RefreshTokenRequest;
 import com.gxj.cropyield.modules.auth.dto.RegisterRequest;
 import com.gxj.cropyield.modules.auth.dto.UserInfo;
@@ -14,6 +16,7 @@ import com.gxj.cropyield.modules.auth.service.AuthService;
 import com.gxj.cropyield.modules.auth.service.CaptchaService;
 import com.gxj.cropyield.modules.auth.service.EmailVerificationService;
 import com.gxj.cropyield.modules.auth.service.LoginLogService;
+import com.gxj.cropyield.modules.auth.service.PasswordResetService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -35,15 +38,18 @@ public class AuthController {
     private final CaptchaService captchaService;
     private final EmailVerificationService emailVerificationService;
     private final LoginLogService loginLogService;
+    private final PasswordResetService passwordResetService;
 
     public AuthController(AuthService authService,
                           CaptchaService captchaService,
                           EmailVerificationService emailVerificationService,
-                          LoginLogService loginLogService) {
+                          LoginLogService loginLogService,
+                          PasswordResetService passwordResetService) {
         this.authService = authService;
         this.captchaService = captchaService;
         this.emailVerificationService = emailVerificationService;
         this.loginLogService = loginLogService;
+        this.passwordResetService = passwordResetService;
     }
 
     @GetMapping("/captcha")
@@ -55,6 +61,21 @@ public class AuthController {
     public ApiResponse<Void> emailCode(@Valid @RequestBody EmailCodeRequest request, HttpServletRequest httpRequest) {
         String ipAddress = resolveClientIp(httpRequest);
         emailVerificationService.sendVerificationCode(request.email(), request.captchaId(), request.captchaCode(), ipAddress);
+        return ApiResponse.success();
+    }
+
+    @PostMapping("/password/reset-code")
+    public ApiResponse<Void> passwordResetCode(@Valid @RequestBody PasswordResetCodeRequest request, HttpServletRequest httpRequest) {
+        String ipAddress = resolveClientIp(httpRequest);
+        passwordResetService.sendResetCode(request, ipAddress);
+        return ApiResponse.success();
+    }
+
+    @PostMapping("/password/reset")
+    public ApiResponse<Void> passwordReset(@Valid @RequestBody PasswordResetRequest request, HttpServletRequest httpRequest) {
+        String ipAddress = resolveClientIp(httpRequest);
+        String userAgent = httpRequest.getHeader("User-Agent");
+        passwordResetService.resetPassword(request, ipAddress, userAgent);
         return ApiResponse.success();
     }
 

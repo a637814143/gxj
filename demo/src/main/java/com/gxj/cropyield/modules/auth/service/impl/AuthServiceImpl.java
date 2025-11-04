@@ -18,6 +18,7 @@ import com.gxj.cropyield.modules.auth.service.AuthService;
 import com.gxj.cropyield.modules.auth.service.CaptchaService;
 import com.gxj.cropyield.modules.auth.service.EmailVerificationService;
 import com.gxj.cropyield.modules.auth.service.LoginLogService;
+import com.gxj.cropyield.modules.auth.service.PasswordPolicyValidator;
 import com.gxj.cropyield.modules.auth.service.RefreshTokenService;
 import com.gxj.cropyield.modules.auth.constant.SystemRole;
 import com.gxj.cropyield.modules.consultation.dto.ConsultationDepartmentOption;
@@ -55,6 +56,7 @@ public class AuthServiceImpl implements AuthService {
     private final EmailVerificationService emailVerificationService;
     private final LoginLogService loginLogService;
     private final PasswordEncoder passwordEncoder;
+    private final PasswordPolicyValidator passwordPolicyValidator;
     private final ConsultationDepartmentDirectory departmentDirectory;
 
     public AuthServiceImpl(UserRepository userRepository,
@@ -67,6 +69,7 @@ public class AuthServiceImpl implements AuthService {
                            EmailVerificationService emailVerificationService,
                            LoginLogService loginLogService,
                            PasswordEncoder passwordEncoder,
+                           PasswordPolicyValidator passwordPolicyValidator,
                            ConsultationDepartmentDirectory departmentDirectory) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
@@ -78,6 +81,7 @@ public class AuthServiceImpl implements AuthService {
         this.emailVerificationService = emailVerificationService;
         this.loginLogService = loginLogService;
         this.passwordEncoder = passwordEncoder;
+        this.passwordPolicyValidator = passwordPolicyValidator;
         this.departmentDirectory = departmentDirectory;
     }
 
@@ -122,6 +126,7 @@ public class AuthServiceImpl implements AuthService {
             });
 
         emailVerificationService.validateAndConsume(request.email(), request.emailCode());
+        passwordPolicyValidator.validate(request.password());
 
         Role role = resolveRole(request.roleCode());
 
