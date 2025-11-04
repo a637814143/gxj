@@ -12,17 +12,19 @@ spring:
     password: 123456
     driver-class-name: com.mysql.cj.jdbc.Driver
   mail:
-    host: smtp.example.com
-    port: 587
+    host: ${MAIL_HOST:smtp.qq.com}
+    port: ${MAIL_PORT:465}
     username: ${key253614:your_username}
     password: ${MAIL_PASSWORD:your_password}
-    from: ${MAIL_FROM:${key253614:no-reply@cropyield.local}}
+    from: ${MAIL_FROM:${key253614:}}
     properties:
       mail:
         smtp:
           auth: true
+          ssl:
+            enable: ${MAIL_SSL_ENABLE:true}
           starttls:
-            enable: true
+            enable: ${MAIL_STARTTLS:false}
   sql:
     init:
       mode: always

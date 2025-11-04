@@ -12,6 +12,7 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
@@ -28,9 +29,16 @@ public class EmailSender {
     private final String defaultFrom;
 
     public EmailSender(JavaMailSender mailSender,
-                       @Value("${spring.mail.from:no-reply@cropyield.local}") String defaultFrom) {
+                       @Value("${spring.mail.from:}") String configuredFrom,
+                       @Value("${spring.mail.username:}") String mailUsername) {
         this.mailSender = mailSender;
-        this.defaultFrom = defaultFrom;
+        if (StringUtils.hasText(configuredFrom)) {
+            this.defaultFrom = configuredFrom;
+        } else if (StringUtils.hasText(mailUsername)) {
+            this.defaultFrom = mailUsername;
+        } else {
+            this.defaultFrom = "no-reply@cropyield.local";
+        }
     }
 
     @Async("mailTaskExecutor")
