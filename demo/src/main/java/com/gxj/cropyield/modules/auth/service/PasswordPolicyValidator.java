@@ -13,7 +13,8 @@ import java.util.regex.Pattern;
 @Component
 public class PasswordPolicyValidator {
 
-    private static final Pattern LETTER_PATTERN = Pattern.compile("[A-Za-z]");
+    private static final Pattern UPPERCASE_PATTERN = Pattern.compile("[A-Z]");
+    private static final Pattern LOWERCASE_PATTERN = Pattern.compile("[a-z]");
     private static final Pattern DIGIT_PATTERN = Pattern.compile("\\d");
     private static final Pattern DIGIT_ONLY_PATTERN = Pattern.compile("\\d+");
 
@@ -22,8 +23,10 @@ public class PasswordPolicyValidator {
             throw new BusinessException(ResultCode.BAD_REQUEST, "密码不能为空");
         }
         String password = rawPassword.trim();
-        if (!LETTER_PATTERN.matcher(password).find() || !DIGIT_PATTERN.matcher(password).find()) {
-            throw new BusinessException(ResultCode.BAD_REQUEST, "密码需同时包含字母和数字");
+        if (!UPPERCASE_PATTERN.matcher(password).find()
+                || !LOWERCASE_PATTERN.matcher(password).find()
+                || !DIGIT_PATTERN.matcher(password).find()) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "密码需同时包含大写字母、小写字母和数字");
         }
         if (isSequentialDigits(password)) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "密码不能为连续数字");
