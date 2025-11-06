@@ -10,7 +10,10 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -20,6 +23,8 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.gxj.cropyield.common.exception.BusinessException;
+import com.gxj.cropyield.common.response.ResultCode;
 import com.gxj.cropyield.modules.weather.config.WeatherProperties;
 import com.gxj.cropyield.modules.weather.config.WeatherProperties.QWeatherProperties;
 import com.gxj.cropyield.modules.weather.config.WeatherProperties.QWeatherProperties.LocationMode;
@@ -32,6 +37,8 @@ import com.gxj.cropyield.modules.weather.service.dto.WeatherRealtimeResponse;
  */
 @Service
 public class WeatherServiceImpl implements WeatherService {
+
+    private static final Logger log = LoggerFactory.getLogger(WeatherServiceImpl.class);
 
     private final RestTemplate restTemplate;
     private final WeatherProperties properties;
@@ -79,7 +86,7 @@ public class WeatherServiceImpl implements WeatherService {
     private WeatherRealtimeResponse fetchRealtimeWeather(double longitude, double latitude) {
         WeatherProperties.QWeatherProperties qweather = properties.getQweather();
         if (qweather == null || !StringUtils.hasText(qweather.getKey())) {
-            throw new IllegalStateException("未配置和风天气访问密钥");
+            throw new BusinessException(ResultCode.SERVER_ERROR, "未配置和风天气访问密钥");
         }
         String baseUrl = Optional.ofNullable(qweather.getBaseUrl()).filter(StringUtils::hasText)
             .orElse("https://m776x8rde7.re.qweatherapi.com/v7");
@@ -97,12 +104,12 @@ public class WeatherServiceImpl implements WeatherService {
         try {
             response = restTemplate.getForEntity(requestUri, JsonNode.class);
         } catch (HttpStatusCodeException ex) {
-            throw new IllegalStateException("调用和风天气实时接口失败: " + ex.getStatusCode() + " " + safeBody(ex), ex);
+            throw translateHttpException("实时", ex);
         } catch (RestClientException ex) {
-            throw new IllegalStateException("调用和风天气实时接口失败: " + ex.getMessage(), ex);
+            throw new BusinessException(ResultCode.SERVER_ERROR, "调用和风天气实时接口失败: " + ex.getMessage());
         }
         if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
-            throw new IllegalStateException("获取天气数据失败");
+            throw new BusinessException(ResultCode.SERVER_ERROR, "获取天气数据失败");
         }
 
         JsonNode body = response.getBody();
@@ -113,9 +120,9 @@ public class WeatherServiceImpl implements WeatherService {
                 errorMessage = body.path("refer").path("license").toString();
             }
             if (StringUtils.hasText(errorMessage)) {
-                throw new IllegalStateException("和风天气返回异常状态: " + errorMessage);
+                throw new BusinessException(ResultCode.SERVER_ERROR, "和风天气返回异常状态: " + errorMessage);
             }
-            throw new IllegalStateException("和风天气返回错误码: " + status);
+            throw new BusinessException(ResultCode.SERVER_ERROR, "和风天气返回错误码: " + status);
         }
 
         JsonNode nowNode = body.path("now");
@@ -179,7 +186,11 @@ public class WeatherServiceImpl implements WeatherService {
         ResponseEntity<JsonNode> response;
         try {
             response = restTemplate.getForEntity(requestUri, JsonNode.class);
+        } catch (HttpStatusCodeException ex) {
+            log.debug("调用和风天气空气质量接口失败: {} {}", ex.getStatusCode(), safeBody(ex));
+            return null;
         } catch (RestClientException ex) {
+            log.debug("调用和风天气空气质量接口异常: {}", ex.getMessage());
             return null;
         }
         if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
@@ -218,6 +229,26 @@ public class WeatherServiceImpl implements WeatherService {
             }
         }
         return longitude + "," + latitude;
+    }
+
+    private BusinessException translateHttpException(String apiName, HttpStatusCodeException ex) {
+        HttpStatus status = ex.getStatusCode();
+        ResultCode code = mapStatusToResult(status);
+        String body = safeBody(ex);
+        String message = StringUtils.hasText(body)
+            ? String.format("调用和风天气%s接口失败（%s %s）", apiName, status, body)
+            : String.format("调用和风天气%s接口失败（%s）", apiName, status);
+        return new BusinessException(code, message);
+    }
+
+    private ResultCode mapStatusToResult(HttpStatus status) {
+        return switch (status.value()) {
+            case 400 -> ResultCode.BAD_REQUEST;
+            case 401 -> ResultCode.UNAUTHORIZED;
+            case 403 -> ResultCode.FORBIDDEN;
+            case 404 -> ResultCode.NOT_FOUND;
+            default -> ResultCode.SERVER_ERROR;
+        };
     }
 
     private String safeBody(HttpStatusCodeException ex) {

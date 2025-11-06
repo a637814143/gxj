@@ -39,9 +39,7 @@ public class QWeatherLocationClient {
         if (qweather == null || !StringUtils.hasText(qweather.getKey())) {
             return Optional.empty();
         }
-        String geoBase = Optional.ofNullable(qweather.getGeoBaseUrl()).filter(StringUtils::hasText)
-            .orElse("https://geoapi.qweather.com/v2");
-        String trimmedBase = geoBase.endsWith("/") ? geoBase.substring(0, geoBase.length() - 1) : geoBase;
+        String trimmedBase = trimTrailingSlash(resolveGeoBaseUrl(qweather));
 
         URI requestUri = UriComponentsBuilder.fromHttpUrl(trimmedBase + "/city/lookup")
             .queryParam("location", longitude + "," + latitude)
@@ -81,6 +79,57 @@ public class QWeatherLocationClient {
             return Optional.empty();
         }
         return Optional.of(id);
+    }
+
+    private String resolveGeoBaseUrl(WeatherProperties.QWeatherProperties qweather) {
+        String configured = qweather.getGeoBaseUrl();
+        if (StringUtils.hasText(configured)) {
+            return configured;
+        }
+        String derived = deriveGeoBaseFromForecastBase(qweather.getBaseUrl());
+        if (StringUtils.hasText(derived)) {
+            return derived;
+        }
+        return "https://geoapi.qweather.com/v2";
+    }
+
+    private String deriveGeoBaseFromForecastBase(String baseUrl) {
+        if (!StringUtils.hasText(baseUrl)) {
+            return null;
+        }
+        try {
+            String normalized = baseUrl.endsWith("/") ? baseUrl : baseUrl + "/";
+            URI uri = URI.create(normalized);
+            String scheme = uri.getScheme();
+            if (!StringUtils.hasText(scheme)) {
+                scheme = "https";
+            }
+            String host = uri.getHost();
+            if (!StringUtils.hasText(host)) {
+                return null;
+            }
+            String derivedHost;
+            if (host.contains(".re.")) {
+                derivedHost = host.replaceFirst("\\.re\\.", ".geo.");
+            } else if (host.startsWith("re.")) {
+                derivedHost = host.replaceFirst("^re\\.", "geo.");
+            } else if (!host.contains(".geo.")) {
+                derivedHost = host.replaceFirst("\\.", ".geo.");
+            } else {
+                derivedHost = host;
+            }
+            return scheme + "://" + derivedHost + "/v2";
+        } catch (IllegalArgumentException ex) {
+            log.debug("无法从和风基础地址派生地理编码地址: {}", baseUrl, ex);
+            return null;
+        }
+    }
+
+    private String trimTrailingSlash(String value) {
+        if (!StringUtils.hasText(value)) {
+            return value;
+        }
+        return value.endsWith("/") ? value.substring(0, value.length() - 1) : value;
     }
 
     private String safeBody(HttpStatusCodeException ex) {

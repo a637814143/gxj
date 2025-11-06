@@ -45,7 +45,7 @@ public class WeatherProperties {
         /**
          * 和风天气地理位置接口基础地址。
          */
-        private String geoBaseUrl = "https://geoapi.qweather.com/v2";
+        private String geoBaseUrl;
 
         /**
          * 和风天气访问密钥。
