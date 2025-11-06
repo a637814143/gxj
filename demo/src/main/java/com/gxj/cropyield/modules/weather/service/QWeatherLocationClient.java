@@ -1,6 +1,7 @@
 package com.gxj.cropyield.modules.weather.service;
 
 import java.net.URI;
+import java.util.LinkedHashSet;
 import java.util.Optional;
 
 import org.slf4j.Logger;
@@ -39,58 +40,68 @@ public class QWeatherLocationClient {
         if (qweather == null || !StringUtils.hasText(qweather.getKey())) {
             return Optional.empty();
         }
-        String trimmedBase = trimTrailingSlash(resolveGeoBaseUrl(qweather));
+        for (String base : buildGeoBaseCandidates(qweather)) {
+            String trimmedBase = trimTrailingSlash(base);
 
-        URI requestUri = UriComponentsBuilder.fromHttpUrl(trimmedBase + "/city/lookup")
-            .queryParam("location", longitude + "," + latitude)
-            .queryParam("key", qweather.getKey())
-            .build(true)
-            .toUri();
+            URI requestUri = UriComponentsBuilder.fromHttpUrl(trimmedBase + "/city/lookup")
+                .queryParam("location", longitude + "," + latitude)
+                .queryParam("key", qweather.getKey())
+                .build(true)
+                .toUri();
 
-        ResponseEntity<JsonNode> response;
-        try {
-            response = restTemplate.getForEntity(requestUri, JsonNode.class);
-        } catch (HttpStatusCodeException ex) {
-            log.warn("和风天气地理编码接口返回异常状态: {} {}", ex.getStatusCode(), safeBody(ex));
-            return Optional.empty();
-        } catch (RestClientException ex) {
-            log.warn("调用和风天气地理编码接口失败: {}", ex.getMessage());
-            return Optional.empty();
+            ResponseEntity<JsonNode> response;
+            try {
+                response = restTemplate.getForEntity(requestUri, JsonNode.class);
+            } catch (HttpStatusCodeException ex) {
+                log.warn("和风天气地理编码接口返回异常状态 ({}): {} {}", trimmedBase, ex.getStatusCode(),
+                    safeBody(ex));
+                continue;
+            } catch (RestClientException ex) {
+                log.warn("调用和风天气地理编码接口失败 ({}): {}", trimmedBase, ex.getMessage());
+                continue;
+            }
+
+            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                continue;
+            }
+
+            JsonNode root = response.getBody();
+            if (!"200".equals(root.path("code").asText())) {
+                log.warn("和风天气地理编码返回错误码 ({}): {}", trimmedBase, root.path("code").asText());
+                continue;
+            }
+
+            JsonNode locationArray = root.path("location");
+            if (locationArray == null || !locationArray.isArray() || locationArray.isEmpty()) {
+                continue;
+            }
+
+            JsonNode first = locationArray.get(0);
+            String id = first.path("id").asText(null);
+            if (!StringUtils.hasText(id)) {
+                continue;
+            }
+            return Optional.of(id);
         }
 
-        if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
-            return Optional.empty();
-        }
-
-        JsonNode root = response.getBody();
-        if (!"200".equals(root.path("code").asText())) {
-            log.warn("和风天气地理编码返回错误码: {}", root.path("code").asText());
-            return Optional.empty();
-        }
-
-        JsonNode locationArray = root.path("location");
-        if (locationArray == null || !locationArray.isArray() || locationArray.isEmpty()) {
-            return Optional.empty();
-        }
-
-        JsonNode first = locationArray.get(0);
-        String id = first.path("id").asText(null);
-        if (!StringUtils.hasText(id)) {
-            return Optional.empty();
-        }
-        return Optional.of(id);
+        return Optional.empty();
     }
 
-    private String resolveGeoBaseUrl(WeatherProperties.QWeatherProperties qweather) {
-        String configured = qweather.getGeoBaseUrl();
-        if (StringUtils.hasText(configured)) {
-            return configured;
+    private Iterable<String> buildGeoBaseCandidates(WeatherProperties.QWeatherProperties qweather) {
+        LinkedHashSet<String> candidates = new LinkedHashSet<>();
+
+        if (StringUtils.hasText(qweather.getGeoBaseUrl())) {
+            candidates.add(qweather.getGeoBaseUrl());
         }
+
         String derived = deriveGeoBaseFromForecastBase(qweather.getBaseUrl());
         if (StringUtils.hasText(derived)) {
-            return derived;
+            candidates.add(derived);
         }
-        return "https://geoapi.qweather.com/v2";
+
+        candidates.add("https://geoapi.qweather.com/v2");
+
+        return candidates;
     }
 
     private String deriveGeoBaseFromForecastBase(String baseUrl) {
