@@ -14,7 +14,9 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.gxj.cropyield.modules.weather.config.WeatherProperties;
@@ -22,7 +24,7 @@ import com.gxj.cropyield.modules.weather.service.WeatherService;
 import com.gxj.cropyield.modules.weather.service.dto.WeatherRealtimeResponse;
 
 /**
- * 天气服务实现，负责调用彩云天气接口并进行数据组装、缓存。
+ * 天气服务实现，负责调用和风天气接口并进行数据组装、缓存。
  */
 @Service
 public class WeatherServiceImpl implements WeatherService {
@@ -67,101 +69,154 @@ public class WeatherServiceImpl implements WeatherService {
     }
 
     private WeatherRealtimeResponse fetchRealtimeWeather(double longitude, double latitude) {
-        WeatherProperties.CaiyunProperties caiyun = properties.getCaiyun();
-        if (caiyun == null || !StringUtils.hasText(caiyun.getToken())) {
-            throw new IllegalStateException("未配置彩云天气访问令牌");
+        WeatherProperties.QWeatherProperties qweather = properties.getQweather();
+        if (qweather == null || !StringUtils.hasText(qweather.getKey())) {
+            throw new IllegalStateException("未配置和风天气访问密钥");
         }
-        String baseUrl = Optional.ofNullable(caiyun.getBaseUrl()).filter(StringUtils::hasText)
-            .orElse("https://api.caiyunapp.com/v2.6");
+        String baseUrl = Optional.ofNullable(qweather.getBaseUrl()).filter(StringUtils::hasText)
+            .orElse("https://devapi.qweather.com/v7");
         String trimmedBase = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
-        String location = longitude + "," + latitude;
-        String url = trimmedBase + "/" + caiyun.getToken() + "/" + location + "/weather";
 
-        URI requestUri = URI.create(url + "?alert=true");
-        ResponseEntity<JsonNode> response = restTemplate.getForEntity(requestUri, JsonNode.class);
+        URI requestUri = UriComponentsBuilder.fromHttpUrl(trimmedBase + "/weather/now")
+            .queryParam("location", longitude + "," + latitude)
+            .queryParam("key", qweather.getKey())
+            .queryParam("lang", qweather.getLanguage())
+            .queryParam("unit", qweather.getUnit())
+            .build(true)
+            .toUri();
+
+        ResponseEntity<JsonNode> response;
+        try {
+            response = restTemplate.getForEntity(requestUri, JsonNode.class);
+        } catch (RestClientException ex) {
+            throw new IllegalStateException("调用和风天气实时接口失败: " + ex.getMessage(), ex);
+        }
         if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
             throw new IllegalStateException("获取天气数据失败");
         }
 
         JsonNode body = response.getBody();
-        String status = body.path("status").asText();
-        if (!"ok".equalsIgnoreCase(status)) {
-            String errorMessage = body.path("error").asText();
+        String status = body.path("code").asText();
+        if (!"200".equals(status)) {
+            String errorMessage = body.path("message").asText();
             if (!StringUtils.hasText(errorMessage)) {
-                errorMessage = body.path("message").asText();
+                errorMessage = body.path("refer").path("license").toString();
             }
             if (StringUtils.hasText(errorMessage)) {
-                throw new IllegalStateException("彩云天气返回异常状态: " + errorMessage);
+                throw new IllegalStateException("和风天气返回异常状态: " + errorMessage);
             }
-            throw new IllegalStateException("彩云天气返回异常状态: " + status);
+            throw new IllegalStateException("和风天气返回错误码: " + status);
         }
 
-        JsonNode result = body.path("result");
-        JsonNode realtime = result.path("realtime");
-        JsonNode precipitation = realtime.path("precipitation");
-        JsonNode wind = realtime.path("wind");
-        JsonNode airQuality = realtime.path("air_quality");
+        JsonNode nowNode = body.path("now");
+        WeatherRealtimeResponse.AirQuality airQuality = fetchAirQuality(longitude, latitude);
 
-        WeatherRealtimeResponse responseDto = new WeatherRealtimeResponse(
+        double humidity = parseDouble(nowNode.path("humidity"));
+        double roundedHumidity = Double.isNaN(humidity) ? humidity : roundToSingleDecimal(humidity);
+        double windSpeed = parseDouble(nowNode.path("windSpeed"));
+        double windSpeedMeters = Double.isNaN(windSpeed) ? windSpeed : roundToSingleDecimal(windSpeed / 3.6);
+        double precipitation = parseDouble(nowNode.path("precip"));
+        double precipitationIntensity = Double.isNaN(precipitation) ? precipitation : roundToSingleDecimal(precipitation);
+        String precipitationDescription = null;
+        if (!Double.isNaN(precipitation) && precipitation > 0) {
+            precipitationDescription = String.format("近一小时降水 %.1f 毫米", precipitationIntensity);
+        }
+        Instant fetchedAt = Optional.ofNullable(parseInstant(body.path("updateTime").asText(null))).orElse(Instant.now());
+
+        return new WeatherRealtimeResponse(
             longitude,
             latitude,
             status,
-            realtime.path("skycon").asText(null),
-            asDouble(realtime.path("temperature")),
-            asDouble(realtime.path("apparent_temperature")),
-            roundToSingleDecimal(asDouble(realtime.path("humidity")) * 100),
-            asDouble(realtime.path("pressure")),
-            asDouble(realtime.path("visibility")),
+            nowNode.path("text").asText(null),
+            parseDouble(nowNode.path("temp")),
+            parseDouble(nowNode.path("feelsLike")),
+            roundedHumidity,
+            parseDouble(nowNode.path("pressure")),
+            parseDouble(nowNode.path("vis")),
             new WeatherRealtimeResponse.Wind(
-                asDouble(wind.path("speed")),
-                asDouble(wind.path("direction"))
+                windSpeedMeters,
+                parseDouble(nowNode.path("wind360"))
             ),
             new WeatherRealtimeResponse.Precipitation(
-                asDouble(precipitation.path("local").path("intensity")),
-                nullableDouble(precipitation.path("nearest").path("intensity")),
-                nullableDouble(precipitation.path("nearest").path("distance"))
+                precipitationIntensity,
+                null,
+                null
             ),
-            buildAirQuality(airQuality),
-            result.path("forecast_keypoint").asText(null),
-            result.path("minutely").path("description").asText(null),
-            parseInstant(realtime.path("obs_time").asText(null)),
-            Instant.now()
+            airQuality,
+            null,
+            precipitationDescription,
+            parseInstant(nowNode.path("obsTime").asText(null)),
+            fetchedAt
         );
-
-        return responseDto;
     }
 
-    private WeatherRealtimeResponse.AirQuality buildAirQuality(JsonNode airQuality) {
-        if (airQuality == null || airQuality.isMissingNode() || airQuality.isNull()) {
+    private WeatherRealtimeResponse.AirQuality fetchAirQuality(double longitude, double latitude) {
+        WeatherProperties.QWeatherProperties qweather = properties.getQweather();
+        if (qweather == null || !StringUtils.hasText(qweather.getKey())) {
             return null;
         }
-        JsonNode aqiNode = airQuality.path("aqi");
-        JsonNode descriptionNode = airQuality.path("description");
+        String baseUrl = Optional.ofNullable(qweather.getBaseUrl()).filter(StringUtils::hasText)
+            .orElse("https://devapi.qweather.com/v7");
+        String trimmedBase = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
+        URI requestUri = UriComponentsBuilder.fromHttpUrl(trimmedBase + "/air/now")
+            .queryParam("location", longitude + "," + latitude)
+            .queryParam("key", qweather.getKey())
+            .queryParam("lang", qweather.getLanguage())
+            .queryParam("unit", qweather.getUnit())
+            .build(true)
+            .toUri();
+
+        ResponseEntity<JsonNode> response;
+        try {
+            response = restTemplate.getForEntity(requestUri, JsonNode.class);
+        } catch (RestClientException ex) {
+            return null;
+        }
+        if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+            return null;
+        }
+
+        JsonNode body = response.getBody();
+        if (!"200".equals(body.path("code").asText())) {
+            return null;
+        }
+
+        JsonNode nowNode = body.path("now");
+        if (nowNode == null || nowNode.isMissingNode() || nowNode.isNull()) {
+            return null;
+        }
+
         return new WeatherRealtimeResponse.AirQuality(
-            nullableDouble(aqiNode.path("chn")),
-            nullableDouble(airQuality.path("pm25")),
-            nullableDouble(airQuality.path("pm10")),
-            nullableDouble(airQuality.path("o3")),
-            nullableDouble(airQuality.path("so2")),
-            nullableDouble(airQuality.path("no2")),
-            nullableDouble(airQuality.path("co")),
-            descriptionNode.path("chn").asText(null),
-            airQuality.path("description").path("color").asText(null)
+            nullableDouble(nowNode.path("aqi")),
+            nullableDouble(nowNode.path("pm2p5")),
+            nullableDouble(nowNode.path("pm10")),
+            nullableDouble(nowNode.path("o3")),
+            nullableDouble(nowNode.path("so2")),
+            nullableDouble(nowNode.path("no2")),
+            nullableDouble(nowNode.path("co")),
+            nowNode.path("category").asText(null),
+            nowNode.path("primary").asText(null)
         );
     }
 
-    private double asDouble(JsonNode node) {
-        if (node == null || node.isMissingNode() || node.isNull()) {
-            return Double.NaN;
-        }
-        return node.asDouble();
+    private double parseDouble(JsonNode node) {
+        Double value = nullableDouble(node);
+        return value != null ? value : Double.NaN;
     }
 
     private Double nullableDouble(JsonNode node) {
         if (node == null || node.isMissingNode() || node.isNull()) {
             return null;
         }
-        return node.asDouble();
+        String text = node.asText();
+        if (!StringUtils.hasText(text)) {
+            return null;
+        }
+        try {
+            return Double.parseDouble(text);
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 
     private double roundToSingleDecimal(double value) {

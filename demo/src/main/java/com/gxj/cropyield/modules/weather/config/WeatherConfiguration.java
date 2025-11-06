@@ -15,18 +15,7 @@ import org.springframework.web.client.RestTemplate;
 @EnableConfigurationProperties(WeatherProperties.class)
 public class WeatherConfiguration {
 
-    @Bean
-    public RestTemplate weatherRestTemplate(RestTemplateBuilder builder, WeatherProperties properties) {
-        WeatherProperties.CaiyunProperties caiyun = properties.getCaiyun();
-        Duration connectTimeout = caiyun.getConnectTimeout();
-        Duration readTimeout = caiyun.getReadTimeout();
-        return builder
-            .setConnectTimeout(connectTimeout != null ? connectTimeout : Duration.ofSeconds(2))
-            .setReadTimeout(readTimeout != null ? readTimeout : Duration.ofSeconds(5))
-            .build();
-    }
-
-    @Bean("qweatherRestTemplate")
+    @Bean({"weatherRestTemplate", "qweatherRestTemplate"})
     public RestTemplate qweatherRestTemplate(RestTemplateBuilder builder, WeatherProperties properties) {
         WeatherProperties.QWeatherProperties qweather = properties.getQweather();
         Duration connectTimeout = qweather.getConnectTimeout();

@@ -64,11 +64,6 @@ forecast:
 
 weather:
   cache-ttl: 120s
-  caiyun:
-    base-url: https://api.caiyunapp.com/v2.6
-    token: RA1saynz7zWYLTmA
-    connect-timeout: 2s
-    read-timeout: 5s
   qweather:
     base-url: https://devapi.qweather.com/v7
     key: 3e575ab392964260a708a58e67c3391c

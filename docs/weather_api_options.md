@@ -1,7 +1,7 @@
 # 天气 API 接入建议
 
 ## 现有集成现状
-- 后端实时天气模块 `WeatherServiceImpl` 已通过彩云天气（Caiyun Weather）REST 接口拉取实时观测，包括温度、风速、湿度、AQI 等指标，并在 `WeatherController` 中对外提供接口，供前端天气中心展示。【F:demo/src/main/java/com/gxj/cropyield/modules/weather/service/impl/WeatherServiceImpl.java†L21-L117】【F:demo/src/main/java/com/gxj/cropyield/modules/weather/controller/WeatherController.java†L24-L60】
+- 后端实时天气模块 `WeatherServiceImpl` 现已直接对接和风天气（QWeather）REST 接口获取实时观测（温度、风速、湿度、AQI 等），并在 `WeatherController` 中对外提供接口供前端天气中心展示。【F:demo/src/main/java/com/gxj/cropyield/modules/weather/service/impl/WeatherServiceImpl.java†L21-L171】【F:demo/src/main/java/com/gxj/cropyield/modules/weather/controller/WeatherController.java†L24-L60】
 - 预测产量流程在构建气象特征时只读取 `dataset_weather_record` 中的历史观测，未来年份通过内生线性外推获得，不会自动消费实时服务的数据。【F:demo/src/main/java/com/gxj/cropyield/modules/forecast/service/impl/ForecastExecutionServiceImpl.java†L419-L522】
 
 因此，要在预测中真正“考虑未来天气”，需要新增一个可靠的预报数据源，并把其结果转换成与 `summarizeWeatherFeatures` 相同的年度特征结构。
@@ -13,7 +13,7 @@
 | **国家气象信息中心（CMA）开放数据服务** | 全国站点级观测与预报 | 逐日/逐小时预报、历史再分析、专业指数 | 官方权威，长期可用；适合需要高可信度的业务沟通 | 需要完成数据使用备案；接口为 FTP/HTTP 文件下载，需自行解析 GRIB/文本格式；开发成本较高 |
 | **ECMWF/ERA5 再分析 + 运营预报** | 全球 0.25°-0.5° 格点 | 中长期（10-45 天）预报、再分析 | 提供长周期气候趋势，适合情景模拟与科研 | 数据量大，需要结合 Copernicus API；时效性较慢，且对网络环境要求高 |
 
-> 推荐优先选择 **和风天气企业版**：其 API 形态与现有彩云调用模式类似，易于快速对接，并提供日级、小时级预报满足未来气象特征聚合需求。对于需要官方背书的场景，可在后续补充 CMA 数据作为校准或兜底。
+> 推荐持续使用 **和风天气企业版**：其 API 形态与现有实现完全匹配，既可提供实时观测，也能输出日级、小时级预报满足未来气象特征聚合需求。对于需要官方背书的场景，可在后续补充 CMA 数据作为校准或兜底。
 
 ## 接入和风天气的实施要点
 1. **配置管理**  
