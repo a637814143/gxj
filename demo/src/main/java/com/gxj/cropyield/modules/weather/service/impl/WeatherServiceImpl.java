@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -232,7 +232,7 @@ public class WeatherServiceImpl implements WeatherService {
     }
 
     private BusinessException translateHttpException(String apiName, HttpStatusCodeException ex) {
-        HttpStatus status = ex.getStatusCode();
+        HttpStatusCode status = ex.getStatusCode();
         ResultCode code = mapStatusToResult(status);
         String body = safeBody(ex);
         String message = StringUtils.hasText(body)
@@ -241,7 +241,7 @@ public class WeatherServiceImpl implements WeatherService {
         return new BusinessException(code, message);
     }
 
-    private ResultCode mapStatusToResult(HttpStatus status) {
+    private ResultCode mapStatusToResult(HttpStatusCode status) {
         return switch (status.value()) {
             case 400 -> ResultCode.BAD_REQUEST;
             case 401 -> ResultCode.UNAUTHORIZED;
