@@ -6,6 +6,8 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
+import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestTemplate;
 
 /**
@@ -23,6 +25,16 @@ public class WeatherConfiguration {
         return builder
             .setConnectTimeout(connectTimeout != null ? connectTimeout : Duration.ofSeconds(2))
             .setReadTimeout(readTimeout != null ? readTimeout : Duration.ofSeconds(5))
+            .additionalInterceptors((request, body, execution) -> {
+                HttpHeaders headers = request.getHeaders();
+                if (StringUtils.hasText(qweather.getReferer()) && !headers.containsKey(HttpHeaders.REFERER)) {
+                    headers.set(HttpHeaders.REFERER, qweather.getReferer());
+                }
+                if (StringUtils.hasText(qweather.getUserAgent()) && !headers.containsKey(HttpHeaders.USER_AGENT)) {
+                    headers.set(HttpHeaders.USER_AGENT, qweather.getUserAgent());
+                }
+                return execution.execute(request, body);
+            })
             .build();
     }
 }

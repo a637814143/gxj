@@ -83,6 +83,17 @@ public class WeatherProperties {
         private Duration readTimeout = Duration.ofSeconds(5);
 
         /**
+         * 某些和风天气账号启用了来源域名或 IP 限制，需要在请求头携带 Referer 才能通过鉴权。
+         * 通过该字段可配置默认的 Referer 值。
+         */
+        private String referer;
+
+        /**
+         * 可选的 User-Agent，自定义后能帮助和风侧识别请求来源，便于问题排查。
+         */
+        private String userAgent;
+
+        /**
          * 位置信息获取模式，默认使用经纬度直接请求。
          */
         private LocationMode locationMode = LocationMode.COORDINATE;
@@ -157,6 +168,22 @@ public class WeatherProperties {
 
         public void setGeoBaseUrl(String geoBaseUrl) {
             this.geoBaseUrl = geoBaseUrl;
+        }
+
+        public String getReferer() {
+            return referer;
+        }
+
+        public void setReferer(String referer) {
+            this.referer = referer;
+        }
+
+        public String getUserAgent() {
+            return userAgent;
+        }
+
+        public void setUserAgent(String userAgent) {
+            this.userAgent = userAgent;
         }
 
         public LocationMode getLocationMode() {

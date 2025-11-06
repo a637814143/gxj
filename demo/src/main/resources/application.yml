@@ -70,6 +70,8 @@ weather:
     language: zh
     unit: m
     geo-base-url: https://m776x8rde7.geo.qweatherapi.com/v2
+    referer: https://localhost
+    user-agent: crop-yield-platform/1.0
     location-mode: GEO_LOOKUP
     connect-timeout: 2s
     read-timeout: 5s
