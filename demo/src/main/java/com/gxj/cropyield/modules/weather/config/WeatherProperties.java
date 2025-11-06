@@ -43,6 +43,11 @@ public class WeatherProperties {
         private String baseUrl = "https://m776x8rde7.re.qweatherapi.com/v7";
 
         /**
+         * 和风天气地理位置接口基础地址。
+         */
+        private String geoBaseUrl = "https://geoapi.qweather.com/v2";
+
+        /**
          * 和风天气访问密钥。
          */
         private String key;
@@ -76,6 +81,11 @@ public class WeatherProperties {
          * HTTP 读取超时时间。
          */
         private Duration readTimeout = Duration.ofSeconds(5);
+
+        /**
+         * 位置信息获取模式，默认使用经纬度直接请求。
+         */
+        private LocationMode locationMode = LocationMode.COORDINATE;
 
         public String getBaseUrl() {
             return baseUrl;
@@ -139,6 +149,27 @@ public class WeatherProperties {
 
         public void setReadTimeout(Duration readTimeout) {
             this.readTimeout = readTimeout;
+        }
+
+        public String getGeoBaseUrl() {
+            return geoBaseUrl;
+        }
+
+        public void setGeoBaseUrl(String geoBaseUrl) {
+            this.geoBaseUrl = geoBaseUrl;
+        }
+
+        public LocationMode getLocationMode() {
+            return locationMode;
+        }
+
+        public void setLocationMode(LocationMode locationMode) {
+            this.locationMode = locationMode;
+        }
+
+        public enum LocationMode {
+            COORDINATE,
+            GEO_LOOKUP
         }
     }
 }

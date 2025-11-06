@@ -14,12 +14,16 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.gxj.cropyield.modules.weather.config.WeatherProperties;
+import com.gxj.cropyield.modules.weather.config.WeatherProperties.QWeatherProperties;
+import com.gxj.cropyield.modules.weather.config.WeatherProperties.QWeatherProperties.LocationMode;
+import com.gxj.cropyield.modules.weather.service.QWeatherLocationClient;
 import com.gxj.cropyield.modules.weather.service.WeatherService;
 import com.gxj.cropyield.modules.weather.service.dto.WeatherRealtimeResponse;
 
@@ -31,11 +35,15 @@ public class WeatherServiceImpl implements WeatherService {
 
     private final RestTemplate restTemplate;
     private final WeatherProperties properties;
+    private final QWeatherLocationClient locationClient;
     private final Map<String, CachedWeather> cache = new ConcurrentHashMap<>();
 
-    public WeatherServiceImpl(@Qualifier("weatherRestTemplate") RestTemplate weatherRestTemplate, WeatherProperties properties) {
+    public WeatherServiceImpl(@Qualifier("weatherRestTemplate") RestTemplate weatherRestTemplate,
+                              WeatherProperties properties,
+                              QWeatherLocationClient locationClient) {
         this.restTemplate = weatherRestTemplate;
         this.properties = properties;
+        this.locationClient = locationClient;
     }
 
     @Override
@@ -78,7 +86,7 @@ public class WeatherServiceImpl implements WeatherService {
         String trimmedBase = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
 
         URI requestUri = UriComponentsBuilder.fromHttpUrl(trimmedBase + "/weather/now")
-            .queryParam("location", longitude + "," + latitude)
+            .queryParam("location", resolveLocationParameter(longitude, latitude, qweather))
             .queryParam("key", qweather.getKey())
             .queryParam("lang", qweather.getLanguage())
             .queryParam("unit", qweather.getUnit())
@@ -88,6 +96,8 @@ public class WeatherServiceImpl implements WeatherService {
         ResponseEntity<JsonNode> response;
         try {
             response = restTemplate.getForEntity(requestUri, JsonNode.class);
+        } catch (HttpStatusCodeException ex) {
+            throw new IllegalStateException("调用和风天气实时接口失败: " + ex.getStatusCode() + " " + safeBody(ex), ex);
         } catch (RestClientException ex) {
             throw new IllegalStateException("调用和风天气实时接口失败: " + ex.getMessage(), ex);
         }
@@ -159,7 +169,7 @@ public class WeatherServiceImpl implements WeatherService {
             .orElse("https://m776x8rde7.re.qweatherapi.com/v7");
         String trimmedBase = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
         URI requestUri = UriComponentsBuilder.fromHttpUrl(trimmedBase + "/air/now")
-            .queryParam("location", longitude + "," + latitude)
+            .queryParam("location", resolveLocationParameter(longitude, latitude, qweather))
             .queryParam("key", qweather.getKey())
             .queryParam("lang", qweather.getLanguage())
             .queryParam("unit", qweather.getUnit())
@@ -197,6 +207,25 @@ public class WeatherServiceImpl implements WeatherService {
             nowNode.path("category").asText(null),
             nowNode.path("primary").asText(null)
         );
+    }
+
+    private String resolveLocationParameter(double longitude, double latitude, QWeatherProperties qweather) {
+        LocationMode mode = Optional.ofNullable(qweather.getLocationMode()).orElse(LocationMode.COORDINATE);
+        if (mode == LocationMode.GEO_LOOKUP) {
+            Optional<String> locationId = locationClient.resolveLocationId(longitude, latitude);
+            if (locationId.isPresent()) {
+                return locationId.get();
+            }
+        }
+        return longitude + "," + latitude;
+    }
+
+    private String safeBody(HttpStatusCodeException ex) {
+        try {
+            return ex.getResponseBodyAsString();
+        } catch (Exception ignore) {
+            return "";
+        }
     }
 
     private double parseDouble(JsonNode node) {

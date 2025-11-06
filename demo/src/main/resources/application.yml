@@ -69,5 +69,7 @@ weather:
     key: 4a614f0f1273489d9fa106f8d237963d
     language: zh
     unit: m
+    geo-base-url: https://geoapi.qweather.com/v2
+    location-mode: GEO_LOOKUP
     connect-timeout: 2s
     read-timeout: 5s

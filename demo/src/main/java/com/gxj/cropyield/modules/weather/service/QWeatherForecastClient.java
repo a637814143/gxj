@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -34,11 +35,14 @@ public class QWeatherForecastClient {
 
     private final RestTemplate restTemplate;
     private final WeatherProperties properties;
+    private final QWeatherLocationClient locationClient;
 
     public QWeatherForecastClient(@Qualifier("qweatherRestTemplate") RestTemplate restTemplate,
-                                  WeatherProperties properties) {
+                                  WeatherProperties properties,
+                                  QWeatherLocationClient locationClient) {
         this.restTemplate = restTemplate;
         this.properties = properties;
+        this.locationClient = locationClient;
     }
 
     public List<WeatherRecord> fetchDailyForecast(double longitude, double latitude) {
@@ -51,7 +55,7 @@ public class QWeatherForecastClient {
             .orElse("https://m776x8rde7.re.qweatherapi.com/v7");
         String trimmedBase = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
         URI requestUri = UriComponentsBuilder.fromHttpUrl(trimmedBase + "/weather/15d")
-            .queryParam("location", longitude + "," + latitude)
+            .queryParam("location", resolveLocationParameter(longitude, latitude, qweather))
             .queryParam("key", qweather.getKey())
             .queryParam("lang", qweather.getLanguage())
             .queryParam("unit", qweather.getUnit())
@@ -61,6 +65,9 @@ public class QWeatherForecastClient {
         ResponseEntity<JsonNode> response;
         try {
             response = restTemplate.getForEntity(requestUri, JsonNode.class);
+        } catch (HttpStatusCodeException ex) {
+            log.warn("和风天气接口返回异常状态: {} {}", ex.getStatusCode(), safeBody(ex));
+            return Collections.emptyList();
         } catch (RestClientException ex) {
             log.warn("调用和风天气接口失败: {}", ex.getMessage());
             return Collections.emptyList();
@@ -138,6 +145,26 @@ public class QWeatherForecastClient {
             return duration.isNegative() ? null : duration.toMinutes() / 60d;
         } catch (DateTimeParseException ex) {
             return null;
+        }
+    }
+
+    private String resolveLocationParameter(double longitude, double latitude, WeatherProperties.QWeatherProperties qweather) {
+        WeatherProperties.QWeatherProperties.LocationMode mode = Optional.ofNullable(qweather.getLocationMode())
+            .orElse(WeatherProperties.QWeatherProperties.LocationMode.COORDINATE);
+        if (mode == WeatherProperties.QWeatherProperties.LocationMode.GEO_LOOKUP) {
+            Optional<String> locationId = locationClient.resolveLocationId(longitude, latitude);
+            if (locationId.isPresent()) {
+                return locationId.get();
+            }
+        }
+        return longitude + "," + latitude;
+    }
+
+    private String safeBody(HttpStatusCodeException ex) {
+        try {
+            return ex.getResponseBodyAsString();
+        } catch (Exception ignore) {
+            return "";
         }
     }
 }
