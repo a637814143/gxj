@@ -74,7 +74,7 @@ public class WeatherServiceImpl implements WeatherService {
             throw new IllegalStateException("未配置和风天气访问密钥");
         }
         String baseUrl = Optional.ofNullable(qweather.getBaseUrl()).filter(StringUtils::hasText)
-            .orElse("https://devapi.qweather.com/v7");
+            .orElse("https://m776x8rde7.re.qweatherapi.com/v7");
         String trimmedBase = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
 
         URI requestUri = UriComponentsBuilder.fromHttpUrl(trimmedBase + "/weather/now")
@@ -156,7 +156,7 @@ public class WeatherServiceImpl implements WeatherService {
             return null;
         }
         String baseUrl = Optional.ofNullable(qweather.getBaseUrl()).filter(StringUtils::hasText)
-            .orElse("https://devapi.qweather.com/v7");
+            .orElse("https://m776x8rde7.re.qweatherapi.com/v7");
         String trimmedBase = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
         URI requestUri = UriComponentsBuilder.fromHttpUrl(trimmedBase + "/air/now")
             .queryParam("location", longitude + "," + latitude)

@@ -40,7 +40,7 @@ public class WeatherProperties {
         /**
          * 和风天气接口基础地址。
          */
-        private String baseUrl = "https://devapi.qweather.com/v7";
+        private String baseUrl = "https://m776x8rde7.re.qweatherapi.com/v7";
 
         /**
          * 和风天气访问密钥。

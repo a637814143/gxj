@@ -65,8 +65,8 @@ forecast:
 weather:
   cache-ttl: 120s
   qweather:
-    base-url: https://devapi.qweather.com/v7
-    key: 3e575ab392964260a708a58e67c3391c
+    base-url: https://m776x8rde7.re.qweatherapi.com/v7
+    key: 4a614f0f1273489d9fa106f8d237963d
     language: zh
     unit: m
     connect-timeout: 2s
