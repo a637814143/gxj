@@ -1,5 +1,7 @@
 package com.gxj.cropyield.modules.weather.config;
 
+import java.time.Duration;
+
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
@@ -16,9 +18,22 @@ public class WeatherConfiguration {
     @Bean
     public RestTemplate weatherRestTemplate(RestTemplateBuilder builder, WeatherProperties properties) {
         WeatherProperties.CaiyunProperties caiyun = properties.getCaiyun();
+        Duration connectTimeout = caiyun.getConnectTimeout();
+        Duration readTimeout = caiyun.getReadTimeout();
         return builder
-            .setConnectTimeout(caiyun.getConnectTimeout())
-            .setReadTimeout(caiyun.getReadTimeout())
+            .setConnectTimeout(connectTimeout != null ? connectTimeout : Duration.ofSeconds(2))
+            .setReadTimeout(readTimeout != null ? readTimeout : Duration.ofSeconds(5))
+            .build();
+    }
+
+    @Bean("qweatherRestTemplate")
+    public RestTemplate qweatherRestTemplate(RestTemplateBuilder builder, WeatherProperties properties) {
+        WeatherProperties.QWeatherProperties qweather = properties.getQweather();
+        Duration connectTimeout = qweather.getConnectTimeout();
+        Duration readTimeout = qweather.getReadTimeout();
+        return builder
+            .setConnectTimeout(connectTimeout != null ? connectTimeout : Duration.ofSeconds(2))
+            .setReadTimeout(readTimeout != null ? readTimeout : Duration.ofSeconds(5))
             .build();
     }
 }
