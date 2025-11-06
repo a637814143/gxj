@@ -29,6 +29,8 @@ import com.gxj.cropyield.modules.forecast.repository.ForecastSnapshotRepository;
 import com.gxj.cropyield.modules.forecast.repository.ForecastTaskRepository;
 import com.gxj.cropyield.modules.forecast.repository.ForecastResultRepository;
 import com.gxj.cropyield.modules.forecast.service.ForecastExecutionService;
+import com.gxj.cropyield.modules.weather.service.QWeatherForecastClient;
+import com.gxj.cropyield.modules.weather.service.WeatherLocationResolver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
@@ -46,6 +48,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 /**
  * 预测管理模块的业务实现类，负责落实预测管理领域的业务处理逻辑。
@@ -68,6 +71,8 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
     private final ForecastResultRepository forecastResultRepository;
     private final ForecastEngineClient forecastEngineClient;
     private final WeatherRecordRepository weatherRecordRepository;
+    private final QWeatherForecastClient qWeatherForecastClient;
+    private final WeatherLocationResolver weatherLocationResolver;
 
     public ForecastExecutionServiceImpl(RegionRepository regionRepository,
                                         CropRepository cropRepository,
@@ -79,7 +84,9 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
                                         ForecastTaskRepository forecastTaskRepository,
                                         ForecastResultRepository forecastResultRepository,
                                         ForecastEngineClient forecastEngineClient,
-                                        WeatherRecordRepository weatherRecordRepository) {
+                                        WeatherRecordRepository weatherRecordRepository,
+                                        QWeatherForecastClient qWeatherForecastClient,
+                                        WeatherLocationResolver weatherLocationResolver) {
         this.regionRepository = regionRepository;
         this.cropRepository = cropRepository;
         this.forecastModelRepository = forecastModelRepository;
@@ -91,6 +98,8 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         this.forecastResultRepository = forecastResultRepository;
         this.forecastEngineClient = forecastEngineClient;
         this.weatherRecordRepository = weatherRecordRepository;
+        this.qWeatherForecastClient = qWeatherForecastClient;
+        this.weatherLocationResolver = weatherLocationResolver;
     }
 
     @Override
@@ -414,9 +423,21 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         parameters.put("frequency", run.getFrequency());
 
         Map<Integer, Map<String, Double>> weatherFeatures = Collections.emptyMap();
+        Map<String, Map<String, Double>> futureWeatherFeatures = Collections.emptyMap();
         if (run.getModel() != null && run.getModel().getType() == ForecastModel.ModelType.WEATHER_REGRESSION) {
-            Long regionId = run.getRegion() != null ? run.getRegion().getId() : null;
-            weatherFeatures = buildWeatherFeatureMap(regionId, run.getCrop(), history);
+            WeatherFeatureBundle bundle = buildWeatherFeatureBundle(run.getRegion(), run.getCrop(), history, run.getForecastPeriods());
+            weatherFeatures = bundle.historyFeatures();
+            if (!bundle.futureFeatures().isEmpty()) {
+                Map<String, Map<String, Double>> mapped = new LinkedHashMap<>();
+                for (Map.Entry<Integer, Map<String, Double>> entry : bundle.futureFeatures().entrySet()) {
+                    mapped.put(String.valueOf(entry.getKey()), entry.getValue());
+                }
+                futureWeatherFeatures = mapped;
+            }
+        }
+
+        if (!futureWeatherFeatures.isEmpty()) {
+            parameters.put("futureWeatherFeatures", futureWeatherFeatures);
         }
 
         Map<Integer, Map<String, Double>> finalWeatherFeatures = weatherFeatures;
@@ -448,52 +469,113 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         }
     }
 
-    private Map<Integer, Map<String, Double>> buildWeatherFeatureMap(Long regionId,
-                                                                      Crop crop,
-                                                                      List<HistoryObservation> history) {
-        if (regionId == null || history.isEmpty()) {
-            return Collections.emptyMap();
+    private WeatherFeatureBundle buildWeatherFeatureBundle(Region region,
+                                                           Crop crop,
+                                                           List<HistoryObservation> history,
+                                                           int forecastPeriods) {
+        if (region == null || history.isEmpty()) {
+            return WeatherFeatureBundle.empty();
         }
-        Set<Integer> targetYears = new LinkedHashSet<>();
+        Set<Integer> historyYears = new LinkedHashSet<>();
+        int lastYear = Integer.MIN_VALUE;
         for (HistoryObservation observation : history) {
-            targetYears.add(observation.record().getYear());
+            int year = observation.record().getYear();
+            historyYears.add(year);
+            if (year > lastYear) {
+                lastYear = year;
+            }
         }
-        if (targetYears.isEmpty()) {
-            return Collections.emptyMap();
-        }
-
-        List<WeatherRecord> weatherRecords = weatherRecordRepository.findByRegionId(regionId);
-        if (weatherRecords.isEmpty()) {
-            return Collections.emptyMap();
+        if (historyYears.isEmpty()) {
+            return WeatherFeatureBundle.empty();
         }
 
         HarvestSeason season = crop != null && crop.getHarvestSeason() != null
             ? crop.getHarvestSeason()
             : HarvestSeason.ANNUAL;
-        Map<Integer, List<WeatherRecord>> grouped = new HashMap<>();
+
+        List<WeatherRecord> weatherRecords = weatherRecordRepository.findByRegionId(region.getId());
+        Map<Integer, List<WeatherRecord>> historyGrouped = new HashMap<>();
         for (WeatherRecord record : weatherRecords) {
             LocalDate date = record.getRecordDate();
             if (date == null) {
                 continue;
             }
             Integer targetYear = resolveWeatherTargetYear(date, season);
-            if (targetYear == null || !targetYears.contains(targetYear)) {
+            if (targetYear == null) {
                 continue;
             }
-            grouped.computeIfAbsent(targetYear, key -> new ArrayList<>()).add(record);
-        }
-        if (grouped.isEmpty()) {
-            return Collections.emptyMap();
-        }
-
-        Map<Integer, Map<String, Double>> result = new HashMap<>();
-        for (Map.Entry<Integer, List<WeatherRecord>> entry : grouped.entrySet()) {
-            Map<String, Double> features = summarizeWeatherFeatures(entry.getValue(), season);
-            if (!features.isEmpty()) {
-                result.put(entry.getKey(), features);
+            if (historyYears.contains(targetYear)) {
+                historyGrouped.computeIfAbsent(targetYear, key -> new ArrayList<>()).add(record);
             }
         }
-        return result;
+
+        Map<Integer, Map<String, Double>> historyFeatures = new HashMap<>();
+        for (Map.Entry<Integer, List<WeatherRecord>> entry : historyGrouped.entrySet()) {
+            Map<String, Double> features = summarizeWeatherFeatures(entry.getValue(), season);
+            if (!features.isEmpty()) {
+                historyFeatures.put(entry.getKey(), features);
+            }
+        }
+
+        Set<Integer> futureYears = new LinkedHashSet<>();
+        if (lastYear != Integer.MIN_VALUE) {
+            for (int i = 1; i <= Math.max(forecastPeriods, 0); i++) {
+                futureYears.add(lastYear + i);
+            }
+        }
+        Map<Integer, List<WeatherRecord>> futureGrouped = new HashMap<>();
+        if (!futureYears.isEmpty()) {
+            for (WeatherRecord record : weatherRecords) {
+                LocalDate date = record.getRecordDate();
+                if (date == null) {
+                    continue;
+                }
+                Integer targetYear = resolveWeatherTargetYear(date, season);
+                if (targetYear == null || !futureYears.contains(targetYear)) {
+                    continue;
+                }
+                futureGrouped.computeIfAbsent(targetYear, key -> new ArrayList<>()).add(record);
+            }
+
+            Set<Integer> missingFutureYears = new LinkedHashSet<>(futureYears);
+            missingFutureYears.removeAll(futureGrouped.keySet());
+            if (!missingFutureYears.isEmpty()) {
+                Optional<WeatherLocationResolver.Coordinate> coordinate = weatherLocationResolver.resolve(region);
+                if (coordinate.isPresent()) {
+                    List<WeatherRecord> forecastRecords = qWeatherForecastClient.fetchDailyForecast(
+                        coordinate.get().longitude(), coordinate.get().latitude());
+                    for (WeatherRecord record : forecastRecords) {
+                        LocalDate date = record.getRecordDate();
+                        if (date == null) {
+                            continue;
+                        }
+                        Integer targetYear = resolveWeatherTargetYear(date, season);
+                        if (targetYear == null || !futureYears.contains(targetYear)) {
+                            continue;
+                        }
+                        futureGrouped.computeIfAbsent(targetYear, key -> new ArrayList<>()).add(record);
+                    }
+                }
+            }
+        }
+
+        Map<Integer, Map<String, Double>> futureFeatures = new LinkedHashMap<>();
+        for (Map.Entry<Integer, List<WeatherRecord>> entry : futureGrouped.entrySet()) {
+            Map<String, Double> features = summarizeWeatherFeatures(entry.getValue(), season);
+            if (!features.isEmpty()) {
+                futureFeatures.put(entry.getKey(), features);
+            }
+        }
+
+        return new WeatherFeatureBundle(historyFeatures, futureFeatures);
+    }
+
+    private record WeatherFeatureBundle(Map<Integer, Map<String, Double>> historyFeatures,
+                                        Map<Integer, Map<String, Double>> futureFeatures) {
+
+        private static WeatherFeatureBundle empty() {
+            return new WeatherFeatureBundle(Collections.emptyMap(), Collections.emptyMap());
+        }
     }
 
     private Integer resolveWeatherTargetYear(LocalDate recordDate, HarvestSeason season) {

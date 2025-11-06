@@ -108,7 +108,8 @@ public class LocalForecastEngine {
             WeatherRegressionResult regressionResult = weatherRegressionForecast(
                 sanitizedHistory,
                 historyValues,
-                forecastPeriods
+                forecastPeriods,
+                request.parameters()
             );
             rawForecast = regressionResult.forecast;
             metrics = regressionResult.metrics != null
@@ -213,7 +214,8 @@ public class LocalForecastEngine {
 
     private WeatherRegressionResult weatherRegressionForecast(List<ForecastEngineRequest.HistoryPoint> history,
                                                                List<Double> historyValues,
-                                                               int periods) {
+                                                               int periods,
+                                                               Map<String, Object> parameters) {
         List<ForecastEngineRequest.HistoryPoint> usable = new ArrayList<>();
         List<Integer> years = new ArrayList<>();
         for (ForecastEngineRequest.HistoryPoint point : history) {
@@ -305,15 +307,20 @@ public class LocalForecastEngine {
         }
 
         int lastYear = years.get(years.size() - 1);
+        Map<Integer, Map<String, Double>> providedFutureFeatures = extractFutureWeatherFeatures(parameters);
         List<Double> forecast = new ArrayList<>();
         for (int step = 1; step <= periods; step++) {
             int targetYear = lastYear + step;
             double prediction = coefficients[0];
+            Map<String, Double> providedForYear = providedFutureFeatures.get(targetYear);
             for (int j = 0; j < featureKeys.size(); j++) {
                 String key = featureKeys.get(j);
                 FeatureTrend trend = featureTrends.get(key);
+                Double providedValue = providedForYear != null ? providedForYear.get(key) : null;
                 double projected;
-                if (trend != null && trend.count >= 2) {
+                if (providedValue != null) {
+                    projected = providedValue;
+                } else if (trend != null && trend.count >= 2) {
                     projected = trend.intercept + trend.slope * targetYear;
                 } else if (trend != null && trend.lastKnown != null) {
                     projected = trend.lastKnown;
@@ -330,6 +337,56 @@ public class LocalForecastEngine {
 
         ForecastEngineResponse.EvaluationMetrics metrics = buildRegressionMetrics(outputs, fitted);
         return new WeatherRegressionResult(forecast, metrics);
+    }
+
+    private Map<Integer, Map<String, Double>> extractFutureWeatherFeatures(Map<String, Object> parameters) {
+        if (parameters == null || parameters.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Object raw = parameters.get("futureWeatherFeatures");
+        if (!(raw instanceof Map<?, ?> rawMap)) {
+            return Collections.emptyMap();
+        }
+        Map<Integer, Map<String, Double>> result = new HashMap<>();
+        for (Map.Entry<?, ?> entry : rawMap.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null) {
+                continue;
+            }
+            Integer year;
+            try {
+                year = Integer.parseInt(entry.getKey().toString());
+            } catch (NumberFormatException ex) {
+                continue;
+            }
+            if (!(entry.getValue() instanceof Map<?, ?> inner)) {
+                continue;
+            }
+            Map<String, Double> features = new HashMap<>();
+            for (Map.Entry<?, ?> featureEntry : inner.entrySet()) {
+                if (featureEntry.getKey() == null || featureEntry.getValue() == null) {
+                    continue;
+                }
+                Double value = convertToDouble(featureEntry.getValue());
+                if (value != null) {
+                    features.put(featureEntry.getKey().toString(), value);
+                }
+            }
+            if (!features.isEmpty()) {
+                result.put(year, features);
+            }
+        }
+        return result;
+    }
+
+    private Double convertToDouble(Object value) {
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+        try {
+            return Double.parseDouble(value.toString());
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 
     private double[] solveNormalEquation(double[][] designMatrix, double[] outputs) {
