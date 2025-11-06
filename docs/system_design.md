@@ -31,7 +31,7 @@ graph TD
     end
 
     subgraph ML[机器学习执行环境]
-        PyService[Python 预测服务（ARIMA/Prophet/LSTM）]
+        JavaLib[Java 预测引擎库（ARIMA/Prophet/LSTM 实现）]
         Scheduler[任务调度器 (Quartz/Spring Scheduling)]
     end
 
@@ -44,15 +44,15 @@ graph TD
     Gateway -->|REST API| Backend
     Backend -->|JPA/MyBatis| MySQL
     Backend -->|文件/模型| ObjectStore
-    Backend -->|HTTP/gRPC| PyService
+    Backend --> JavaLib
     Backend --> Scheduler
-    PyService --> ModelRegistry
+    JavaLib --> ModelRegistry
     Backend --> Monitor
     Gateway --> Auth
     Client --> Auth
 ```
 
-> 说明：系统采用前后端分离架构。Spring Boot 后端提供统一 RESTful API，负责数据管理、预测编排与决策支持；Vue3 前端消费 API，展示可视化图表与预测结果。ARIMA/Prophet/LSTM 模型在独立的 Python 服务中训练与推理，Spring Boot 通过异步任务调度与其通信。
+> 说明：系统采用前后端分离架构。Spring Boot 后端提供统一 RESTful API，负责数据管理、预测编排与决策支持；Vue3 前端消费 API，展示可视化图表与预测结果。ARIMA/Prophet/LSTM 模型由后端内嵌的 Java 预测库完成训练与推理，Spring Boot 通过异步任务调度直接调用模型能力。
 
 ## 2. 前后端分离技术方案
 
@@ -72,11 +72,19 @@ graph TD
 - **数据导入与清洗**：利用 Apache Commons CSV/POI 解析 Excel/CSV，集成 MapStruct 做 DTO-Entity 转换，Bean Validation 校验。
 - **预测任务编排**：
   - Spring Scheduler/Quartz 定时触发训练、回测。
-  - 使用 Spring Cloud OpenFeign/RestTemplate 调用 Python 预测服务。
+  - 通过封装的 Java 预测库执行 ARIMA/Prophet/LSTM 等模型训练与推理。
   - 采用消息队列（如 RabbitMQ）可选提升异步能力。
 - **安全**：Spring Security + JWT，RBAC 控制数据导入/预测操作权限。
 - **文档**：Springdoc OpenAPI 生成 Swagger 接口文档。
 - **监控**：Spring Boot Actuator + Micrometer（Prometheus）。
+
+#### 气象数据与未来天气接入
+- **历史气象特征生成**：在调用 Java 预测库前，后端根据预测任务涉及的历史年份自动聚合 `WeatherRecord`，形成年度级特征（平均最高/最低温、昼夜温差、日照时数等），并在 `buildWeatherFeatureMap` 中与历史产量一同封装。
+- **未来气象特征构建**：
+  - 调用外部气象预报 API（CMA、ECMWF、和风等）拉取目标年份生育期内的逐日/逐小时预测，聚合为与历史一致的指标后再传入预测引擎，可选择临时入库或直接以内存特征注入。
+  - 支持多情景（正常年、偏旱、偏涝等）预测，任务参数扩展 `weatherScenario`、`forecastSource` 等标识，通过多次调用预测组件获得不同结果。
+  - 允许将未来天气生成逻辑下沉到 Java 预测库：当模型具备气象预测能力时，后端仅传入历史观测并在 `ForecastEngineRequest` 中附带开关标记，由预测引擎先行模拟未来气象。
+- **特征一致性要求**：无论来源如何，未来气象特征的结构需与 `summarizeWeatherFeatures` 输出保持一致（字段命名、单位、汇总方式），以保证模型与可视化兼容。
 
 ### 数据导入示例
 
@@ -86,11 +94,11 @@ graph TD
 - 表头已经按照 `DataImportService` 的同义词映射准备，包含作物、地区、年份、播种面积、产量、单产、平均价格、数据来源、采集日期等字段，且单位设置可触发自动换算（如“千公顷”“万吨”“元/吨”）。
 - 导入后应能看到任务进度正常推进，并在进度详情页预览到 4 条数据，其中新增作物和地区会在基础库中自动创建。
 
-### Python 预测服务
-- 运行于独立容器或虚拟环境，提供 REST/gRPC 接口。
-- 使用 `pmdarima`、`prophet`、`torch`/`tensorflow` 实现 ARIMA、Prophet、LSTM 模型。
-- 使用 MLflow/自定义模型仓库存储模型版本及评估指标。
-- 返回预测值、置信区间、模型元数据，供后端入库展示。
+### Java 预测库
+- 以内嵌依赖方式集成在 Spring Boot 服务中，可通过 Spring Bean 形式注入使用。
+- 提供 ARIMA、Prophet、LSTM 等模型的训练、预测、回测 API，统一封装为 `ForecastEngine` 接口。
+- 支持将模型文件保存在 ModelRegistry（本地文件、MinIO 等），并记录评估指标与版本元数据。
+- 输出预测值、置信区间与模型元数据，由后端直接入库展示。
 
 ## 3. 数据库表结构设计
 
@@ -286,44 +294,51 @@ VITE_API_BASE_URL=https://api.example.com/api
 - 自定义主题适配云南农业色彩（绿色、金色）。
 - 支持暗黑模式（ECharts、Element Plus 主题联动）。
 
-### 4.3 Python 预测服务
+### 4.3 Java 预测库集成
 
-**环境依赖（requirements.txt）**
-```
-fastapi
-uvicorn
-pydantic
-pandas
-numpy
-scikit-learn
-pmdarima
-prophet
-torch
-mlflow
-joblib
-redis
-loguru
+**核心依赖（pom.xml）**
+```xml
+<dependency>
+    <groupId>com.github.signaflo</groupId>
+    <artifactId>timeseries-forecast</artifactId>
+    <version>${signaflo.version}</version>
+</dependency>
+<dependency>
+    <groupId>org.tensorflow</groupId>
+    <artifactId>tensorflow</artifactId>
+    <version>${tensorflow.version}</version>
+</dependency>
+<dependency>
+    <groupId>ai.djl</groupId>
+    <artifactId>djl-basicdataset</artifactId>
+    <version>${djl.version}</version>
+</dependency>
 ```
 
-**基础结构**
+> 实际依赖可根据选用的 ARIMA、Prophet、LSTM 实现替换，上述示例仅为常见组合。
+
+**模块结构建议**
 ```
-app/
-  main.py         # FastAPI 入口
-  routers/
-    forecast.py   # 预测接口
-  services/
-    arima_service.py
-    prophet_service.py
-    lstm_service.py
-  models/
-    schemas.py    # 请求/响应模型
-  repository/
-    model_registry.py
+demo/
+  src/main/java/
+    com/example/forecast/engine/
+      ForecastEngine.java        # 统一入口接口（train/predict/backtest）
+      TimeseriesModule.java      # ARIMA/Prophet 封装
+      DeepLearningModule.java    # LSTM 封装
+      FeatureAssembler.java      # 气象与产量特征处理
+      ModelRepository.java       # 模型文件读写（MinIO/本地）
+    com/example/forecast/service/
+      ForecastService.java       # 业务服务调用 ForecastEngine
 ```
+
+**运行要点**
+- 通过 Spring 的 `@Configuration` 暴露 `ForecastEngine` Bean，可在 Service 层注入。
+- 训练/预测任务由 Scheduler 触发，统一封装任务上下文（地区、作物、年份、气象情景）。
+- 将模型文件与评估指标写入 ModelRegistry，保持版本可追溯。
 
 ## 5. 开发流程建议
 1. 定义统一 API 契约（OpenAPI），前后端依据接口并行开发。
 2. 通过 Docker Compose 启动依赖服务，`npm run dev` 与 `mvn spring-boot:run` 联调。
 3. 引入 CI/CD（GitHub Actions）：自动构建、运行单元测试、前端 Lint、后端测试。
 4. 使用 SonarQube/Checkstyle + ESLint/Prettier 保证代码质量。
-5. 部署时后端、Python 服务容器部署于同一网络；前端静态资源部署 Nginx/CDN。
+5. 部署时后端容器内嵌预测库即可，结合 Docker Compose 或 K8s 暴露统一 API；前端静态资源部署 Nginx/CDN。

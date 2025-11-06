@@ -1,4 +1,5 @@
-const hasLetter = value => /[A-Za-z]/.test(value)
+const hasUppercase = value => /[A-Z]/.test(value)
+const hasLowercase = value => /[a-z]/.test(value)
 const hasDigit = value => /\d/.test(value)
 const hasSymbol = value => /[^A-Za-z0-9]/.test(value)
 
@@ -35,8 +36,8 @@ export const validatePasswordPolicy = password => {
   if (password.length < 6) {
     return '密码长度至少为6位'
   }
-  if (!hasLetter(password) || !hasDigit(password)) {
-    return '密码需同时包含字母和数字'
+  if (!hasUppercase(password) || !hasLowercase(password) || !hasDigit(password)) {
+    return '密码需同时包含大写字母、小写字母和数字'
   }
   if (isSequentialDigits(password)) {
     return '密码不能为连续数字'
@@ -55,7 +56,7 @@ export const getPasswordStrength = password => {
   if (password.length >= 10) {
     score += 1
   }
-  if (hasLetter(password) && hasDigit(password)) {
+  if (hasUppercase(password) && hasLowercase(password) && hasDigit(password)) {
     score += 1
   }
   if (hasSymbol(password)) {
