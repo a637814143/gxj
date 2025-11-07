@@ -236,7 +236,10 @@ public class WeatherServiceImpl implements WeatherService {
     private boolean shouldAppendQueryKey(QWeatherProperties qweather) {
         WeatherProperties.QWeatherProperties.AuthMode authMode = Optional.ofNullable(qweather.getAuthMode())
             .orElse(WeatherProperties.QWeatherProperties.AuthMode.QUERY_KEY);
-        return authMode == WeatherProperties.QWeatherProperties.AuthMode.QUERY_KEY;
+        if (authMode == WeatherProperties.QWeatherProperties.AuthMode.QUERY_KEY) {
+            return true;
+        }
+        return !StringUtils.hasText(qweather.getToken());
     }
 
     private BusinessException translateHttpException(String apiName, HttpStatusCodeException ex) {

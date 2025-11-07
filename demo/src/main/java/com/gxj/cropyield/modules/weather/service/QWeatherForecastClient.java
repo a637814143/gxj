@@ -164,7 +164,10 @@ public class QWeatherForecastClient {
     private boolean shouldAppendQueryKey(WeatherProperties.QWeatherProperties qweather) {
         WeatherProperties.QWeatherProperties.AuthMode authMode = Optional.ofNullable(qweather.getAuthMode())
             .orElse(WeatherProperties.QWeatherProperties.AuthMode.QUERY_KEY);
-        return authMode == WeatherProperties.QWeatherProperties.AuthMode.QUERY_KEY;
+        if (authMode == WeatherProperties.QWeatherProperties.AuthMode.QUERY_KEY) {
+            return true;
+        }
+        return !StringUtils.hasText(qweather.getToken());
     }
 
     private String safeBody(HttpStatusCodeException ex) {

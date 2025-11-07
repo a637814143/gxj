@@ -53,6 +53,11 @@ public class WeatherProperties {
         private String key;
 
         /**
+         * 企业版和风天气使用的访问令牌，用于 Bearer 身份校验。
+         */
+        private String token;
+
+        /**
          * 默认查询语言。
          */
         private String language = "zh";
@@ -117,6 +122,14 @@ public class WeatherProperties {
 
         public void setKey(String key) {
             this.key = key;
+        }
+
+        public String getToken() {
+            return token;
+        }
+
+        public void setToken(String token) {
+            this.token = token;
         }
 
         public String getLanguage() {
