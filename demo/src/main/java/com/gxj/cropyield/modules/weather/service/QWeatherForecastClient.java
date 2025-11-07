@@ -7,6 +7,7 @@ import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 
@@ -51,62 +52,66 @@ public class QWeatherForecastClient {
             log.debug("QWeather key is not configured, skip fetching forecast");
             return Collections.emptyList();
         }
-        String baseUrl = Optional.ofNullable(qweather.getBaseUrl()).filter(StringUtils::hasText)
-            .orElse("https://m776x8rde7.re.qweatherapi.com/v7");
-        String trimmedBase = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
-        UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromHttpUrl(trimmedBase + "/weather/15d")
-            .queryParam("location", resolveLocationParameter(longitude, latitude, qweather))
-            .queryParam("lang", qweather.getLanguage())
-            .queryParam("unit", qweather.getUnit());
-        if (shouldAppendQueryKey(qweather)) {
-            uriBuilder.queryParam("key", qweather.getKey());
-        }
-        URI requestUri = uriBuilder.build(true).toUri();
+        String locationParam = resolveLocationParameter(longitude, latitude, qweather);
+        for (String base : buildWeatherBaseCandidates(qweather)) {
+            String trimmedBase = trimTrailingSlash(base);
+            UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromHttpUrl(trimmedBase + "/weather/15d")
+                .queryParam("location", locationParam)
+                .queryParam("lang", qweather.getLanguage())
+                .queryParam("unit", qweather.getUnit());
+            if (shouldAppendQueryKey(qweather)) {
+                uriBuilder.queryParam("key", qweather.getKey());
+            }
+            URI requestUri = uriBuilder.build(true).toUri();
 
-        ResponseEntity<JsonNode> response;
-        try {
-            response = restTemplate.getForEntity(requestUri, JsonNode.class);
-        } catch (HttpStatusCodeException ex) {
-            log.warn("和风天气接口返回异常状态: {} {}", ex.getStatusCode(), safeBody(ex));
-            return Collections.emptyList();
-        } catch (RestClientException ex) {
-            log.warn("调用和风天气接口失败: {}", ex.getMessage());
-            return Collections.emptyList();
-        }
-
-        if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
-            log.warn("和风天气返回非成功状态: {}", response.getStatusCode());
-            return Collections.emptyList();
-        }
-
-        JsonNode root = response.getBody();
-        String code = root.path("code").asText();
-        if (!"200".equals(code)) {
-            log.warn("和风天气返回错误码: {}", code);
-            return Collections.emptyList();
-        }
-
-        JsonNode daily = root.path("daily");
-        if (daily == null || !daily.isArray() || daily.isEmpty()) {
-            return Collections.emptyList();
-        }
-
-        List<WeatherRecord> records = new ArrayList<>();
-        for (JsonNode node : daily) {
-            LocalDate date = parseDate(node.path("fxDate").asText(null));
-            if (date == null) {
+            ResponseEntity<JsonNode> response;
+            try {
+                response = restTemplate.getForEntity(requestUri, JsonNode.class);
+            } catch (HttpStatusCodeException ex) {
+                log.warn("和风天气接口返回异常状态: {} {}", ex.getStatusCode(), safeBody(ex));
+                continue;
+            } catch (RestClientException ex) {
+                log.warn("调用和风天气接口失败: {}", ex.getMessage());
                 continue;
             }
-            WeatherRecord record = new WeatherRecord();
-            record.setRecordDate(date);
-            record.setMaxTemperature(parseDouble(node.path("tempMax")));
-            record.setMinTemperature(parseDouble(node.path("tempMin")));
-            record.setWeatherText(node.path("textDay").asText(null));
-            record.setSunshineHours(computeSunshine(node.path("sunrise").asText(null), node.path("sunset").asText(null)));
-            record.setDataSource("qweather-forecast");
-            records.add(record);
+
+            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                log.warn("和风天气返回非成功状态: {}", response.getStatusCode());
+                continue;
+            }
+
+            JsonNode root = response.getBody();
+            String code = root.path("code").asText();
+            if (!"200".equals(code)) {
+                log.warn("和风天气返回错误码: {}", code);
+                continue;
+            }
+
+            JsonNode daily = root.path("daily");
+            if (daily == null || !daily.isArray() || daily.isEmpty()) {
+                continue;
+            }
+
+            List<WeatherRecord> records = new ArrayList<>();
+            for (JsonNode node : daily) {
+                LocalDate date = parseDate(node.path("fxDate").asText(null));
+                if (date == null) {
+                    continue;
+                }
+                WeatherRecord record = new WeatherRecord();
+                record.setRecordDate(date);
+                record.setMaxTemperature(parseDouble(node.path("tempMax")));
+                record.setMinTemperature(parseDouble(node.path("tempMin")));
+                record.setWeatherText(node.path("textDay").asText(null));
+                record.setSunshineHours(computeSunshine(node.path("sunrise").asText(null), node.path("sunset").asText(null)));
+                record.setDataSource("qweather-forecast");
+                records.add(record);
+            }
+            if (!records.isEmpty()) {
+                return records;
+            }
         }
-        return records;
+        return Collections.emptyList();
     }
 
     private LocalDate parseDate(String value) {
@@ -168,6 +173,23 @@ public class QWeatherForecastClient {
             return true;
         }
         return !StringUtils.hasText(qweather.getToken());
+    }
+
+    private Iterable<String> buildWeatherBaseCandidates(WeatherProperties.QWeatherProperties qweather) {
+        LinkedHashSet<String> candidates = new LinkedHashSet<>();
+        if (qweather != null && StringUtils.hasText(qweather.getBaseUrl())) {
+            candidates.add(qweather.getBaseUrl());
+        }
+        candidates.add("https://devapi.qweather.com/v7");
+        candidates.add("https://api.qweather.com/v7");
+        return candidates;
+    }
+
+    private String trimTrailingSlash(String value) {
+        if (!StringUtils.hasText(value)) {
+            return value;
+        }
+        return value.endsWith("/") ? value.substring(0, value.length() - 1) : value;
     }
 
     private String safeBody(HttpStatusCodeException ex) {
