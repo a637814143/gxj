@@ -43,11 +43,12 @@ public class QWeatherLocationClient {
         for (String base : buildGeoBaseCandidates(qweather)) {
             String trimmedBase = trimTrailingSlash(base);
 
-            URI requestUri = UriComponentsBuilder.fromHttpUrl(trimmedBase + "/city/lookup")
-                .queryParam("location", longitude + "," + latitude)
-                .queryParam("key", qweather.getKey())
-                .build(true)
-                .toUri();
+            UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(trimmedBase + "/city/lookup")
+                .queryParam("location", longitude + "," + latitude);
+            if (shouldAppendQueryKey(qweather)) {
+                builder.queryParam("key", qweather.getKey());
+            }
+            URI requestUri = builder.build(true).toUri();
 
             ResponseEntity<JsonNode> response;
             try {
@@ -141,6 +142,12 @@ public class QWeatherLocationClient {
             return value;
         }
         return value.endsWith("/") ? value.substring(0, value.length() - 1) : value;
+    }
+
+    private boolean shouldAppendQueryKey(WeatherProperties.QWeatherProperties qweather) {
+        WeatherProperties.QWeatherProperties.AuthMode authMode = Optional.ofNullable(qweather.getAuthMode())
+            .orElse(WeatherProperties.QWeatherProperties.AuthMode.QUERY_KEY);
+        return authMode == WeatherProperties.QWeatherProperties.AuthMode.QUERY_KEY;
     }
 
     private String safeBody(HttpStatusCodeException ex) {

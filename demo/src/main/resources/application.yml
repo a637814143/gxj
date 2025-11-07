@@ -73,5 +73,6 @@ weather:
     referer: https://localhost
     user-agent: crop-yield-platform/1.0
     location-mode: GEO_LOOKUP
+    auth-mode: HEADER_BEARER
     connect-timeout: 2s
     read-timeout: 5s

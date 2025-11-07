@@ -92,13 +92,14 @@ public class WeatherServiceImpl implements WeatherService {
             .orElse("https://m776x8rde7.re.qweatherapi.com/v7");
         String trimmedBase = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
 
-        URI requestUri = UriComponentsBuilder.fromHttpUrl(trimmedBase + "/weather/now")
+        UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromHttpUrl(trimmedBase + "/weather/now")
             .queryParam("location", resolveLocationParameter(longitude, latitude, qweather))
-            .queryParam("key", qweather.getKey())
             .queryParam("lang", qweather.getLanguage())
-            .queryParam("unit", qweather.getUnit())
-            .build(true)
-            .toUri();
+            .queryParam("unit", qweather.getUnit());
+        if (shouldAppendQueryKey(qweather)) {
+            uriBuilder.queryParam("key", qweather.getKey());
+        }
+        URI requestUri = uriBuilder.build(true).toUri();
 
         ResponseEntity<JsonNode> response;
         try {
@@ -175,13 +176,14 @@ public class WeatherServiceImpl implements WeatherService {
         String baseUrl = Optional.ofNullable(qweather.getBaseUrl()).filter(StringUtils::hasText)
             .orElse("https://m776x8rde7.re.qweatherapi.com/v7");
         String trimmedBase = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
-        URI requestUri = UriComponentsBuilder.fromHttpUrl(trimmedBase + "/air/now")
+        UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromHttpUrl(trimmedBase + "/air/now")
             .queryParam("location", resolveLocationParameter(longitude, latitude, qweather))
-            .queryParam("key", qweather.getKey())
             .queryParam("lang", qweather.getLanguage())
-            .queryParam("unit", qweather.getUnit())
-            .build(true)
-            .toUri();
+            .queryParam("unit", qweather.getUnit());
+        if (shouldAppendQueryKey(qweather)) {
+            uriBuilder.queryParam("key", qweather.getKey());
+        }
+        URI requestUri = uriBuilder.build(true).toUri();
 
         ResponseEntity<JsonNode> response;
         try {
@@ -229,6 +231,12 @@ public class WeatherServiceImpl implements WeatherService {
             }
         }
         return longitude + "," + latitude;
+    }
+
+    private boolean shouldAppendQueryKey(QWeatherProperties qweather) {
+        WeatherProperties.QWeatherProperties.AuthMode authMode = Optional.ofNullable(qweather.getAuthMode())
+            .orElse(WeatherProperties.QWeatherProperties.AuthMode.QUERY_KEY);
+        return authMode == WeatherProperties.QWeatherProperties.AuthMode.QUERY_KEY;
     }
 
     private BusinessException translateHttpException(String apiName, HttpStatusCodeException ex) {

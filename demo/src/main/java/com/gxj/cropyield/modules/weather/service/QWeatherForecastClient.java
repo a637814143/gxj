@@ -54,13 +54,14 @@ public class QWeatherForecastClient {
         String baseUrl = Optional.ofNullable(qweather.getBaseUrl()).filter(StringUtils::hasText)
             .orElse("https://m776x8rde7.re.qweatherapi.com/v7");
         String trimmedBase = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
-        URI requestUri = UriComponentsBuilder.fromHttpUrl(trimmedBase + "/weather/15d")
+        UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromHttpUrl(trimmedBase + "/weather/15d")
             .queryParam("location", resolveLocationParameter(longitude, latitude, qweather))
-            .queryParam("key", qweather.getKey())
             .queryParam("lang", qweather.getLanguage())
-            .queryParam("unit", qweather.getUnit())
-            .build(true)
-            .toUri();
+            .queryParam("unit", qweather.getUnit());
+        if (shouldAppendQueryKey(qweather)) {
+            uriBuilder.queryParam("key", qweather.getKey());
+        }
+        URI requestUri = uriBuilder.build(true).toUri();
 
         ResponseEntity<JsonNode> response;
         try {
@@ -158,6 +159,12 @@ public class QWeatherForecastClient {
             }
         }
         return longitude + "," + latitude;
+    }
+
+    private boolean shouldAppendQueryKey(WeatherProperties.QWeatherProperties qweather) {
+        WeatherProperties.QWeatherProperties.AuthMode authMode = Optional.ofNullable(qweather.getAuthMode())
+            .orElse(WeatherProperties.QWeatherProperties.AuthMode.QUERY_KEY);
+        return authMode == WeatherProperties.QWeatherProperties.AuthMode.QUERY_KEY;
     }
 
     private String safeBody(HttpStatusCodeException ex) {

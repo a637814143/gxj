@@ -94,6 +94,11 @@ public class WeatherProperties {
         private String userAgent;
 
         /**
+         * 鉴权模式，免费版使用 query 参数，企业版使用 Authorization 头传递 Bearer Token。
+         */
+        private AuthMode authMode = AuthMode.QUERY_KEY;
+
+        /**
          * 位置信息获取模式，默认使用经纬度直接请求。
          */
         private LocationMode locationMode = LocationMode.COORDINATE;
@@ -186,6 +191,14 @@ public class WeatherProperties {
             this.userAgent = userAgent;
         }
 
+        public AuthMode getAuthMode() {
+            return authMode;
+        }
+
+        public void setAuthMode(AuthMode authMode) {
+            this.authMode = authMode;
+        }
+
         public LocationMode getLocationMode() {
             return locationMode;
         }
@@ -197,6 +210,11 @@ public class WeatherProperties {
         public enum LocationMode {
             COORDINATE,
             GEO_LOOKUP
+        }
+
+        public enum AuthMode {
+            QUERY_KEY,
+            HEADER_BEARER
         }
     }
 }

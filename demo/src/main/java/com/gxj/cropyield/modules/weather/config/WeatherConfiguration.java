@@ -33,6 +33,11 @@ public class WeatherConfiguration {
                 if (StringUtils.hasText(qweather.getUserAgent()) && !headers.containsKey(HttpHeaders.USER_AGENT)) {
                     headers.set(HttpHeaders.USER_AGENT, qweather.getUserAgent());
                 }
+                if (qweather.getAuthMode() == WeatherProperties.QWeatherProperties.AuthMode.HEADER_BEARER
+                    && StringUtils.hasText(qweather.getKey())
+                    && !headers.containsKey(HttpHeaders.AUTHORIZATION)) {
+                    headers.set(HttpHeaders.AUTHORIZATION, "Bearer " + qweather.getKey());
+                }
                 return execution.execute(request, body);
             })
             .build();
