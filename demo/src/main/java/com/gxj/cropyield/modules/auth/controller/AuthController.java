@@ -30,7 +30,10 @@ import org.springframework.web.bind.annotation.RestController;
 import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
 import java.net.UnknownHostException;
+import java.util.Enumeration;
 /**
  * 认证与账号模块的控制器，用于暴露认证与账号相关的 REST 接口。
  * <p>核心方法：captcha、register、login、adminLogin、userLogin、refreshToken、currentUser、checkPermission。</p>
@@ -179,13 +182,15 @@ public class AuthController {
 
         String trimmed = ipAddress.trim();
         if ("0:0:0:0:0:0:0:1".equals(trimmed) || "::1".equals(trimmed)) {
-            return "127.0.0.1";
+            String preferredLanIp = resolvePreferredLanIp();
+            return StringUtils.hasText(preferredLanIp) ? preferredLanIp : "192.168.0.1";
         }
 
         try {
             InetAddress inetAddress = InetAddress.getByName(trimmed);
             if (inetAddress.isLoopbackAddress()) {
-                return "127.0.0.1";
+                String preferredLanIp = resolvePreferredLanIp();
+                return StringUtils.hasText(preferredLanIp) ? preferredLanIp : "192.168.0.1";
             }
             if (inetAddress instanceof Inet4Address) {
                 return inetAddress.getHostAddress();
@@ -204,6 +209,36 @@ public class AuthController {
             return inetAddress.getHostAddress();
         } catch (UnknownHostException ex) {
             return trimmed;
+        }
+    }
+
+    private String resolvePreferredLanIp() {
+        try {
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            String firstSiteLocal = null;
+            while (interfaces.hasMoreElements()) {
+                NetworkInterface networkInterface = interfaces.nextElement();
+                Enumeration<InetAddress> addresses = networkInterface.getInetAddresses();
+                while (addresses.hasMoreElements()) {
+                    InetAddress candidate = addresses.nextElement();
+                    if (!(candidate instanceof Inet4Address)) {
+                        continue;
+                    }
+                    String hostAddress = candidate.getHostAddress();
+                    if (!candidate.isSiteLocalAddress()) {
+                        continue;
+                    }
+                    if (hostAddress.startsWith("192.168.")) {
+                        return hostAddress;
+                    }
+                    if (firstSiteLocal == null) {
+                        firstSiteLocal = hostAddress;
+                    }
+                }
+            }
+            return firstSiteLocal;
+        } catch (SocketException ex) {
+            return null;
         }
     }
 }
