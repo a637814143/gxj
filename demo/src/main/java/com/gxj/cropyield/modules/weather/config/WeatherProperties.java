@@ -48,6 +48,11 @@ public class WeatherProperties {
         private String geoBaseUrl;
 
         /**
+         * 和风天气空气质量接口基础地址，默认与基础地址同源。
+         */
+        private String airBaseUrl;
+
+        /**
          * 和风天气访问密钥。
          */
         private String key;
@@ -186,6 +191,14 @@ public class WeatherProperties {
 
         public void setGeoBaseUrl(String geoBaseUrl) {
             this.geoBaseUrl = geoBaseUrl;
+        }
+
+        public String getAirBaseUrl() {
+            return airBaseUrl;
+        }
+
+        public void setAirBaseUrl(String airBaseUrl) {
+            this.airBaseUrl = airBaseUrl;
         }
 
         public String getReferer() {

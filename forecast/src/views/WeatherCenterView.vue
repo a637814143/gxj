@@ -470,13 +470,17 @@ const airQualitySummary = computed(() => {
     }
   })
 
+  const subtitle =
+    aqiValue === null
+      ? '暂无空气质量数据'
+      : air.description || descriptor?.label || '空气质量监测'
+
+  const badge = descriptor?.badge || air.category || ''
+
   return {
     aqi: aqiValue === null ? '—' : formatNumber(aqiValue),
-    subtitle:
-      aqiValue === null
-        ? '暂无空气质量数据'
-        : descriptor?.label || '空气质量监测',
-    badge: descriptor?.badge || '',
+    subtitle,
+    badge,
     metrics,
     accentClass
   }

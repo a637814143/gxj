@@ -7,6 +7,7 @@ import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -140,7 +141,7 @@ public class WeatherServiceImpl implements WeatherService {
             }
 
             JsonNode nowNode = body.path("now");
-            WeatherRealtimeResponse.AirQuality airQuality = fetchAirQuality(locationParam, qweather);
+            WeatherRealtimeResponse.AirQuality airQuality = fetchAirQuality(longitude, latitude, qweather);
 
             double humidity = parseDouble(nowNode.path("humidity"));
             double roundedHumidity = Double.isNaN(humidity) ? humidity : roundToSingleDecimal(humidity);
@@ -187,17 +188,23 @@ public class WeatherServiceImpl implements WeatherService {
         throw new BusinessException(ResultCode.SERVER_ERROR, "获取天气数据失败");
     }
 
-    private WeatherRealtimeResponse.AirQuality fetchAirQuality(String locationParam, QWeatherProperties qweather) {
+    private WeatherRealtimeResponse.AirQuality fetchAirQuality(double longitude,
+                                                               double latitude,
+                                                               QWeatherProperties qweather) {
         if (qweather == null || !StringUtils.hasText(qweather.getKey())) {
             return null;
         }
         BusinessException lastError = null;
-        for (String base : buildWeatherBaseCandidates(qweather)) {
+        String latitudePath = formatCoordinate(latitude);
+        String longitudePath = formatCoordinate(longitude);
+        for (String base : buildAirQualityBaseCandidates(qweather)) {
             String trimmedBase = trimTrailingSlash(base);
-            UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromHttpUrl(trimmedBase + "/air/now")
-                .queryParam("location", locationParam)
-                .queryParam("lang", qweather.getLanguage())
-                .queryParam("unit", qweather.getUnit());
+            if (!StringUtils.hasText(trimmedBase)) {
+                continue;
+            }
+            UriComponentsBuilder uriBuilder = UriComponentsBuilder
+                .fromHttpUrl(trimmedBase + "/airquality/v1/current/" + latitudePath + "/" + longitudePath)
+                .queryParam("lang", qweather.getLanguage());
             if (shouldAppendQueryKey(qweather)) {
                 uriBuilder.queryParam("key", qweather.getKey());
             }
@@ -219,25 +226,41 @@ public class WeatherServiceImpl implements WeatherService {
             }
 
             JsonNode body = response.getBody();
-            if (!"200".equals(body.path("code").asText())) {
+            JsonNode indexes = body.path("indexes");
+            JsonNode primaryIndex = (indexes != null && indexes.isArray() && !indexes.isEmpty())
+                ? indexes.get(0)
+                : null;
+
+            if (primaryIndex == null || primaryIndex.isMissingNode()) {
                 continue;
             }
 
-            JsonNode nowNode = body.path("now");
-            if (nowNode == null || nowNode.isMissingNode() || nowNode.isNull()) {
-                continue;
+            Double aqi = nullableDouble(primaryIndex.path("aqi"));
+            String categoryRaw = primaryIndex.path("category").asText(null);
+            String description = localizeAqiCategory(categoryRaw);
+            if (!StringUtils.hasText(description)) {
+                description = localizeAqiCategory(primaryIndex.path("name").asText(null));
             }
+            String category = categoryRaw;
+
+            JsonNode pollutants = body.path("pollutants");
+            Double pm25 = findPollutantValue(pollutants, "pm2p5", "pm25");
+            Double pm10 = findPollutantValue(pollutants, "pm10");
+            Double o3 = findPollutantValue(pollutants, "o3");
+            Double so2 = findPollutantValue(pollutants, "so2");
+            Double no2 = findPollutantValue(pollutants, "no2");
+            Double co = findPollutantValue(pollutants, "co");
 
             return new WeatherRealtimeResponse.AirQuality(
-                nullableDouble(nowNode.path("aqi")),
-                nullableDouble(nowNode.path("pm2p5")),
-                nullableDouble(nowNode.path("pm10")),
-                nullableDouble(nowNode.path("o3")),
-                nullableDouble(nowNode.path("so2")),
-                nullableDouble(nowNode.path("no2")),
-                nullableDouble(nowNode.path("co")),
-                nowNode.path("category").asText(null),
-                nowNode.path("primary").asText(null)
+                aqi,
+                pm25,
+                pm10,
+                o3,
+                so2,
+                no2,
+                co,
+                description,
+                category
             );
         }
 
@@ -277,11 +300,50 @@ public class WeatherServiceImpl implements WeatherService {
         return candidates;
     }
 
+    private Iterable<String> buildAirQualityBaseCandidates(QWeatherProperties qweather) {
+        LinkedHashSet<String> candidates = new LinkedHashSet<>();
+        if (qweather != null) {
+            addIfHasText(candidates, qweather.getAirBaseUrl());
+            addIfHasText(candidates, extractHostRoot(qweather.getBaseUrl()));
+            addIfHasText(candidates, extractHostRoot(qweather.getGeoBaseUrl()));
+        }
+        candidates.add("https://devapi.qweather.com");
+        candidates.add("https://api.qweather.com");
+        return candidates;
+    }
+
     private String trimTrailingSlash(String value) {
         if (!StringUtils.hasText(value)) {
             return value;
         }
         return value.endsWith("/") ? value.substring(0, value.length() - 1) : value;
+    }
+
+    private String extractHostRoot(String baseUrl) {
+        if (!StringUtils.hasText(baseUrl)) {
+            return null;
+        }
+        try {
+            URI uri = URI.create(baseUrl);
+            String scheme = uri.getScheme();
+            if (!StringUtils.hasText(scheme)) {
+                scheme = "https";
+            }
+            String host = uri.getHost();
+            if (!StringUtils.hasText(host)) {
+                return null;
+            }
+            return scheme + "://" + host;
+        } catch (IllegalArgumentException ex) {
+            log.debug("无法从和风天气基础地址解析主机: {}", baseUrl, ex);
+            return null;
+        }
+    }
+
+    private void addIfHasText(LinkedHashSet<String> set, String value) {
+        if (StringUtils.hasText(value)) {
+            set.add(value);
+        }
     }
 
     private BusinessException translateHttpException(String apiName, HttpStatusCodeException ex) {
@@ -310,6 +372,77 @@ public class WeatherServiceImpl implements WeatherService {
         } catch (Exception ignore) {
             return "";
         }
+    }
+
+    private String formatCoordinate(double value) {
+        return String.format(Locale.US, "%.2f", value);
+    }
+
+    private Double findPollutantValue(JsonNode pollutants, String... codes) {
+        if (pollutants == null || !pollutants.isArray() || pollutants.isEmpty()) {
+            return null;
+        }
+        for (JsonNode pollutant : pollutants) {
+            if (pollutant == null || pollutant.isMissingNode()) {
+                continue;
+            }
+            String code = pollutant.path("code").asText(null);
+            if (!StringUtils.hasText(code)) {
+                continue;
+            }
+            for (String candidate : codes) {
+                if (code.equalsIgnoreCase(candidate)) {
+                    Double value = extractPollutantValue(pollutant);
+                    if (value != null) {
+                        return value;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private Double extractPollutantValue(JsonNode pollutant) {
+        if (pollutant == null || pollutant.isMissingNode()) {
+            return null;
+        }
+        Double value = nullableDouble(pollutant.path("value"));
+        if (value != null) {
+            return value;
+        }
+        JsonNode concentration = pollutant.path("concentration");
+        if (concentration != null && !concentration.isMissingNode()) {
+            value = nullableDouble(concentration.path("value"));
+            if (value != null) {
+                return value;
+            }
+        }
+        JsonNode dataNode = pollutant.path("data");
+        if (dataNode != null && !dataNode.isMissingNode()) {
+            value = nullableDouble(dataNode.path("value"));
+        }
+        return value;
+    }
+
+    private String localizeAqiCategory(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            return null;
+        }
+        String normalized = raw.trim().toLowerCase(Locale.ROOT);
+        return switch (normalized) {
+            case "excellent" -> "优";
+            case "good" -> "优";
+            case "fair" -> "良";
+            case "moderate" -> "轻度污染";
+            case "unhealthy for sensitive groups" -> "轻度污染";
+            case "unhealthy" -> "中度污染";
+            case "poor" -> "中度污染";
+            case "very unhealthy" -> "重度污染";
+            case "severe" -> "重度污染";
+            case "hazardous" -> "严重污染";
+            case "extremely hazardous" -> "严重污染";
+            default -> raw;
+        };
     }
 
     private double parseDouble(JsonNode node) {

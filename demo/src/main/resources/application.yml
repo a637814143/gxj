@@ -66,6 +66,7 @@ weather:
   cache-ttl: 120s
   qweather:
     base-url: https://m776x8rde7.re.qweatherapi.com/v7
+    air-base-url: https://m776x8rde7.re.qweatherapi.com
     key: 4a614f0f1273489d9fa106f8d237963d
     language: zh
     unit: m
