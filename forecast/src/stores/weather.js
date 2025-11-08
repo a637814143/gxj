@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { fetchRealtimeWeather } from '../services/weather'
+import { fetchRealtimeWeather, fetchDailyForecast } from '../services/weather'
 
 const STORAGE_KEY = 'cropyield-weather-location'
 
@@ -56,9 +56,12 @@ export const useWeatherStore = defineStore('weather', {
   state: () => ({
     selectedLocationId: LOCATION_PRESETS[0]?.id || null,
     current: null,
+    forecast: [],
     isLoading: false,
     error: null,
     lastUpdated: 0,
+    forecastUpdated: 0,
+    forecastError: null,
     initialized: false,
     refreshTimer: null
   }),
@@ -98,9 +101,28 @@ export const useWeatherStore = defineStore('weather', {
         }
         this.current = payload
         this.lastUpdated = Date.now()
+
+        try {
+          const { data: forecastResponse } = await fetchDailyForecast({
+            longitude: location.longitude,
+            latitude: location.latitude
+          })
+          const forecastPayload = forecastResponse?.data?.daily || []
+          this.forecast = Array.isArray(forecastPayload) ? forecastPayload : []
+          this.forecastUpdated = Date.now()
+          this.forecastError = null
+        } catch (forecastError) {
+          console.warn('获取未来天气预报失败', forecastError)
+          this.forecastError =
+            forecastError?.response?.data?.message || forecastError?.message || '未来天气预报获取失败'
+        }
       } catch (error) {
         console.error('获取天气数据失败', error)
         this.error = error?.response?.data?.message || error?.message || '天气数据获取失败'
+        this.forecast = []
+        this.forecastUpdated = 0
+        this.forecastError =
+          error?.response?.data?.message || error?.message || this.forecastError || '未来天气预报获取失败'
       } finally {
         this.isLoading = false
       }

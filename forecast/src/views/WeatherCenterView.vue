@@ -100,6 +100,41 @@
         </div>
       </section>
 
+      <section class="weather-forecast">
+        <el-card class="forecast-card">
+          <template #header>
+            <div class="forecast-header">
+              <div class="forecast-title-group">
+                <h3 class="forecast-title">15 日天气预报</h3>
+                <p class="forecast-subtitle">来自和风天气企业预报服务</p>
+              </div>
+              <span class="forecast-updated">更新于 {{ forecastUpdatedLabel }}</span>
+            </div>
+          </template>
+
+          <div v-if="extendedForecast.length" class="forecast-grid">
+            <div v-for="day in extendedForecast" :key="day.date" class="forecast-day">
+              <div class="forecast-day-labels">
+                <span class="forecast-day-name">{{ formatForecastDay(day.dateObject) }}</span>
+                <span class="forecast-day-date">{{ formatForecastDate(day.dateObject) }}</span>
+              </div>
+              <div class="forecast-icon">{{ forecastConditionEmoji(day.conditionText) }}</div>
+              <span class="forecast-condition">{{ forecastConditionLabel(day.conditionText) }}</span>
+              <div class="forecast-temperatures">
+                <span class="forecast-temp-max">{{ formatNumber(day.maxTemperature) }}°</span>
+                <span class="forecast-temp-min">{{ formatNumber(day.minTemperature) }}°</span>
+              </div>
+              <span v-if="day.sunshineHours !== null" class="forecast-sunshine">
+                日照 {{ formatNumber(day.sunshineHours) }}h
+              </span>
+            </div>
+          </div>
+          <el-empty v-else description="暂无未来天气预报数据" />
+
+          <p v-if="forecastErrorMessage" class="forecast-error">{{ forecastErrorMessage }}</p>
+        </el-card>
+      </section>
+
       <section class="weather-insights">
         <el-card class="insight-card insight-card--suggestion">
           <template #header>
@@ -197,6 +232,39 @@ const selectedLocationLabel = computed(() => selectedLocation.value?.label || '�
 const currentWeather = computed(() => weatherStore.current)
 const isLoading = computed(() => weatherStore.isLoading)
 const errorMessage = computed(() => weatherStore.error)
+const forecastErrorMessage = computed(() => weatherStore.forecastError)
+
+const extendedForecast = computed(() => {
+  const list = Array.isArray(weatherStore.forecast) ? weatherStore.forecast : []
+  const normalized = list
+    .filter(item => !!item)
+    .map(item => {
+      const isoString = item.date ? `${item.date}T00:00:00` : null
+      const dateObject = isoString ? new Date(isoString) : null
+      const isValidDate = dateObject instanceof Date && !Number.isNaN(dateObject.getTime())
+      const sunshineValue = Number(item.sunshineHours)
+      return {
+        ...item,
+        dateObject: isValidDate ? dateObject : null,
+        sunshineHours: Number.isFinite(sunshineValue) ? sunshineValue : null
+      }
+    })
+
+  return normalized.sort((a, b) => {
+    if (!a.date && !b.date) return 0
+    if (!a.date) return 1
+    if (!b.date) return -1
+    return String(a.date).localeCompare(String(b.date))
+  })
+})
+
+const forecastUpdatedLabel = computed(() => {
+  if (!weatherStore.forecastUpdated) {
+    return '—'
+  }
+  const date = new Date(weatherStore.forecastUpdated)
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString()
+})
 
 const showSkeleton = computed(() => isLoading.value && !currentWeather.value)
 const isRefreshing = computed(() => isLoading.value)
@@ -470,13 +538,17 @@ const airQualitySummary = computed(() => {
     }
   })
 
+  const subtitle =
+    aqiValue === null
+      ? '暂无空气质量数据'
+      : air.description || descriptor?.label || '空气质量监测'
+
+  const badge = descriptor?.badge || air.category || ''
+
   return {
     aqi: aqiValue === null ? '—' : formatNumber(aqiValue),
-    subtitle:
-      aqiValue === null
-        ? '暂无空气质量数据'
-        : descriptor?.label || '空气质量监测',
-    badge: descriptor?.badge || '',
+    subtitle,
+    badge,
     metrics,
     accentClass
   }
@@ -495,6 +567,45 @@ const formatNumber = value => {
     return '—'
   }
   return Math.round(numeric * 10) / 10
+}
+
+const formatForecastDay = date => {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return '—'
+  }
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const target = new Date(date)
+  target.setHours(0, 0, 0, 0)
+  const diff = Math.round((target.getTime() - today.getTime()) / (24 * 60 * 60 * 1000))
+  if (diff === -1) return '昨天'
+  if (diff === 0) return '今天'
+  if (diff === 1) return '明天'
+  const weekdayFormatter = new Intl.DateTimeFormat(undefined, { weekday: 'short' })
+  return weekdayFormatter.format(target)
+}
+
+const formatForecastDate = date => {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return ''
+  }
+  const month = date.getMonth() + 1
+  const day = date.getDate()
+  return `${month}/${day}`
+}
+
+const forecastConditionEmoji = condition => {
+  if (!condition) {
+    return '🌦️'
+  }
+  return SKY_EMOJI_MAP[condition] || '🌦️'
+}
+
+const forecastConditionLabel = condition => {
+  if (!condition) {
+    return '—'
+  }
+  return SKYCON_MAP[condition] || condition
 }
 
 const formatPercent = value => {
@@ -553,7 +664,26 @@ const SKYCON_MAP = {
   STORM_SNOW: '暴雪',
   DUST: '浮尘',
   SAND: '沙尘',
-  WIND: '大风'
+  WIND: '大风',
+  晴: '晴',
+  少云: '少云',
+  多云: '多云',
+  阴: '阴',
+  晴间多云: '晴间多云',
+  阵雨: '阵雨',
+  雷阵雨: '雷阵雨',
+  小雨: '小雨',
+  中雨: '中雨',
+  大雨: '大雨',
+  暴雨: '暴雨',
+  小雪: '小雪',
+  中雪: '中雪',
+  大雪: '大雪',
+  暴雪: '暴雪',
+  雨夹雪: '雨夹雪',
+  雾: '雾',
+  霾: '雾霾',
+  沙尘暴: '沙尘暴'
 }
 
 const WIND_DIRECTIONS = ['北', '东北', '东', '东南', '南', '西南', '西', '西北', '北']
@@ -578,7 +708,26 @@ const SKY_EMOJI_MAP = {
   STORM_SNOW: '🌨️',
   DUST: '🌪️',
   SAND: '🌪️',
-  WIND: '💨'
+  WIND: '💨',
+  晴: '☀️',
+  少云: '🌤️',
+  多云: '⛅',
+  阴: '☁️',
+  晴间多云: '🌤️',
+  阵雨: '🌦️',
+  雷阵雨: '⛈️',
+  小雨: '🌧️',
+  中雨: '🌧️',
+  大雨: '🌧️',
+  暴雨: '⛈️',
+  小雪: '🌨️',
+  中雪: '❄️',
+  大雪: '❄️',
+  暴雪: '🌨️',
+  雨夹雪: '🌨️',
+  雾: '🌫️',
+  霾: '🌫️',
+  沙尘暴: '🌪️'
 }
 
 const describeHumidityLevel = value => {
@@ -743,6 +892,134 @@ const describePollutantLevel = (value, key) => {
   display: flex;
   flex-direction: column;
   gap: 24px;
+}
+
+.weather-forecast {
+  width: 100%;
+}
+
+.forecast-card {
+  border-radius: 18px;
+  border: none;
+  box-shadow: 0 18px 36px rgba(11, 61, 46, 0.12);
+  overflow: hidden;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(236, 249, 255, 0.9) 100%);
+}
+
+.forecast-card :deep(.el-card__header) {
+  background: transparent;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.forecast-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.forecast-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.forecast-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #0b3d2e;
+}
+
+.forecast-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: #4d7082;
+}
+
+.forecast-updated {
+  font-size: 13px;
+  color: #607d8b;
+}
+
+.forecast-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+  padding: 0 24px 20px;
+}
+
+.forecast-day {
+  background: rgba(255, 255, 255, 0.72);
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.forecast-day:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px rgba(30, 136, 118, 0.14);
+}
+
+.forecast-day-labels {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.forecast-day-name {
+  font-weight: 600;
+  color: #1b5e20;
+  font-size: 15px;
+}
+
+.forecast-day-date {
+  font-size: 12px;
+  color: #78909c;
+}
+
+.forecast-icon {
+  font-size: 28px;
+}
+
+.forecast-condition {
+  font-size: 14px;
+  color: #37474f;
+}
+
+.forecast-temperatures {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.forecast-temp-max {
+  color: #ef5350;
+}
+
+.forecast-temp-min {
+  color: #1e88e5;
+}
+
+.forecast-sunshine {
+  font-size: 12px;
+  color: #ffb300;
+}
+
+.forecast-error {
+  margin: 0;
+  padding: 12px 24px 20px;
+  color: #c62828;
+  font-size: 13px;
 }
 
 .weather-summary {

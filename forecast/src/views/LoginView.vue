@@ -11,6 +11,16 @@
         <h1>农作物产量预测平台</h1>
         <p>{{ loginSubtitle }}</p>
       </div>
+      <el-alert
+        v-if="registrationNotice"
+        type="success"
+        class="login-alert"
+        show-icon
+        closable
+        @close="registrationNotice = ''"
+      >
+        {{ registrationNotice }}
+      </el-alert>
       <el-form :model="form" class="login-form" @keyup.enter="handleSubmit">
         <el-form-item>
           <el-input v-model.trim="form.username" placeholder="用户名" autocomplete="username">
@@ -185,6 +195,7 @@ const form = reactive({
 const captchaId = ref('')
 const captchaImage = ref('')
 const loading = ref(false)
+const registrationNotice = ref('')
 
 const loginSubtitle = computed(() =>
   loginMode.value === 'admin'
@@ -196,6 +207,27 @@ const loginModeHint = computed(() =>
   loginMode.value === 'admin'
     ? '管理员登录后可使用数据管理、预测建模、系统维护等高级功能'
     : '普通用户登录后可查看预测结果、报告中心和个人资料等功能'
+)
+
+const handleRegistrationNotice = () => {
+  if (!route.query.registered) {
+    return
+  }
+  const message = route.query.registrationMessage || '注册成功，请使用账号登录'
+  registrationNotice.value = message
+  ElMessage.success(message)
+  const nextQuery = { ...route.query }
+  delete nextQuery.registered
+  delete nextQuery.registrationMessage
+  router.replace({ name: route.name || 'login', query: nextQuery }).catch(() => {})
+}
+
+watch(
+  () => route.query.registered,
+  () => {
+    handleRegistrationNotice()
+  },
+  { immediate: true }
 )
 
 const forgotDialogVisible = ref(false)
@@ -498,6 +530,10 @@ const switchToMode = mode => {
 .login-header p {
   margin: 8px 0 0;
   color: #607d8b;
+}
+
+.login-alert {
+  margin: 0 0 16px;
 }
 
 .login-form {
