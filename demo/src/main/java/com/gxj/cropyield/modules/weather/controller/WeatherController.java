@@ -11,6 +11,7 @@ import com.gxj.cropyield.common.exception.BusinessException;
 import com.gxj.cropyield.common.response.ApiResponse;
 import com.gxj.cropyield.common.response.ResultCode;
 import com.gxj.cropyield.modules.weather.service.WeatherService;
+import com.gxj.cropyield.modules.weather.service.dto.WeatherForecastResponse;
 import com.gxj.cropyield.modules.weather.service.dto.WeatherRealtimeResponse;
 
 /**
@@ -33,29 +34,43 @@ public class WeatherController {
         @RequestParam(required = false) Double latitude,
         @RequestParam(required = false) String location
     ) {
-        double resolvedLongitude;
-        double resolvedLatitude;
+        Coordinate coordinate = resolveCoordinate(longitude, latitude, location);
 
+        WeatherRealtimeResponse payload = weatherService.getRealtimeWeather(coordinate.longitude(), coordinate.latitude());
+        return ApiResponse.success(payload);
+    }
+
+    @GetMapping("/forecast/daily")
+    public ApiResponse<WeatherForecastResponse> fetchDailyForecast(
+        @RequestParam(required = false) Double longitude,
+        @RequestParam(required = false) Double latitude,
+        @RequestParam(required = false) String location
+    ) {
+        Coordinate coordinate = resolveCoordinate(longitude, latitude, location);
+        WeatherForecastResponse payload = weatherService.getDailyForecast(coordinate.longitude(), coordinate.latitude());
+        return ApiResponse.success(payload);
+    }
+
+    private Coordinate resolveCoordinate(Double longitude, Double latitude, String location) {
         if (StringUtils.hasText(location)) {
             String[] parts = location.split(",");
             if (parts.length != 2) {
                 throw new BusinessException(ResultCode.BAD_REQUEST, "location 参数格式错误，应为 '经度,纬度'");
             }
             try {
-                resolvedLongitude = Double.parseDouble(parts[0].trim());
-                resolvedLatitude = Double.parseDouble(parts[1].trim());
+                double resolvedLongitude = Double.parseDouble(parts[0].trim());
+                double resolvedLatitude = Double.parseDouble(parts[1].trim());
+                return new Coordinate(resolvedLongitude, resolvedLatitude);
             } catch (NumberFormatException ex) {
                 throw new BusinessException(ResultCode.BAD_REQUEST, "location 参数包含非法数字");
             }
-        } else {
-            if (longitude == null || latitude == null) {
-                throw new BusinessException(ResultCode.BAD_REQUEST, "缺少经纬度参数");
-            }
-            resolvedLongitude = longitude;
-            resolvedLatitude = latitude;
         }
+        if (longitude == null || latitude == null) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "缺少经纬度参数");
+        }
+        return new Coordinate(longitude, latitude);
+    }
 
-        WeatherRealtimeResponse payload = weatherService.getRealtimeWeather(resolvedLongitude, resolvedLatitude);
-        return ApiResponse.success(payload);
+    private record Coordinate(double longitude, double latitude) {
     }
 }

@@ -5,7 +5,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Locale;
 import java.util.Objects;
@@ -30,8 +32,11 @@ import com.gxj.cropyield.common.response.ResultCode;
 import com.gxj.cropyield.modules.weather.config.WeatherProperties;
 import com.gxj.cropyield.modules.weather.config.WeatherProperties.QWeatherProperties;
 import com.gxj.cropyield.modules.weather.config.WeatherProperties.QWeatherProperties.LocationMode;
+import com.gxj.cropyield.modules.dataset.entity.WeatherRecord;
+import com.gxj.cropyield.modules.weather.service.QWeatherForecastClient;
 import com.gxj.cropyield.modules.weather.service.QWeatherLocationClient;
 import com.gxj.cropyield.modules.weather.service.WeatherService;
+import com.gxj.cropyield.modules.weather.service.dto.WeatherForecastResponse;
 import com.gxj.cropyield.modules.weather.service.dto.WeatherRealtimeResponse;
 
 /**
@@ -45,14 +50,17 @@ public class WeatherServiceImpl implements WeatherService {
     private final RestTemplate restTemplate;
     private final WeatherProperties properties;
     private final QWeatherLocationClient locationClient;
+    private final QWeatherForecastClient forecastClient;
     private final Map<String, CachedWeather> cache = new ConcurrentHashMap<>();
 
     public WeatherServiceImpl(@Qualifier("weatherRestTemplate") RestTemplate weatherRestTemplate,
                               WeatherProperties properties,
-                              QWeatherLocationClient locationClient) {
+                              QWeatherLocationClient locationClient,
+                              QWeatherForecastClient forecastClient) {
         this.restTemplate = weatherRestTemplate;
         this.properties = properties;
         this.locationClient = locationClient;
+        this.forecastClient = forecastClient;
     }
 
     @Override
@@ -66,6 +74,29 @@ public class WeatherServiceImpl implements WeatherService {
         WeatherRealtimeResponse fresh = fetchRealtimeWeather(longitude, latitude);
         cache.put(cacheKey, new CachedWeather(fresh));
         return fresh;
+    }
+
+    @Override
+    public WeatherForecastResponse getDailyForecast(double longitude, double latitude) {
+        List<WeatherRecord> records = forecastClient.fetchDailyForecast(longitude, latitude);
+        if (records == null || records.isEmpty()) {
+            return new WeatherForecastResponse(List.of());
+        }
+
+        List<WeatherForecastResponse.DailyForecast> daily = records.stream()
+            .filter(record -> record != null && record.getRecordDate() != null)
+            .sorted(Comparator.comparing(WeatherRecord::getRecordDate))
+            .map(record -> new WeatherForecastResponse.DailyForecast(
+                record.getRecordDate(),
+                record.getMaxTemperature(),
+                record.getMinTemperature(),
+                record.getWeatherText(),
+                record.getSunshineHours(),
+                record.getDataSource()
+            ))
+            .toList();
+
+        return new WeatherForecastResponse(daily);
     }
 
     private WeatherRealtimeResponse getCachedWeather(String cacheKey) {
