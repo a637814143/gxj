@@ -69,10 +69,10 @@ weather:
     key: 4a614f0f1273489d9fa106f8d237963d
     language: zh
     unit: m
-    geo-base-url: https://m776x8rde7.geo.qweatherapi.com/v2
+    geo-base-url: https://m776x8rde7.re.qweatherapi.com/geo/v2
     referer: https://localhost
     user-agent: crop-yield-platform/1.0
     location-mode: GEO_LOOKUP
-    auth-mode: HEADER_BEARER
+    auth-mode: QUERY_KEY
     connect-timeout: 2s
     read-timeout: 5s

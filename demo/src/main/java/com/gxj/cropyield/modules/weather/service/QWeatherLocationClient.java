@@ -42,6 +42,9 @@ public class QWeatherLocationClient {
         }
         for (String base : buildGeoBaseCandidates(qweather)) {
             String trimmedBase = trimTrailingSlash(base);
+            if (!StringUtils.hasText(trimmedBase)) {
+                continue;
+            }
 
             UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(trimmedBase + "/city/lookup")
                 .queryParam("location", longitude + "," + latitude);
@@ -91,49 +94,58 @@ public class QWeatherLocationClient {
     private Iterable<String> buildGeoBaseCandidates(WeatherProperties.QWeatherProperties qweather) {
         LinkedHashSet<String> candidates = new LinkedHashSet<>();
 
-        if (StringUtils.hasText(qweather.getGeoBaseUrl())) {
-            candidates.add(qweather.getGeoBaseUrl());
+        addIfHasText(candidates, qweather.getGeoBaseUrl());
+        for (String derived : deriveGeoBasesFromForecastBase(qweather.getBaseUrl())) {
+            addIfHasText(candidates, derived);
         }
-
-        String derived = deriveGeoBaseFromForecastBase(qweather.getBaseUrl());
-        if (StringUtils.hasText(derived)) {
-            candidates.add(derived);
-        }
-
+        candidates.add("https://devapi.qweather.com/geo/v2");
         candidates.add("https://geoapi.qweather.com/v2");
 
         return candidates;
     }
 
-    private String deriveGeoBaseFromForecastBase(String baseUrl) {
+    private Iterable<String> deriveGeoBasesFromForecastBase(String baseUrl) {
+        LinkedHashSet<String> derived = new LinkedHashSet<>();
         if (!StringUtils.hasText(baseUrl)) {
-            return null;
+            return derived;
         }
         try {
-            String normalized = baseUrl.endsWith("/") ? baseUrl : baseUrl + "/";
-            URI uri = URI.create(normalized);
+            URI uri = URI.create(baseUrl);
             String scheme = uri.getScheme();
             if (!StringUtils.hasText(scheme)) {
                 scheme = "https";
             }
             String host = uri.getHost();
             if (!StringUtils.hasText(host)) {
-                return null;
+                return derived;
             }
-            String derivedHost;
+
+            String root = scheme + "://" + host;
+            derived.add(root + "/geo/v2");
+
+            String geoHost = host;
             if (host.contains(".re.")) {
-                derivedHost = host.replaceFirst("\\.re\\.", ".geo.");
+                geoHost = host.replaceFirst("\\.re\\.", ".geo.");
             } else if (host.startsWith("re.")) {
-                derivedHost = host.replaceFirst("^re\\.", "geo.");
+                geoHost = host.replaceFirst("^re\\.", "geo.");
             } else if (!host.contains(".geo.")) {
-                derivedHost = host.replaceFirst("\\.", ".geo.");
-            } else {
-                derivedHost = host;
+                int firstDot = host.indexOf('.');
+                if (firstDot > 0) {
+                    geoHost = host.substring(0, firstDot) + ".geo" + host.substring(firstDot);
+                } else {
+                    geoHost = "geo." + host;
+                }
             }
-            return scheme + "://" + derivedHost + "/v2";
+            derived.add(scheme + "://" + geoHost + "/v2");
         } catch (IllegalArgumentException ex) {
             log.debug("无法从和风基础地址派生地理编码地址: {}", baseUrl, ex);
-            return null;
+        }
+        return derived;
+    }
+
+    private void addIfHasText(LinkedHashSet<String> set, String value) {
+        if (StringUtils.hasText(value)) {
+            set.add(value);
         }
     }
 
