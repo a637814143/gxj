@@ -156,15 +156,12 @@ export const useAuthStore = defineStore('auth', {
       return roles.some(role => this.user.roles.includes(role))
     },
     async register(payload) {
-      const { rememberMe, ...requestBody } = payload
+      const { rememberMe: _rememberMe, ...requestBody } = payload
       const client = await getApiClient()
       const { data } = await client.post('/api/auth/register', requestBody)
       const response = data?.data
-      if (!response) {
-        throw new Error('注册响应数据不完整')
-      }
-      this.applyLoginResponse(response, rememberMe)
-      return response
+      const message = data?.message || '注册成功，请使用账号登录'
+      return { message, response }
     },
     async login(payload) {
       const { rememberMe, loginMode, ...requestBody } = payload
