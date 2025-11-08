@@ -64,8 +64,15 @@ forecast:
 
 weather:
   cache-ttl: 120s
-  caiyun:
-    base-url: https://api.caiyunapp.com/v2.6
-    token: RA1saynz7zWYLTmA
+  qweather:
+    base-url: https://m776x8rde7.re.qweatherapi.com/v7
+    key: 4a614f0f1273489d9fa106f8d237963d
+    language: zh
+    unit: m
+    geo-base-url: https://m776x8rde7.re.qweatherapi.com/geo/v2
+    referer: https://localhost
+    user-agent: crop-yield-platform/1.0
+    location-mode: GEO_LOOKUP
+    auth-mode: QUERY_KEY
     connect-timeout: 2s
     read-timeout: 5s
