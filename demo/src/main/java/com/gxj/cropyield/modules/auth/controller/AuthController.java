@@ -214,24 +214,45 @@ public class AuthController {
 
     private String resolvePreferredLanIp() {
         try {
+            try (java.net.DatagramSocket socket = new java.net.DatagramSocket()) {
+                socket.connect(InetAddress.getByName("8.8.8.8"), 10002);
+                InetAddress localAddress = socket.getLocalAddress();
+                if (localAddress instanceof Inet4Address && localAddress.isSiteLocalAddress()) {
+                    String hostAddress = localAddress.getHostAddress();
+                    if (hostAddress.startsWith("192.168.")) {
+                        return hostAddress;
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+
+        try {
             Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
             String firstSiteLocal = null;
             while (interfaces.hasMoreElements()) {
                 NetworkInterface networkInterface = interfaces.nextElement();
+                if (!networkInterface.isUp() || networkInterface.isLoopback() || networkInterface.isVirtual()) {
+                    continue;
+                }
                 Enumeration<InetAddress> addresses = networkInterface.getInetAddresses();
                 while (addresses.hasMoreElements()) {
                     InetAddress candidate = addresses.nextElement();
-                    if (!(candidate instanceof Inet4Address)) {
+                    if (!(candidate instanceof Inet4Address) || candidate.isLoopbackAddress()) {
                         continue;
                     }
-                    String hostAddress = candidate.getHostAddress();
                     if (!candidate.isSiteLocalAddress()) {
                         continue;
                     }
+                    String hostAddress = candidate.getHostAddress();
                     if (hostAddress.startsWith("192.168.")) {
-                        return hostAddress;
-                    }
-                    if (firstSiteLocal == null) {
+                        if (!hostAddress.endsWith(".1")) {
+                            return hostAddress;
+                        }
+                        if (firstSiteLocal == null) {
+                            firstSiteLocal = hostAddress;
+                        }
+                    } else if (firstSiteLocal == null) {
                         firstSiteLocal = hostAddress;
                     }
                 }
