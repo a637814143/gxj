@@ -339,7 +339,7 @@ const handleSubmit = async () => {
   }
   loading.value = true
   try {
-    await authStore.register({
+    const result = await authStore.register({
       username: form.username,
       password: form.password,
       fullName: form.fullName || undefined,
@@ -348,9 +348,15 @@ const handleSubmit = async () => {
       roleCode: form.roleCode,
       rememberMe: form.rememberMe
     })
-    const redirect = route.query.redirect || '/dashboard'
-    await router.replace(redirect)
-    ElMessage.success('注册成功，已自动登录')
+    const redirect = route.query.redirect
+    const query = { registered: '1' }
+    if (redirect) {
+      query.redirect = redirect
+    }
+    if (result?.message) {
+      query.registrationMessage = result.message
+    }
+    await router.replace({ name: 'login', query })
   } catch (error) {
     const message = error?.response?.data?.message || error.message || '注册失败，请稍后重试'
     ElMessage.error(message)

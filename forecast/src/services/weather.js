@@ -5,6 +5,11 @@ export const fetchRealtimeWeather = params =>
     params
   })
 
+export const fetchDailyForecast = params =>
+  apiClient.get('/api/weather/forecast/daily', {
+    params
+  })
+
 export const fetchWeatherDataset = params =>
   apiClient.get('/api/datasets/weather-records', {
     params
