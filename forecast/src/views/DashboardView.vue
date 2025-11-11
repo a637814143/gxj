@@ -93,8 +93,20 @@
             <div class="card-subtitle">结合最新导入的基础数据与模型输出，追踪各地区预测表现</div>
           </div>
           <div class="card-actions">
-            <el-button>导出 Excel</el-button>
-            <el-button>导出 PDF</el-button>
+            <el-button
+              :loading="exporting.excel"
+              :disabled="!filteredTableData.length || exporting.pdf"
+              @click="handleExportExcel"
+            >
+              导出 Excel
+            </el-button>
+            <el-button
+              :loading="exporting.pdf"
+              :disabled="!filteredTableData.length || exporting.excel"
+              @click="handleExportPdf"
+            >
+              导出 PDF
+            </el-button>
           </div>
         </div>
       </template>
@@ -185,6 +197,7 @@ const isUserTheme = computed(() => {
 const summary = ref(null)
 const summaryLoading = ref(false)
 const deletingRunId = ref(null)
+const exporting = reactive({ excel: false, pdf: false })
 
 const TABLE_PAGE_SIZE = 5
 const tablePagination = reactive({ page: 1, size: TABLE_PAGE_SIZE })
@@ -295,6 +308,20 @@ const filteredTableData = computed(() => {
   return records
 })
 
+const exportFileNameBase = computed(() => {
+  const parts = ['仪表盘预测数据']
+  if (filterForm.region && filterForm.region !== 'ALL') {
+    parts.push(filterForm.region)
+  }
+  if (filterForm.crop && filterForm.crop !== 'ALL') {
+    parts.push(filterForm.crop)
+  }
+  if (filterForm.year !== null) {
+    parts.push(`${filterForm.year}年`)
+  }
+  return parts.join('_')
+})
+
 const paginatedTableData = computed(() => {
   const size = tablePagination.size || TABLE_PAGE_SIZE
   const start = (tablePagination.page - 1) * size
@@ -397,6 +424,166 @@ const handleDeleteRecord = async record => {
     if (deletingRunId.value === record.runId) {
       deletingRunId.value = null
     }
+  }
+}
+
+const exportHeaders = [
+  '年份',
+  '地区',
+  '作物',
+  '播种面积 (公顷)',
+  '总产量 (吨)',
+  '单产 (吨/公顷)',
+  '平均价格 (元/公斤)',
+  '预计收益 (万元)',
+  '数据日期'
+]
+
+const buildExportRows = () =>
+  filteredTableData.value.map(record => [
+    record.year ?? '',
+    record.regionName ?? '',
+    record.cropName ?? '',
+    record.sownArea ?? '',
+    record.production ?? '',
+    record.yieldPerHectare ?? '',
+    record.averagePrice ?? '',
+    record.estimatedRevenue ?? '',
+    formatDate(record.collectedAt)
+  ])
+
+const ensureExportable = () => {
+  if (!filteredTableData.value.length) {
+    ElMessage.warning('暂无数据可导出')
+    return false
+  }
+  return true
+}
+
+const getTimestamp = () => {
+  const now = new Date()
+  const yyyy = now.getFullYear()
+  const mm = String(now.getMonth() + 1).padStart(2, '0')
+  const dd = String(now.getDate()).padStart(2, '0')
+  const hh = String(now.getHours()).padStart(2, '0')
+  const mi = String(now.getMinutes()).padStart(2, '0')
+  return `${yyyy}${mm}${dd}_${hh}${mi}`
+}
+
+const triggerDownload = (blob, fileName) => {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  link.style.display = 'none'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+const handleExportExcel = () => {
+  if (!ensureExportable() || exporting.pdf) {
+    return
+  }
+  exporting.excel = true
+  try {
+    const headerHtml = exportHeaders.map(title => `<th>${title}</th>`).join('')
+    const bodyHtml = buildExportRows()
+      .map(row => `<tr>${row.map(cell => `<td>${cell ?? ''}</td>`).join('')}</tr>`)
+      .join('')
+    const tableHtml = `<table><thead><tr>${headerHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8" /></head><body>${tableHtml}</body></html>`
+    const blob = new Blob([`﻿${html}`], { type: 'application/vnd.ms-excel' })
+    const fileName = `${exportFileNameBase.value}_${getTimestamp()}.xls`
+    triggerDownload(blob, fileName)
+    ElMessage.success('Excel 导出成功')
+  } catch (error) {
+    console.error('导出 Excel 失败', error)
+    ElMessage.error('导出 Excel 失败，请稍后再试')
+  } finally {
+    exporting.excel = false
+  }
+}
+
+const escapePdfText = text =>
+  String(text ?? '')
+    .replace(/\\/g, '\\\\')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)')
+    .replace(/\r?\n/g, ' ')
+
+const buildPdfContentStream = lines => {
+  const content = [
+    'BT',
+    '/F1 12 Tf',
+    '16 TL',
+    '50 800 Td'
+  ]
+  lines.forEach((line, index) => {
+    if (index === 0) {
+      content.push(`(${escapePdfText(line)}) Tj`)
+    } else {
+      content.push('T*', `(${escapePdfText(line)}) Tj`)
+    }
+  })
+  content.push('ET')
+  return content.join('\n')
+}
+
+const buildSimplePdf = lines => {
+  let pdf = '%PDF-1.4\n'
+  const offsets = []
+  const appendObject = (id, body) => {
+    offsets[id] = pdf.length
+    pdf += `${id} 0 obj\n${body}\nendobj\n`
+  }
+  const appendStreamObject = (id, body) => {
+    offsets[id] = pdf.length
+    pdf += `${id} 0 obj\n<< /Length ${body.length} >>\nstream\n${body}\nendstream\nendobj\n`
+  }
+
+  appendObject(1, '<< /Type /Catalog /Pages 2 0 R >>')
+  appendObject(2, '<< /Type /Pages /Count 1 /Kids [3 0 R] >>')
+  appendObject(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>')
+
+  const contentStream = buildPdfContentStream(lines)
+  appendStreamObject(4, contentStream)
+  appendObject(5, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>')
+
+  const xrefStart = pdf.length
+  pdf += 'xref\n'
+  pdf += '0 6\n'
+  pdf += '0000000000 65535 f \n'
+  for (let i = 1; i <= 5; i += 1) {
+    pdf += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`
+  }
+  pdf += 'trailer\n'
+  pdf += '<< /Size 6 /Root 1 0 R >>\n'
+  pdf += 'startxref\n'
+  pdf += `${xrefStart}\n`
+  pdf += '%%EOF'
+
+  return pdf
+}
+
+const handleExportPdf = () => {
+  if (!ensureExportable() || exporting.excel) {
+    return
+  }
+  exporting.pdf = true
+  try {
+    const lines = [exportHeaders.join(' | '), ...buildExportRows().map(row => row.join(' | '))]
+    const pdfContent = buildSimplePdf(lines)
+    const blob = new Blob([pdfContent], { type: 'application/pdf' })
+    const fileName = `${exportFileNameBase.value}_${getTimestamp()}.pdf`
+    triggerDownload(blob, fileName)
+    ElMessage.success('PDF 导出成功')
+  } catch (error) {
+    console.error('导出 PDF 失败', error)
+    ElMessage.error('导出 PDF 失败，请稍后再试')
+  } finally {
+    exporting.pdf = false
   }
 }
 
