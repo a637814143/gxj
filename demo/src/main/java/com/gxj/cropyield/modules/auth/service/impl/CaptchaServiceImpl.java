@@ -68,30 +68,36 @@ public class CaptchaServiceImpl implements CaptchaService {
     }
 
     private Captcha generateAddition() {
-        int first = random.nextInt(11);
-        int second = random.nextInt(11 - first);
+        int first = random.nextInt(101);
+        int maxSecond = 100 - first;
+        int second = maxSecond > 0 ? random.nextInt(maxSecond + 1) : 0;
         int result = first + second;
         return new Captcha(formatExpression(first, second, "+"), Integer.toString(result));
     }
 
     private Captcha generateSubtraction() {
-        int first = random.nextInt(11);
-        int second = random.nextInt(first + 1);
+        int first = random.nextInt(101);
+        int second = first > 0 ? random.nextInt(first + 1) : 0;
         int result = first - second;
         return new Captcha(formatExpression(first, second, "-"), Integer.toString(result));
     }
 
     private Captcha generateMultiplication() {
-        int first = random.nextInt(11);
-        int maxSecond = first == 0 ? 10 : 10 / first;
-        int second = random.nextInt(maxSecond + 1);
+        int first = random.nextInt(101);
+        if (first > 0) {
+            int maxSecond = Math.max(1, 100 / first);
+            int second = random.nextInt(maxSecond + 1);
+            int result = first * second;
+            return new Captcha(formatExpression(first, second, "×"), Integer.toString(result));
+        }
+        int second = random.nextInt(101);
         int result = first * second;
         return new Captcha(formatExpression(first, second, "×"), Integer.toString(result));
     }
 
     private Captcha generateDivision() {
-        int divisor = random.nextInt(10) + 1;
-        int maxQuotient = 10 / divisor;
+        int divisor = random.nextInt(100) + 1;
+        int maxQuotient = Math.max(1, 100 / divisor);
         int quotient = random.nextInt(maxQuotient + 1);
         int dividend = divisor * quotient;
         return new Captcha(formatExpression(dividend, divisor, "÷"), Integer.toString(quotient));

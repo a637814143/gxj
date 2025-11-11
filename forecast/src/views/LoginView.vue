@@ -1,5 +1,5 @@
 <template>
-  <div class="login-page">
+  <div class="login-page" :style="loginPageStyle">
     <div class="login-card">
       <div class="login-toggle">
         <el-radio-group v-model="loginMode" size="large" class="login-toggle-group">
@@ -184,6 +184,12 @@ const route = useRoute()
 const authStore = useAuthStore()
 
 const loginMode = ref(route.query.mode === 'user' ? 'user' : 'admin')
+
+const loginBackgroundImage = new URL('../../beijin.jpg', import.meta.url).href
+
+const loginPageStyle = computed(() => ({
+  backgroundImage: `linear-gradient(135deg, rgba(11, 61, 46, 0.85), rgba(30, 111, 92, 0.85)), url(${loginBackgroundImage})`
+}))
 
 const form = reactive({
   username: '',
@@ -493,7 +499,10 @@ const switchToMode = mode => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #0b3d2e 0%, #1e6f5c 100%);
+  background-color: #0b3d2e;
+  background-size: 100% 100%, cover;
+  background-position: center, center;
+  background-repeat: no-repeat, no-repeat;
   padding: 24px;
 }
 
