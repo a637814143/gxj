@@ -439,7 +439,7 @@ const exportHeaders = [
   '数据日期'
 ]
 
-const buildExportRows = () =>
+const buildExcelRows = () =>
   filteredTableData.value.map(record => [
     record.year ?? '',
     record.regionName ?? '',
@@ -449,6 +449,19 @@ const buildExportRows = () =>
     record.yieldPerHectare ?? '',
     record.averagePrice ?? '',
     record.estimatedRevenue ?? '',
+    record.collectedAt ? formatDate(record.collectedAt) : ''
+  ])
+
+const buildPdfRows = () =>
+  filteredTableData.value.map(record => [
+    record.year ?? '-',
+    record.regionName ?? '-',
+    record.cropName ?? '-',
+    formatNumber(record.sownArea),
+    formatNumber(record.production),
+    formatNumber(record.yieldPerHectare),
+    formatNumber(record.averagePrice),
+    formatNumber(record.estimatedRevenue),
     formatDate(record.collectedAt)
   ])
 
@@ -482,19 +495,66 @@ const triggerDownload = (blob, fileName) => {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
+const escapeExcelXml = value =>
+  String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+
+const buildExcelXml = () => {
+  const headerRow = `<Row>${exportHeaders
+    .map(title => `<Cell ss:StyleID="header"><Data ss:Type="String">${escapeExcelXml(title)}</Data></Cell>`)
+    .join('')}</Row>`
+  const dataRows = buildExcelRows()
+    .map(row => {
+      const cells = row
+        .map(cell => {
+          if (cell === null || cell === undefined || cell === '') {
+            return '<Cell><Data ss:Type="String"></Data></Cell>'
+          }
+          const numeric = Number(cell)
+          if (!Number.isNaN(numeric) && Number.isFinite(numeric)) {
+            return `<Cell><Data ss:Type="Number">${escapeExcelXml(numeric)}</Data></Cell>`
+          }
+          return `<Cell><Data ss:Type="String">${escapeExcelXml(cell)}</Data></Cell>`
+        })
+        .join('')
+      return `<Row>${cells}</Row>`
+    })
+    .join('')
+
+  return `<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?>` +
+    '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"' +
+    ' xmlns:o="urn:schemas-microsoft-com:office:office"' +
+    ' xmlns:x="urn:schemas-microsoft-com:office:excel"' +
+    ' xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"' +
+    ' xmlns:html="http://www.w3.org/TR/REC-html40">' +
+    '<Styles>' +
+    '<Style ss:ID="header">' +
+    '<Font ss:Bold="1" />' +
+    '<Interior ss:Color="#F0F7FF" ss:Pattern="Solid" />' +
+    '</Style>' +
+    '</Styles>' +
+    `<Worksheet ss:Name="历史预测数据">` +
+    '<Table>' +
+    headerRow +
+    dataRows +
+    '</Table>' +
+    '</Worksheet>' +
+    '</Workbook>'
+}
+
 const handleExportExcel = () => {
   if (!ensureExportable() || exporting.pdf) {
     return
   }
   exporting.excel = true
   try {
-    const headerHtml = exportHeaders.map(title => `<th>${title}</th>`).join('')
-    const bodyHtml = buildExportRows()
-      .map(row => `<tr>${row.map(cell => `<td>${cell ?? ''}</td>`).join('')}</tr>`)
-      .join('')
-    const tableHtml = `<table><thead><tr>${headerHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8" /></head><body>${tableHtml}</body></html>`
-    const blob = new Blob([`﻿${html}`], { type: 'application/vnd.ms-excel' })
+    const workbookXml = buildExcelXml()
+    const blob = new Blob([workbookXml], {
+      type: 'application/vnd.ms-excel;charset=utf-8'
+    })
     const fileName = `${exportFileNameBase.value}_${getTimestamp()}.xls`
     triggerDownload(blob, fileName)
     ElMessage.success('Excel 导出成功')
@@ -506,33 +566,61 @@ const handleExportExcel = () => {
   }
 }
 
-const escapePdfText = text =>
-  String(text ?? '')
-    .replace(/\\/g, '\\\\')
-    .replace(/\(/g, '\\(')
-    .replace(/\)/g, '\\)')
-    .replace(/\r?\n/g, ' ')
+const encodePdfText = text => {
+  const value = String(text ?? '')
+  const codePoints = Array.from(value)
+  const bytes = [0xfe, 0xff]
+  codePoints.forEach(char => {
+    const code = char.codePointAt(0)
+    if (code === undefined) return
+    if (code > 0xffff) {
+      const adjusted = code - 0x10000
+      const high = 0xd800 + (adjusted >> 10)
+      const low = 0xdc00 + (adjusted & 0x3ff)
+      bytes.push((high >> 8) & 0xff, high & 0xff, (low >> 8) & 0xff, low & 0xff)
+    } else {
+      bytes.push((code >> 8) & 0xff, code & 0xff)
+    }
+  })
+  return bytes.map(byte => byte.toString(16).padStart(2, '0')).join('').toUpperCase()
+}
+
+const wrapPdfLines = (text, maxChars = 80) => {
+  const result = []
+  let current = ''
+  Array.from(text).forEach(char => {
+    if (current.length >= maxChars) {
+      result.push(current)
+      current = ''
+    }
+    current += char
+  })
+  if (current) {
+    result.push(current)
+  }
+  return result.length ? result : ['']
+}
 
 const buildPdfContentStream = lines => {
-  const content = [
-    'BT',
-    '/F1 12 Tf',
-    '16 TL',
-    '50 800 Td'
-  ]
-  lines.forEach((line, index) => {
-    if (index === 0) {
-      content.push(`(${escapePdfText(line)}) Tj`)
-    } else {
-      content.push('T*', `(${escapePdfText(line)}) Tj`)
-    }
+  const content = ['BT', '/F1 12 Tf', '1 0 0 1 50 800 Tm']
+  const lineHeight = 18
+  let isFirstLine = true
+  lines.forEach(line => {
+    const pieces = wrapPdfLines(line)
+    pieces.forEach(part => {
+      if (!isFirstLine) {
+        content.push(`0 -${lineHeight} Td`)
+      }
+      content.push(`<${encodePdfText(part)}> Tj`)
+      isFirstLine = false
+    })
   })
   content.push('ET')
   return content.join('\n')
 }
 
 const buildSimplePdf = lines => {
-  let pdf = '%PDF-1.4\n'
+  let pdf = '%PDF-1.7\n'
   const offsets = []
   const appendObject = (id, body) => {
     offsets[id] = pdf.length
@@ -545,21 +633,35 @@ const buildSimplePdf = lines => {
 
   appendObject(1, '<< /Type /Catalog /Pages 2 0 R >>')
   appendObject(2, '<< /Type /Pages /Count 1 /Kids [3 0 R] >>')
-  appendObject(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>')
+  appendObject(
+    3,
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>'
+  )
 
   const contentStream = buildPdfContentStream(lines)
   appendStreamObject(4, contentStream)
-  appendObject(5, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>')
+  appendObject(
+    5,
+    '<< /Type /Font /Subtype /Type0 /BaseFont /STSong-Light /Encoding /UniGB-UCS2-H /DescendantFonts [6 0 R] >>'
+  )
+  appendObject(
+    6,
+    '<< /Type /Font /Subtype /CIDFontType0 /BaseFont /STSong-Light /CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 2 >> /FontDescriptor 7 0 R /DW 600 >>'
+  )
+  appendObject(
+    7,
+    '<< /Type /FontDescriptor /FontName /STSong-Light /Flags 4 /FontBBox [-250 -250 1000 1000] /ItalicAngle 0 /Ascent 880 /Descent -120 /CapHeight 880 /StemV 80 >>'
+  )
 
   const xrefStart = pdf.length
   pdf += 'xref\n'
-  pdf += '0 6\n'
+  pdf += '0 8\n'
   pdf += '0000000000 65535 f \n'
-  for (let i = 1; i <= 5; i += 1) {
+  for (let i = 1; i <= 7; i += 1) {
     pdf += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`
   }
   pdf += 'trailer\n'
-  pdf += '<< /Size 6 /Root 1 0 R >>\n'
+  pdf += '<< /Size 8 /Root 1 0 R >>\n'
   pdf += 'startxref\n'
   pdf += `${xrefStart}\n`
   pdf += '%%EOF'
@@ -573,7 +675,10 @@ const handleExportPdf = () => {
   }
   exporting.pdf = true
   try {
-    const lines = [exportHeaders.join(' | '), ...buildExportRows().map(row => row.join(' | '))]
+    const lines = [
+      exportHeaders.join(' | '),
+      ...buildPdfRows().map(row => row.join(' | '))
+    ]
     const pdfContent = buildSimplePdf(lines)
     const blob = new Blob([pdfContent], { type: 'application/pdf' })
     const fileName = `${exportFileNameBase.value}_${getTimestamp()}.pdf`
