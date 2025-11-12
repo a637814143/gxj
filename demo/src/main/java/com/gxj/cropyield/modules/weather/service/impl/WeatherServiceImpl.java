@@ -226,6 +226,26 @@ public class WeatherServiceImpl implements WeatherService {
             return null;
         }
 
+        WeatherRealtimeResponse.AirQuality current = fetchFromCurrentAirQuality(longitude, latitude, qweather);
+        if (current != null) {
+            if (hasPollutantConcentrations(current)) {
+                return current;
+            }
+            WeatherRealtimeResponse.AirQuality hourly = fetchFromHourlyAirQuality(longitude, latitude, qweather);
+            if (hourly != null) {
+                WeatherRealtimeResponse.AirQuality merged = mergeAirQuality(current, hourly);
+                if (hasPollutantConcentrations(merged)) {
+                    return merged;
+                }
+            }
+            String legacyLocation = StringUtils.hasText(locationParam) ? locationParam : longitude + "," + latitude;
+            WeatherRealtimeResponse.AirQuality legacy = fetchFromLegacyAirQuality(legacyLocation, qweather);
+            if (legacy != null) {
+                return mergeAirQuality(current, legacy);
+            }
+            return current;
+        }
+
         WeatherRealtimeResponse.AirQuality hourly = fetchFromHourlyAirQuality(longitude, latitude, qweather);
         if (hourly != null) {
             if (hasPollutantConcentrations(hourly)) {
@@ -245,6 +265,54 @@ public class WeatherServiceImpl implements WeatherService {
             locationParam = longitude + "," + latitude;
         }
         return fetchFromLegacyAirQuality(locationParam, qweather);
+    }
+
+    private WeatherRealtimeResponse.AirQuality fetchFromCurrentAirQuality(double longitude,
+                                                                          double latitude,
+                                                                          QWeatherProperties qweather) {
+        BusinessException lastError = null;
+        for (String base : buildAirQualityBaseCandidates(qweather)) {
+            if (!StringUtils.hasText(base)) {
+                continue;
+            }
+            String trimmedBase = trimTrailingSlash(base);
+            String path = trimmedBase + "/airquality/v1/current/" + formatCoordinate(latitude)
+                + "/" + formatCoordinate(longitude);
+            UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromHttpUrl(path);
+            if (StringUtils.hasText(qweather.getLanguage())) {
+                uriBuilder.queryParam("lang", qweather.getLanguage());
+            }
+            if (shouldAppendQueryKey(qweather)) {
+                uriBuilder.queryParam("key", qweather.getKey());
+            }
+            URI requestUri = uriBuilder.build(true).toUri();
+
+            ResponseEntity<JsonNode> response;
+            try {
+                response = restTemplate.getForEntity(requestUri, JsonNode.class);
+            } catch (HttpStatusCodeException ex) {
+                lastError = translateHttpException("实时空气质量", ex);
+                continue;
+            } catch (RestClientException ex) {
+                lastError = new BusinessException(ResultCode.SERVER_ERROR,
+                    "调用实时空气质量接口失败: " + ex.getMessage());
+                continue;
+            }
+
+            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                continue;
+            }
+
+            WeatherRealtimeResponse.AirQuality parsed = parseCurrentAirQuality(response.getBody());
+            if (parsed != null) {
+                return parsed;
+            }
+        }
+
+        if (lastError != null) {
+            log.debug("调用实时空气质量接口失败，已忽略: {}", lastError.getMessage());
+        }
+        return null;
     }
 
     private WeatherRealtimeResponse.AirQuality fetchFromHourlyAirQuality(double longitude,
@@ -293,6 +361,36 @@ public class WeatherServiceImpl implements WeatherService {
             log.debug("调用空气质量小时预报接口失败，将回退旧接口: {}", lastError.getMessage());
         }
         return null;
+    }
+
+    private WeatherRealtimeResponse.AirQuality parseCurrentAirQuality(JsonNode payload) {
+        if (payload == null) {
+            return null;
+        }
+
+        JsonNode indexNode = choosePreferredIndex(payload.path("indexes"));
+        Double aqi = indexNode != null ? nullableDouble(indexNode.path("aqi")) : nullableDouble(payload.path("aqi"));
+        String category = indexNode != null ? textOrNull(indexNode.path("category")) : textOrNull(payload.path("category"));
+        String description = extractHealthDescription(indexNode);
+        if (!StringUtils.hasText(description)) {
+            description = textOrNull(payload.path("description"));
+        }
+        if (!StringUtils.hasText(description)) {
+            description = category;
+        }
+
+        Double pm25 = extractPollutantConcentration(payload, "pm2p5");
+        Double pm10 = extractPollutantConcentration(payload, "pm10");
+        Double o3 = extractPollutantConcentration(payload, "o3");
+        Double so2 = extractPollutantConcentration(payload, "so2");
+        Double no2 = extractPollutantConcentration(payload, "no2");
+        Double co = extractPollutantConcentration(payload, "co");
+
+        if (aqi == null && pm25 == null && pm10 == null && o3 == null && so2 == null && no2 == null && co == null) {
+            return null;
+        }
+
+        return new WeatherRealtimeResponse.AirQuality(aqi, pm25, pm10, o3, so2, no2, co, description, category);
     }
 
     private boolean hasPollutantConcentrations(WeatherRealtimeResponse.AirQuality airQuality) {
