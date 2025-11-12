@@ -228,6 +228,16 @@ public class WeatherServiceImpl implements WeatherService {
 
         WeatherRealtimeResponse.AirQuality hourly = fetchFromHourlyAirQuality(longitude, latitude, qweather);
         if (hourly != null) {
+            if (hasPollutantConcentrations(hourly)) {
+                return hourly;
+            }
+            WeatherRealtimeResponse.AirQuality legacy = fetchFromLegacyAirQuality(
+                StringUtils.hasText(locationParam) ? locationParam : longitude + "," + latitude,
+                qweather
+            );
+            if (legacy != null) {
+                return mergeAirQuality(hourly, legacy);
+            }
             return hourly;
         }
 
@@ -283,6 +293,36 @@ public class WeatherServiceImpl implements WeatherService {
             log.debug("调用空气质量小时预报接口失败，将回退旧接口: {}", lastError.getMessage());
         }
         return null;
+    }
+
+    private boolean hasPollutantConcentrations(WeatherRealtimeResponse.AirQuality airQuality) {
+        if (airQuality == null) {
+            return false;
+        }
+        return airQuality.pm25() != null
+            || airQuality.pm10() != null
+            || airQuality.o3() != null
+            || airQuality.so2() != null
+            || airQuality.no2() != null
+            || airQuality.co() != null;
+    }
+
+    private WeatherRealtimeResponse.AirQuality mergeAirQuality(WeatherRealtimeResponse.AirQuality primary,
+                                                               WeatherRealtimeResponse.AirQuality fallback) {
+        if (fallback == null) {
+            return primary;
+        }
+        return new WeatherRealtimeResponse.AirQuality(
+            primary.aqi() != null ? primary.aqi() : fallback.aqi(),
+            primary.pm25() != null ? primary.pm25() : fallback.pm25(),
+            primary.pm10() != null ? primary.pm10() : fallback.pm10(),
+            primary.o3() != null ? primary.o3() : fallback.o3(),
+            primary.so2() != null ? primary.so2() : fallback.so2(),
+            primary.no2() != null ? primary.no2() : fallback.no2(),
+            primary.co() != null ? primary.co() : fallback.co(),
+            StringUtils.hasText(primary.description()) ? primary.description() : fallback.description(),
+            StringUtils.hasText(primary.category()) ? primary.category() : fallback.category()
+        );
     }
 
     private WeatherRealtimeResponse.AirQuality fetchFromLegacyAirQuality(String locationParam,
