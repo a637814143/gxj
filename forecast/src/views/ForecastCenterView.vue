@@ -74,6 +74,7 @@
                 filterable
                 placeholder="请选择作物"
                 :loading="loadingOptions.crops"
+                :disabled="!selectors.regionId || loadingOptions.regions"
                 clearable
               >
                 <el-option
@@ -307,9 +308,9 @@ import BaseChart from '@/components/charts/BaseChart.vue'
 import {
   deleteForecastRun,
   executeForecast,
-  fetchCrops,
   fetchForecastHistory,
   fetchModels,
+  fetchRegionCrops,
   fetchRegions,
 } from '@/services/forecast'
 import { useAuthStore } from '@/stores/auth'
@@ -328,6 +329,8 @@ const optionLists = reactive({
   crops: [],
   models: []
 })
+
+const cropRequestId = ref(0)
 
 const authStore = useAuthStore()
 const isUserTheme = computed(() => {
@@ -545,9 +548,80 @@ const resetResult = (options = { keepError: false }) => {
 }
 
 const optionFetchers = {
-  regions: fetchRegions,
-  crops: fetchCrops,
   models: fetchModels,
+}
+
+const loadCropOptions = async regionId => {
+  cropRequestId.value += 1
+  const currentRequest = cropRequestId.value
+
+  if (!regionId) {
+    optionLists.crops = []
+    selectors.cropId = null
+    return
+  }
+
+  loadingOptions.crops = true
+  try {
+    const list = await fetchRegionCrops(regionId)
+    if (currentRequest !== cropRequestId.value) {
+      return
+    }
+    optionLists.crops = Array.isArray(list) ? list : []
+
+    const selectedExists = optionLists.crops.some(item => item && item.id === selectors.cropId)
+    if (!selectedExists) {
+      selectors.cropId = null
+    }
+
+    if (!optionLists.crops.length) {
+      ElMessage.info('该地区暂无作物数据，请先导入对应作物记录')
+    }
+  } catch (error) {
+    if (currentRequest === cropRequestId.value) {
+      optionLists.crops = []
+      selectors.cropId = null
+      ElMessage.error(error?.response?.data?.message || '加载作物列表失败')
+    }
+  } finally {
+    if (currentRequest === cropRequestId.value) {
+      loadingOptions.crops = false
+    }
+  }
+}
+
+const loadRegionOptions = async () => {
+  loadingOptions.regions = true
+  try {
+    const list = await fetchRegions()
+    optionLists.regions = Array.isArray(list) ? list : []
+
+    if (!optionLists.regions.length) {
+      selectors.regionId = null
+      optionLists.crops = []
+      selectors.cropId = null
+      ElMessage.info('暂无可用的天气数据地区')
+      return
+    }
+
+    const currentRegionId = selectors.regionId
+    const hasCurrent = currentRegionId
+      && optionLists.regions.some(option => option && option.id === currentRegionId)
+
+    if (hasCurrent) {
+      await loadCropOptions(currentRegionId)
+    } else {
+      selectors.regionId = optionLists.regions[0]?.id ?? null
+    }
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.message || '加载地区列表失败')
+    optionLists.regions = []
+    optionLists.crops = []
+    selectors.regionId = null
+    selectors.cropId = null
+  } finally {
+    loadingOptions.regions = false
+  }
 }
 
 const loadForecastHistory = async (page = historyPagination.currentPage) => {
@@ -632,7 +706,7 @@ const fetchOptions = async type => {
     const list = await fetcher()
     optionLists[type] = Array.isArray(list) ? list : []
   } catch (error) {
-    ElMessage.error(`加载${type === 'regions' ? '地区' : type === 'crops' ? '作物' : '模型'}列表失败`)
+    ElMessage.error('加载模型列表失败')
   } finally {
     loadingOptions[type] = false
   }
@@ -679,13 +753,22 @@ const runForecast = async () => {
 
 onMounted(async () => {
   await Promise.all([
-    fetchOptions('regions'),
-    fetchOptions('crops'),
+    loadRegionOptions(),
     fetchOptions('models')
   ])
   historyPagination.currentPage = 1
   await loadForecastHistory(1)
 })
+
+watch(
+  () => selectors.regionId,
+  (newRegionId, oldRegionId) => {
+    if (newRegionId === oldRegionId) {
+      return
+    }
+    loadCropOptions(newRegionId)
+  }
+)
 
 watch(
   () => [selectors.regionId, selectors.cropId, selectors.modelId],

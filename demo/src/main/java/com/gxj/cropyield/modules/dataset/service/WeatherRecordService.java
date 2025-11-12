@@ -1,5 +1,6 @@
 package com.gxj.cropyield.modules.dataset.service;
 
+import com.gxj.cropyield.modules.dataset.dto.WeatherCropOption;
 import com.gxj.cropyield.modules.dataset.dto.WeatherDatasetResponse;
 import com.gxj.cropyield.modules.dataset.dto.WeatherRegionOption;
 
@@ -14,4 +15,6 @@ public interface WeatherRecordService {
     WeatherDatasetResponse queryDataset(Long regionId, LocalDate startDate, LocalDate endDate, Integer limit);
 
     List<WeatherRegionOption> listRegionsWithRecords();
+
+    List<WeatherCropOption> listCropsWithRecords(Long regionId);
 }

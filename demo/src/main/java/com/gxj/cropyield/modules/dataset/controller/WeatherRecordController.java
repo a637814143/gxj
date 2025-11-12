@@ -1,11 +1,13 @@
 package com.gxj.cropyield.modules.dataset.controller;
 
 import com.gxj.cropyield.common.response.ApiResponse;
+import com.gxj.cropyield.modules.dataset.dto.WeatherCropOption;
 import com.gxj.cropyield.modules.dataset.dto.WeatherDatasetResponse;
 import com.gxj.cropyield.modules.dataset.dto.WeatherRegionOption;
 import com.gxj.cropyield.modules.dataset.service.WeatherRecordService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -40,5 +42,10 @@ public class WeatherRecordController {
     @GetMapping("/regions")
     public ApiResponse<List<WeatherRegionOption>> listRegionOptions() {
         return ApiResponse.success(weatherRecordService.listRegionsWithRecords());
+    }
+
+    @GetMapping("/regions/{regionId}/crops")
+    public ApiResponse<List<WeatherCropOption>> listRegionCropOptions(@PathVariable Long regionId) {
+        return ApiResponse.success(weatherRecordService.listCropsWithRecords(regionId));
     }
 }
