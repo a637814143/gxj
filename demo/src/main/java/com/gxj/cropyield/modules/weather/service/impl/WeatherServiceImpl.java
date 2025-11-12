@@ -252,6 +252,9 @@ public class WeatherServiceImpl implements WeatherService {
             if (StringUtils.hasText(qweather.getLanguage())) {
                 uriBuilder.queryParam("lang", qweather.getLanguage());
             }
+            if (shouldAppendQueryKey(qweather)) {
+                uriBuilder.queryParam("key", qweather.getKey());
+            }
             URI requestUri = uriBuilder.build(true).toUri();
 
             ResponseEntity<JsonNode> response;
