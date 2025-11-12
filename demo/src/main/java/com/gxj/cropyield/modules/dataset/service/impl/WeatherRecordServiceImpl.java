@@ -3,6 +3,7 @@ package com.gxj.cropyield.modules.dataset.service.impl;
 import com.gxj.cropyield.modules.dataset.dto.WeatherDatasetResponse;
 import com.gxj.cropyield.modules.dataset.dto.WeatherDatasetSummary;
 import com.gxj.cropyield.modules.dataset.dto.WeatherRecordView;
+import com.gxj.cropyield.modules.dataset.dto.WeatherRegionOption;
 import com.gxj.cropyield.modules.dataset.entity.DatasetFile;
 import com.gxj.cropyield.modules.dataset.entity.WeatherRecord;
 import com.gxj.cropyield.modules.dataset.repository.WeatherRecordRepository;
@@ -16,13 +17,17 @@ import org.springframework.stereotype.Service;
 
 import jakarta.persistence.criteria.Predicate;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.springframework.util.StringUtils;
 
 /**
  * 气象数据服务实现。
@@ -71,6 +76,45 @@ public class WeatherRecordServiceImpl implements WeatherRecordService {
 
         WeatherDatasetSummary summary = buildSummary(records);
         return new WeatherDatasetResponse(summary, views);
+    }
+
+    @Override
+    public List<WeatherRegionOption> listRegionsWithRecords() {
+        List<WeatherRecord> records = weatherRecordRepository.findAll();
+
+        Map<Long, Long> counts = new HashMap<>();
+        Map<Long, String> names = new HashMap<>();
+
+        for (WeatherRecord record : records) {
+            if (record.getRegion() == null) {
+                continue;
+            }
+            String dataSource = resolveDataSource(record);
+            if (!StringUtils.hasText(dataSource)) {
+                continue;
+            }
+            String normalized = dataSource.toLowerCase(Locale.ROOT);
+            if (normalized.contains("示例") || normalized.contains("sample")) {
+                continue;
+            }
+
+            Long regionId = record.getRegion().getId();
+            counts.merge(regionId, 1L, Long::sum);
+            names.putIfAbsent(regionId, record.getRegion().getName());
+        }
+
+        List<WeatherRegionOption> options = new ArrayList<>();
+        for (Map.Entry<Long, Long> entry : counts.entrySet()) {
+            Long regionId = entry.getKey();
+            String regionName = names.get(regionId);
+            if (!StringUtils.hasText(regionName)) {
+                continue;
+            }
+            options.add(new WeatherRegionOption(regionId, regionName, entry.getValue()));
+        }
+
+        options.sort(Comparator.comparing(WeatherRegionOption::regionName, String.CASE_INSENSITIVE_ORDER));
+        return options;
     }
 
     private WeatherDatasetSummary buildSummary(List<WeatherRecord> records) {
@@ -130,14 +174,7 @@ public class WeatherRecordServiceImpl implements WeatherRecordService {
     }
 
     private WeatherRecordView mapToView(WeatherRecord record) {
-        String resolvedDataSource = Optional.ofNullable(record.getDataSource())
-                .map(String::trim)
-                .filter(source -> !source.isEmpty())
-                .orElseGet(() -> Optional.ofNullable(record.getDatasetFile())
-                        .map(file -> Optional.ofNullable(file.getDescription()).orElse(file.getName()))
-                        .map(String::trim)
-                        .filter(source -> !source.isEmpty())
-                        .orElse(null));
+        String resolvedDataSource = resolveDataSource(record);
 
         return new WeatherRecordView(
                 record.getId(),
@@ -152,6 +189,17 @@ public class WeatherRecordServiceImpl implements WeatherRecordService {
                 resolvedDataSource,
                 Optional.ofNullable(record.getDatasetFile()).map(DatasetFile::getName).orElse(null)
         );
+    }
+
+    private String resolveDataSource(WeatherRecord record) {
+        return Optional.ofNullable(record.getDataSource())
+                .map(String::trim)
+                .filter(source -> !source.isEmpty())
+                .orElseGet(() -> Optional.ofNullable(record.getDatasetFile())
+                        .map(file -> Optional.ofNullable(file.getDescription()).orElse(file.getName()))
+                        .map(String::trim)
+                        .filter(source -> !source.isEmpty())
+                        .orElse(null));
     }
 
     private Double average(List<WeatherRecord> records, Function<WeatherRecord, Double> extractor) {

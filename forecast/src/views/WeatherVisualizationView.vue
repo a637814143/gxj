@@ -13,7 +13,12 @@
     </div>
     <el-card class="filter-card" shadow="hover">
       <div class="filter-row">
-        <el-select v-model="selectedRegionId" placeholder="选择地区" class="filter-select">
+        <el-select
+          v-model="selectedRegionId"
+          placeholder="选择地区"
+          class="filter-select"
+          :disabled="!regionOptions.length"
+        >
           <el-option v-for="region in regionOptions" :key="region.id" :label="region.label" :value="region.id" />
         </el-select>
         <el-date-picker
@@ -109,8 +114,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import BaseChart from '@/components/charts/BaseChart.vue'
-import apiClient from '@/services/http'
-import { fetchWeatherDataset } from '@/services/weather'
+import { fetchWeatherDataset, fetchWeatherRegions } from '@/services/weather'
 import { useAuthStore } from '@/stores/auth'
 
 const regionOptions = ref([])
@@ -121,10 +125,12 @@ const loading = ref(false)
 const records = ref([])
 const summary = ref(null)
 const suppressRangeWatch = ref(false)
+const suppressRegionWatch = ref(false)
 const userCustomizedRange = ref(false)
 const currentPage = ref(1)
 const pageSize = 10
 const selectedWeatherType = ref('ALL')
+const regionLoadedDuringFetch = ref(false)
 
 const authStore = useAuthStore()
 
@@ -348,12 +354,35 @@ function formatNumber(value) {
 
 const fetchRegions = async () => {
   try {
-    const { data } = await apiClient.get('/api/base/regions')
+    regionLoadedDuringFetch.value = false
+    const { data } = await fetchWeatherRegions()
     const payload = Array.isArray(data?.data) ? data.data : []
-    regionOptions.value = payload.map(item => ({ id: item.id, label: item.name }))
-    if (!selectedRegionId.value && regionOptions.value.length) {
+    const options = payload.map(item => ({
+      id: item.regionId,
+      label: item.regionName,
+      count: item.recordCount
+    }))
+    regionOptions.value = options
+
+    const current = selectedRegionId.value
+    const hasCurrent = current && options.some(option => option.id === current)
+    if (hasCurrent) {
+      return
+    }
+
+    const next = options.length ? options[0].id : null
+    suppressRegionWatch.value = true
+    selectedRegionId.value = next
+    suppressRegionWatch.value = false
+
+    if (next) {
       userCustomizedRange.value = false
-      selectedRegionId.value = regionOptions.value[0].id
+      regionLoadedDuringFetch.value = true
+      await loadWeatherData()
+    } else {
+      records.value = []
+      summary.value = null
+      ElMessage.info('暂无可用的天气数据地区')
     }
   } catch (error) {
     ElMessage.error(error?.response?.data?.message || '加载地区列表失败')
@@ -439,6 +468,9 @@ const handlePageChange = page => {
 }
 
 watch(selectedRegionId, newValue => {
+  if (suppressRegionWatch.value) {
+    return
+  }
   if (newValue) {
     userCustomizedRange.value = false
     loadWeatherData()
@@ -474,9 +506,10 @@ watch(weatherTypeOptions, options => {
 
 onMounted(async () => {
   await fetchRegions()
-  if (selectedRegionId.value) {
+  if (selectedRegionId.value && !regionLoadedDuringFetch.value) {
     loadWeatherData()
   }
+  regionLoadedDuringFetch.value = false
 })
 </script>
 
