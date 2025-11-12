@@ -1,5 +1,6 @@
 package com.gxj.cropyield.modules.weather.service;
 
+import com.gxj.cropyield.modules.weather.service.dto.WeatherForecastResponse;
 import com.gxj.cropyield.modules.weather.service.dto.WeatherRealtimeResponse;
 
 /**
@@ -15,4 +16,13 @@ public interface WeatherService {
      * @return 实时天气响应数据
      */
     WeatherRealtimeResponse getRealtimeWeather(double longitude, double latitude);
+
+    /**
+     * 获取指定经纬度的逐日天气预报数据。
+     *
+     * @param longitude 经度
+     * @param latitude  纬度
+     * @return 逐日天气预报响应数据
+     */
+    WeatherForecastResponse getDailyForecast(double longitude, double latitude);
 }

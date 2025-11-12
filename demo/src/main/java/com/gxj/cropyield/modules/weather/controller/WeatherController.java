@@ -11,6 +11,7 @@ import com.gxj.cropyield.common.exception.BusinessException;
 import com.gxj.cropyield.common.response.ApiResponse;
 import com.gxj.cropyield.common.response.ResultCode;
 import com.gxj.cropyield.modules.weather.service.WeatherService;
+import com.gxj.cropyield.modules.weather.service.dto.WeatherForecastResponse;
 import com.gxj.cropyield.modules.weather.service.dto.WeatherRealtimeResponse;
 
 /**
@@ -56,6 +57,38 @@ public class WeatherController {
         }
 
         WeatherRealtimeResponse payload = weatherService.getRealtimeWeather(resolvedLongitude, resolvedLatitude);
+        return ApiResponse.success(payload);
+    }
+
+    @GetMapping("/forecast/daily")
+    public ApiResponse<WeatherForecastResponse> fetchDailyForecast(
+        @RequestParam(required = false) Double longitude,
+        @RequestParam(required = false) Double latitude,
+        @RequestParam(required = false) String location
+    ) {
+        double resolvedLongitude;
+        double resolvedLatitude;
+
+        if (StringUtils.hasText(location)) {
+            String[] parts = location.split(",");
+            if (parts.length != 2) {
+                throw new BusinessException(ResultCode.BAD_REQUEST, "location 参数格式错误，应为 '经度,纬度'");
+            }
+            try {
+                resolvedLongitude = Double.parseDouble(parts[0].trim());
+                resolvedLatitude = Double.parseDouble(parts[1].trim());
+            } catch (NumberFormatException ex) {
+                throw new BusinessException(ResultCode.BAD_REQUEST, "location 参数包含非法数字");
+            }
+        } else {
+            if (longitude == null || latitude == null) {
+                throw new BusinessException(ResultCode.BAD_REQUEST, "缺少经纬度参数");
+            }
+            resolvedLongitude = longitude;
+            resolvedLatitude = latitude;
+        }
+
+        WeatherForecastResponse payload = weatherService.getDailyForecast(resolvedLongitude, resolvedLatitude);
         return ApiResponse.success(payload);
     }
 }

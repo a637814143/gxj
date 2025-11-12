@@ -29,8 +29,11 @@ import com.gxj.cropyield.common.response.ResultCode;
 import com.gxj.cropyield.modules.weather.config.WeatherProperties;
 import com.gxj.cropyield.modules.weather.config.WeatherProperties.QWeatherProperties;
 import com.gxj.cropyield.modules.weather.config.WeatherProperties.QWeatherProperties.LocationMode;
+import com.gxj.cropyield.modules.dataset.entity.WeatherRecord;
+import com.gxj.cropyield.modules.weather.service.QWeatherForecastClient;
 import com.gxj.cropyield.modules.weather.service.QWeatherLocationClient;
 import com.gxj.cropyield.modules.weather.service.WeatherService;
+import com.gxj.cropyield.modules.weather.service.dto.WeatherForecastResponse;
 import com.gxj.cropyield.modules.weather.service.dto.WeatherRealtimeResponse;
 
 /**
@@ -44,14 +47,41 @@ public class WeatherServiceImpl implements WeatherService {
     private final RestTemplate restTemplate;
     private final WeatherProperties properties;
     private final QWeatherLocationClient locationClient;
+    private final QWeatherForecastClient forecastClient;
     private final Map<String, CachedWeather> cache = new ConcurrentHashMap<>();
 
     public WeatherServiceImpl(@Qualifier("weatherRestTemplate") RestTemplate weatherRestTemplate,
                               WeatherProperties properties,
-                              QWeatherLocationClient locationClient) {
+                              QWeatherLocationClient locationClient,
+                              QWeatherForecastClient forecastClient) {
         this.restTemplate = weatherRestTemplate;
         this.properties = properties;
         this.locationClient = locationClient;
+        this.forecastClient = forecastClient;
+    }
+
+    @Override
+    public WeatherForecastResponse getDailyForecast(double longitude, double latitude) {
+        WeatherProperties.QWeatherProperties qweather = properties.getQweather();
+        if (qweather == null || !StringUtils.hasText(qweather.getKey())) {
+            throw new BusinessException(ResultCode.SERVER_ERROR, "未配置和风天气访问密钥");
+        }
+
+        java.util.List<WeatherRecord> records = forecastClient.fetchDailyForecast(longitude, latitude);
+        java.time.Instant fetchedAt = java.time.Instant.now();
+
+        java.util.List<WeatherForecastResponse.DailyForecast> daily = records.stream()
+            .map(record -> new WeatherForecastResponse.DailyForecast(
+                record.getRecordDate(),
+                record.getMaxTemperature(),
+                record.getMinTemperature(),
+                record.getWeatherText(),
+                record.getSunshineHours(),
+                record.getDataSource()
+            ))
+            .collect(java.util.stream.Collectors.toList());
+
+        return new WeatherForecastResponse(fetchedAt, daily);
     }
 
     @Override
