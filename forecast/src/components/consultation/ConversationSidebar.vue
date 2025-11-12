@@ -70,7 +70,8 @@
             <div class="item-preview">
               <el-badge :value="item.unreadCount" :hidden="!item.unreadCount" type="danger">
                 <span class="preview-text">
-                  {{ item.lastMessage?.content || '暂无最新消息' }}
+                  <template v-if="item.lastMessage?.recalled">最近消息已撤回</template>
+                  <template v-else>{{ item.lastMessage?.content || '暂无最新消息' }}</template>
                 </span>
               </el-badge>
             </div>

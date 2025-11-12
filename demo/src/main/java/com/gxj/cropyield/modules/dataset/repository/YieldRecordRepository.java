@@ -47,4 +47,6 @@ public interface YieldRecordRepository extends JpaRepository<YieldRecord, Long> 
             @Param("startYear") Integer startYear,
             @Param("endYear") Integer endYear
     );
+
+    List<YieldRecord> findByRegionId(Long regionId);
 }

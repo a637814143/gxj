@@ -24,6 +24,8 @@ public interface ConsultationService {
 
     ConsultationMessageResponse sendMessage(Long consultationId, ConsultationMessageRequest request);
 
+    ConsultationMessageResponse recallMessage(Long consultationId, Long messageId);
+
     ConsultationSummary updateConsultation(Long consultationId, ConsultationUpdateRequest request);
 
     void markAsRead(Long consultationId);

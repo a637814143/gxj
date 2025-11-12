@@ -13,14 +13,39 @@ const extractData = response => {
   return []
 }
 
-export const fetchRegions = async () => {
-  const { data } = await apiClient.get('/api/base/regions')
-  return extractData(data)
+const normalizeOption = item => {
+  if (!item || typeof item !== 'object') {
+    return null
+  }
+  const id = item.id ?? item.regionId ?? item.cropId
+  const name = item.name ?? item.regionName ?? item.cropName
+  if (!id || !name) {
+    return null
+  }
+  return {
+    id,
+    name,
+    count: item.count ?? item.recordCount ?? null
+  }
 }
 
-export const fetchCrops = async () => {
-  const { data } = await apiClient.get('/api/base/crops')
-  return extractData(data)
+export const fetchRegions = async () => {
+  const { data } = await apiClient.get('/api/datasets/weather-records/regions')
+  const payload = extractData(data)
+  return payload
+    .map(normalizeOption)
+    .filter(Boolean)
+}
+
+export const fetchRegionCrops = async regionId => {
+  if (!regionId) {
+    return []
+  }
+  const { data } = await apiClient.get(`/api/datasets/weather-records/regions/${regionId}/crops`)
+  const payload = extractData(data)
+  return payload
+    .map(normalizeOption)
+    .filter(Boolean)
 }
 
 export const fetchModels = async () => {
@@ -89,7 +114,7 @@ export const executeForecast = async payload => {
 
 export default {
   fetchRegions,
-  fetchCrops,
+  fetchRegionCrops,
   fetchModels,
   fetchForecastHistory,
   deleteForecastRun,

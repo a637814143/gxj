@@ -16,6 +16,10 @@ public interface ConsultationMessageRepository extends JpaRepository<Consultatio
 
     Optional<ConsultationMessage> findFirstByConsultationIdOrderByCreatedAtDesc(Long consultationId);
 
+    Optional<ConsultationMessage> findFirstByConsultationIdAndRecalledFalseOrderByCreatedAtDesc(Long consultationId);
+
+    Optional<ConsultationMessage> findByIdAndConsultationId(Long id, Long consultationId);
+
     long countByConsultationIdAndCreatedAtAfterAndSenderIdNot(Long consultationId, LocalDateTime createdAt, Long senderId);
 
     long countByConsultationIdAndSenderIdNot(Long consultationId, Long senderId);

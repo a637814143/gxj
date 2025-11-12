@@ -9,3 +9,6 @@ export const fetchWeatherDataset = params =>
   apiClient.get('/api/datasets/weather-records', {
     params
   })
+
+export const fetchWeatherRegions = () =>
+  apiClient.get('/api/datasets/weather-records/regions')

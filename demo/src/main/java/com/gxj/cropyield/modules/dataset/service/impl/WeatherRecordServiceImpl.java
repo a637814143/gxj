@@ -1,11 +1,16 @@
 package com.gxj.cropyield.modules.dataset.service.impl;
 
+import com.gxj.cropyield.modules.base.entity.Crop;
+import com.gxj.cropyield.modules.dataset.dto.WeatherCropOption;
 import com.gxj.cropyield.modules.dataset.dto.WeatherDatasetResponse;
 import com.gxj.cropyield.modules.dataset.dto.WeatherDatasetSummary;
 import com.gxj.cropyield.modules.dataset.dto.WeatherRecordView;
+import com.gxj.cropyield.modules.dataset.dto.WeatherRegionOption;
 import com.gxj.cropyield.modules.dataset.entity.DatasetFile;
 import com.gxj.cropyield.modules.dataset.entity.WeatherRecord;
+import com.gxj.cropyield.modules.dataset.entity.YieldRecord;
 import com.gxj.cropyield.modules.dataset.repository.WeatherRecordRepository;
+import com.gxj.cropyield.modules.dataset.repository.YieldRecordRepository;
 import com.gxj.cropyield.modules.dataset.service.WeatherRecordService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -16,13 +21,18 @@ import org.springframework.stereotype.Service;
 
 import jakarta.persistence.criteria.Predicate;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.springframework.util.StringUtils;
 
 /**
  * 气象数据服务实现。
@@ -33,9 +43,12 @@ public class WeatherRecordServiceImpl implements WeatherRecordService {
     private static final int MAX_PAGE_SIZE = 1000;
 
     private final WeatherRecordRepository weatherRecordRepository;
+    private final YieldRecordRepository yieldRecordRepository;
 
-    public WeatherRecordServiceImpl(WeatherRecordRepository weatherRecordRepository) {
+    public WeatherRecordServiceImpl(WeatherRecordRepository weatherRecordRepository,
+                                    YieldRecordRepository yieldRecordRepository) {
         this.weatherRecordRepository = weatherRecordRepository;
+        this.yieldRecordRepository = yieldRecordRepository;
     }
 
     @Override
@@ -71,6 +84,97 @@ public class WeatherRecordServiceImpl implements WeatherRecordService {
 
         WeatherDatasetSummary summary = buildSummary(records);
         return new WeatherDatasetResponse(summary, views);
+    }
+
+    @Override
+    public List<WeatherRegionOption> listRegionsWithRecords() {
+        List<WeatherRecord> records = weatherRecordRepository.findAll();
+
+        Map<Long, Long> counts = new HashMap<>();
+        Map<Long, String> names = new HashMap<>();
+
+        for (WeatherRecord record : records) {
+            if (record.getRegion() == null) {
+                continue;
+            }
+            String dataSource = resolveDataSource(record);
+            if (!StringUtils.hasText(dataSource)) {
+                continue;
+            }
+            String normalized = dataSource.toLowerCase(Locale.ROOT);
+            if (normalized.contains("示例") || normalized.contains("sample")) {
+                continue;
+            }
+
+            Long regionId = record.getRegion().getId();
+            counts.merge(regionId, 1L, Long::sum);
+            names.putIfAbsent(regionId, record.getRegion().getName());
+        }
+
+        List<WeatherRegionOption> options = new ArrayList<>();
+        for (Map.Entry<Long, Long> entry : counts.entrySet()) {
+            Long regionId = entry.getKey();
+            String regionName = names.get(regionId);
+            if (!StringUtils.hasText(regionName)) {
+                continue;
+            }
+            options.add(new WeatherRegionOption(regionId, regionName, entry.getValue()));
+        }
+
+        options.sort(Comparator.comparing(WeatherRegionOption::regionName, String.CASE_INSENSITIVE_ORDER));
+        return options;
+    }
+
+    @Override
+    public List<WeatherCropOption> listCropsWithRecords(Long regionId) {
+        if (regionId == null) {
+            return Collections.emptyList();
+        }
+
+        List<YieldRecord> records = yieldRecordRepository.findByRegionId(regionId);
+        if (records.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Map<Long, Long> counts = new HashMap<>();
+        Map<Long, String> names = new HashMap<>();
+
+        for (YieldRecord record : records) {
+            Crop crop = record.getCrop();
+            if (crop == null) {
+                continue;
+            }
+
+            String dataSource = resolveDataSource(record);
+            if (!StringUtils.hasText(dataSource)) {
+                continue;
+            }
+            String normalized = dataSource.toLowerCase(Locale.ROOT);
+            if (normalized.contains("示例") || normalized.contains("sample")) {
+                continue;
+            }
+
+            Long cropId = crop.getId();
+            if (cropId == null) {
+                continue;
+            }
+
+            counts.merge(cropId, 1L, Long::sum);
+            names.putIfAbsent(cropId, crop.getName());
+        }
+
+        List<WeatherCropOption> options = new ArrayList<>();
+        for (Map.Entry<Long, Long> entry : counts.entrySet()) {
+            Long cropId = entry.getKey();
+            String cropName = names.get(cropId);
+            if (!StringUtils.hasText(cropName)) {
+                continue;
+            }
+            options.add(new WeatherCropOption(cropId, cropName, entry.getValue()));
+        }
+
+        options.sort(Comparator.comparing(WeatherCropOption::cropName, String.CASE_INSENSITIVE_ORDER));
+        return options;
     }
 
     private WeatherDatasetSummary buildSummary(List<WeatherRecord> records) {
@@ -130,6 +234,8 @@ public class WeatherRecordServiceImpl implements WeatherRecordService {
     }
 
     private WeatherRecordView mapToView(WeatherRecord record) {
+        String resolvedDataSource = resolveDataSource(record);
+
         return new WeatherRecordView(
                 record.getId(),
                 Optional.ofNullable(record.getRegion()).map(r -> r.getId()).orElse(null),
@@ -140,9 +246,31 @@ public class WeatherRecordServiceImpl implements WeatherRecordService {
                 record.getWeatherText(),
                 record.getWind(),
                 record.getSunshineHours(),
-                record.getDataSource(),
+                resolvedDataSource,
                 Optional.ofNullable(record.getDatasetFile()).map(DatasetFile::getName).orElse(null)
         );
+    }
+
+    private String resolveDataSource(WeatherRecord record) {
+        return Optional.ofNullable(record.getDataSource())
+                .map(String::trim)
+                .filter(source -> !source.isEmpty())
+                .orElseGet(() -> Optional.ofNullable(record.getDatasetFile())
+                        .map(file -> Optional.ofNullable(file.getDescription()).orElse(file.getName()))
+                        .map(String::trim)
+                        .filter(source -> !source.isEmpty())
+                        .orElse(null));
+    }
+
+    private String resolveDataSource(YieldRecord record) {
+        return Optional.ofNullable(record.getDataSource())
+                .map(String::trim)
+                .filter(source -> !source.isEmpty())
+                .orElseGet(() -> Optional.ofNullable(record.getDatasetFile())
+                        .map(file -> Optional.ofNullable(file.getDescription()).orElse(file.getName()))
+                        .map(String::trim)
+                        .filter(source -> !source.isEmpty())
+                        .orElse(null));
     }
 
     private Double average(List<WeatherRecord> records, Function<WeatherRecord, Double> extractor) {

@@ -9,6 +9,8 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
+import java.time.LocalDateTime;
+
 /**
  * 在线咨询模块的实体类，记录会话中的消息内容。
  */
@@ -29,6 +31,12 @@ public class ConsultationMessage extends BaseEntity {
 
     @Column(columnDefinition = "TEXT")
     private String content;
+
+    @Column(nullable = false)
+    private boolean recalled = false;
+
+    @Column(name = "recalled_at")
+    private LocalDateTime recalledAt;
 
     public Consultation getConsultation() {
         return consultation;
@@ -60,6 +68,22 @@ public class ConsultationMessage extends BaseEntity {
 
     public void setContent(String content) {
         this.content = content;
+    }
+
+    public boolean isRecalled() {
+        return recalled;
+    }
+
+    public void setRecalled(boolean recalled) {
+        this.recalled = recalled;
+    }
+
+    public LocalDateTime getRecalledAt() {
+        return recalledAt;
+    }
+
+    public void setRecalledAt(LocalDateTime recalledAt) {
+        this.recalledAt = recalledAt;
     }
 
 }

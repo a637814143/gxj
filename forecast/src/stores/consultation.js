@@ -7,7 +7,8 @@ import {
   updateConsultation,
   markConsultationRead,
   closeConsultation,
-  fetchConsultationDepartments
+  fetchConsultationDepartments,
+  recallConsultationMessage
 } from '../services/consultation'
 
 const toArray = value => {
@@ -18,6 +19,14 @@ const toArray = value => {
     return value
   }
   return [value]
+}
+
+const toIsoString = value => {
+  if (!value) {
+    return null
+  }
+  const date = value instanceof Date ? value : new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date.toISOString()
 }
 
 const normalizeParticipant = participant => ({
@@ -59,6 +68,7 @@ const normalizeConversation = item => {
       ? item.messageCount
       : Number(item?.messageCount ?? item?.message_count ?? 0)
 
+  const rawLastMessage = item?.lastMessage || item?.latestMessage || null
   return {
     id: item?.id ?? item?.consultationId ?? null,
     subject: item?.subject || item?.title || '未命名咨询',
@@ -70,7 +80,7 @@ const normalizeConversation = item => {
     createdAt: item?.createdAt || item?.created_at || null,
     updatedAt: item?.updatedAt || item?.updated_at || null,
     closedAt: item?.closedAt || item?.closed_at || null,
-    lastMessage: item?.lastMessage || item?.latestMessage || null,
+    lastMessage: rawLastMessage ? normalizeMessage(rawLastMessage) : null,
     unreadCount: item?.unreadCount ?? item?.unread_count ?? 0,
     participants,
     description: item?.description || '',
@@ -87,9 +97,13 @@ const normalizeMessage = item => ({
   senderName: item?.senderName || item?.sender_name || '未知用户',
   senderRole: item?.senderRole || item?.role || '',
   senderAvatar: item?.senderAvatar || item?.avatar || '',
-  content: item?.content || item?.message || '',
+  content: item?.content ?? item?.message ?? '',
   createdAt: item?.createdAt || item?.created_at || item?.timestamp || null,
-  metadata: item?.metadata || {}
+  metadata: item?.metadata || {},
+  recalled: Boolean(item?.recalled),
+  recalledAt: item?.recalledAt || item?.recalled_at || null,
+  recallableUntil: item?.recallableUntil || item?.recallable_until || null,
+  canRecall: Boolean(item?.canRecall)
 })
 
 export const useConsultationStore = defineStore('consultation', {
@@ -326,6 +340,44 @@ export const useConsultationStore = defineStore('consultation', {
         throw error
       } finally {
         this.sending = false
+      }
+    },
+    async recallMessage({ consultationId = this.activeConversationId, messageId }) {
+      if (!consultationId) {
+        throw new Error('未选择会话')
+      }
+      if (!messageId) {
+        throw new Error('未指定需要撤回的消息')
+      }
+      try {
+        const { data } = await recallConsultationMessage(consultationId, messageId)
+        const record = data?.data || data
+        if (record) {
+          const normalized = normalizeMessage(record)
+          const existing = this.messages[consultationId] ? [...this.messages[consultationId]] : []
+          const index = existing.findIndex(item => item.id === normalized.id)
+          if (index !== -1) {
+            existing.splice(index, 1, normalized)
+          } else {
+            existing.push(normalized)
+          }
+          this.messages[consultationId] = existing
+
+          const lastMessage = existing.length ? existing[existing.length - 1] : null
+          const lastVisible = existing.filter(item => !item.recalled)
+          const latestVisible = lastVisible.length ? lastVisible[lastVisible.length - 1] : null
+          const metaLast = latestVisible || lastMessage
+          const recallTimestamp = toIsoString(normalized.recalledAt)
+          const createdTimestamp = toIsoString(normalized.createdAt)
+          this.updateConversationMeta(consultationId, {
+            lastMessage: metaLast || null,
+            updatedAt: recallTimestamp || createdTimestamp || new Date().toISOString()
+          })
+        }
+        return record
+      } catch (error) {
+        console.error('Failed to recall consultation message', error)
+        throw error
       }
     },
     async closeConversation(consultationId = this.activeConversationId) {

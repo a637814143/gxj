@@ -197,6 +197,7 @@
             :allow-close="canCloseSelected"
             :closing="consultationStore.closing && closingId === selectedConversation.id"
             @close="handleCloseFromThread"
+            @recall="handleRecallFromThread"
           />
         </div>
       </div>
@@ -451,6 +452,22 @@ const handleCloseFromThread = () => {
     return
   }
   confirmCloseConversation(selectedConversation.value.id)
+}
+
+const handleRecallFromThread = async message => {
+  if (!selectedConversation.value?.id || !message?.id) {
+    return
+  }
+  try {
+    await consultationStore.recallMessage({
+      consultationId: selectedConversation.value.id,
+      messageId: message.id
+    })
+    ElMessage.success('消息已撤回')
+  } catch (error) {
+    const text = error?.response?.data?.message || error.message || '撤回失败'
+    ElMessage.error(text)
+  }
 }
 
 onMounted(() => {
