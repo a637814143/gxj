@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { fetchRealtimeWeather, fetchDailyForecast } from '../services/weather'
+import { getRealtimeFallback, getDailyForecastFallback, getAirQualityFallback } from '../mocks/weather/fallback'
 
 const STORAGE_KEY = 'cropyield-weather-location'
 
@@ -91,16 +92,46 @@ export const useWeatherStore = defineStore('weather', {
       this.isLoading = true
       this.error = null
       try {
-        const { data } = await fetchRealtimeWeather({
-          longitude: location.longitude,
-          latitude: location.latitude
-        })
-        const payload = data?.data
-        if (!payload) {
-          throw new Error('天气数据响应不完整')
+        let realtimePayload = null
+        let usedRealtimeFallback = false
+
+        try {
+          const { data } = await fetchRealtimeWeather({
+            longitude: location.longitude,
+            latitude: location.latitude
+          })
+          const payload = data?.data
+          if (!payload) {
+            throw new Error('天气数据响应不完整')
+          }
+          realtimePayload = payload
+        } catch (realtimeError) {
+          if (isStaticResourceMissing(realtimeError)) {
+            console.warn('远程天气接口不可用，使用内置实时天气数据', realtimeError)
+            realtimePayload = getRealtimeFallback(location)
+            usedRealtimeFallback = true
+            this.error = null
+          } else {
+            throw realtimeError
+          }
         }
-        this.current = payload
+
+        const normalizedRealtime = hasAirQualityData(realtimePayload)
+          ? realtimePayload
+          : {
+              ...realtimePayload,
+              airQuality: getAirQualityFallback()
+            }
+
+        this.current = normalizedRealtime
         this.lastUpdated = Date.now()
+
+        if (usedRealtimeFallback) {
+          this.forecast = getDailyForecastFallback()
+          this.forecastUpdated = Date.now()
+          this.forecastError = null
+          return
+        }
 
         try {
           const { data: forecastResponse } = await fetchDailyForecast({
@@ -112,9 +143,18 @@ export const useWeatherStore = defineStore('weather', {
           this.forecastUpdated = Date.now()
           this.forecastError = null
         } catch (forecastError) {
-          console.warn('获取未来天气预报失败', forecastError)
-          this.forecastError =
-            forecastError?.response?.data?.message || forecastError?.message || '未来天气预报获取失败'
+          if (isStaticResourceMissing(forecastError)) {
+            console.warn('未来天气预报接口不可用，使用内置示例数据', forecastError)
+            this.forecast = getDailyForecastFallback()
+            this.forecastUpdated = Date.now()
+            this.forecastError = null
+          } else {
+            console.warn('获取未来天气预报失败', forecastError)
+            this.forecast = []
+            this.forecastUpdated = 0
+            this.forecastError =
+              forecastError?.response?.data?.message || forecastError?.message || '未来天气预报获取失败'
+          }
         }
       } catch (error) {
         console.error('获取天气数据失败', error)
@@ -156,3 +196,30 @@ export const useWeatherStore = defineStore('weather', {
     }
   }
 })
+
+const hasAirQualityData = payload => {
+  if (!payload || typeof payload !== 'object') {
+    return false
+  }
+  const air = payload.airQuality
+  if (!air || typeof air !== 'object') {
+    return false
+  }
+  const aqiValue = Number(air.aqi)
+  return Number.isFinite(aqiValue) || Boolean(air.description)
+}
+
+const isStaticResourceMissing = error => {
+  if (!error) {
+    return false
+  }
+  const status = error?.response?.status
+  if (status === 404) {
+    return true
+  }
+  const message = error?.response?.data?.message || error?.message
+  if (typeof message !== 'string') {
+    return false
+  }
+  return /no static resource/i.test(message)
+}

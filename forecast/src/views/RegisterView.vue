@@ -201,6 +201,7 @@ const errors = reactive({
 const loading = ref(false)
 const codeSending = ref(false)
 const sendCountdown = ref(0)
+const codeExpiresAt = ref(0)
 const captchaId = ref('')
 const captchaImage = ref('')
 let countdownTimer = null
@@ -212,11 +213,13 @@ const clearCountdown = () => {
     window.clearInterval(countdownTimer)
     countdownTimer = null
   }
+  sendCountdown.value = 0
 }
 
 const startCountdown = seconds => {
   clearCountdown()
   sendCountdown.value = seconds
+  codeExpiresAt.value = Date.now() + seconds * 1000
   countdownTimer = window.setInterval(() => {
     if (sendCountdown.value > 0) {
       sendCountdown.value -= 1
@@ -265,6 +268,8 @@ const validateForm = () => {
   }
   if (!form.emailCode) {
     errors.emailCode = '请输入邮箱验证码'
+  } else if (codeExpiresAt.value && Date.now() > codeExpiresAt.value) {
+    errors.emailCode = '邮箱验证码已过期，请重新获取'
   }
 
   return (
@@ -322,6 +327,7 @@ const handleSendCode = async () => {
     })
     ElMessage.success('验证码已发送，请查收邮箱')
     startCountdown(60)
+    errors.emailCode = ''
     form.captchaCode = ''
     await refreshCaptcha()
   } catch (error) {
@@ -358,8 +364,26 @@ const handleSubmit = async () => {
     }
     await router.replace({ name: 'login', query })
   } catch (error) {
-    const message = error?.response?.data?.message || error.message || '注册失败，请稍后重试'
-    ElMessage.error(message)
+    const status = error?.response?.status
+    const rawMessage = error?.response?.data?.message || error.message || ''
+    const normalizedMessage = rawMessage || '注册失败，请稍后重试'
+
+    if (status === 409 || /已.*注册|already\s*registered/i.test(normalizedMessage)) {
+      errors.email = normalizedMessage.includes('邮箱')
+        ? normalizedMessage
+        : '该邮箱已经被注册'
+      return
+    }
+
+    if (/验证码/.test(normalizedMessage)) {
+      errors.emailCode = normalizedMessage
+      if (/过期/.test(normalizedMessage)) {
+        codeExpiresAt.value = 0
+      }
+      return
+    }
+
+    ElMessage.error(normalizedMessage)
   } finally {
     loading.value = false
   }
@@ -455,12 +479,16 @@ onBeforeUnmount(() => {
   cursor: pointer;
   user-select: none;
   background-color: #f5f7fa;
+  flex-shrink: 0;
+  overflow: hidden;
 }
 
 .captcha-image img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  padding: 2px;
+  display: block;
   border-radius: 4px;
 }
 
