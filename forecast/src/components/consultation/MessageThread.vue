@@ -65,14 +65,52 @@
               />
               <div v-else class="avatar-fallback">{{ getInitial(message.senderName) }}</div>
             </div>
-            <div class="bubble">
+            <div class="bubble" :class="{ recalled: message.recalled }">
               <div class="bubble-header">
                 <span class="sender-name">{{ message.senderName }}</span>
                 <span class="sender-role" v-if="message.senderRole">{{ roleMeta[message.senderRole] || message.senderRole }}</span>
                 <span class="timestamp">{{ formatTime(message.createdAt) }}</span>
               </div>
-              <div class="bubble-content" v-if="message.content">
+              <div v-if="canShowRecallButton(message)" class="bubble-actions">
+                <el-popconfirm
+                  :disabled="!isRecallable(message)"
+                  confirm-button-text="撤回"
+                  confirm-button-type="danger"
+                  cancel-button-text="取消"
+                  title="确认撤回该条消息？"
+                  @confirm="$emit('recall', message)"
+                >
+                  <template #reference>
+                    <el-button link type="primary" size="small" :disabled="!isRecallable(message)">
+                      撤回
+                    </el-button>
+                  </template>
+                </el-popconfirm>
+                <span
+                  v-if="isMine(message) && isRecallable(message) && recallCountdown(message)"
+                  class="recall-countdown"
+                >
+                  剩余 {{ recallCountdown(message) }}
+                </span>
+                <span
+                  v-else-if="isMine(message) && !isRecallable(message)"
+                  class="recall-expired"
+                >
+                  撤回时间已过
+                </span>
+              </div>
+              <div class="bubble-content" v-if="!message.recalled && message.content">
                 <p>{{ message.content }}</p>
+              </div>
+              <div class="bubble-content recalled" v-else-if="message.recalled">
+                <el-icon class="recalled-icon"><RefreshLeft /></el-icon>
+                <div class="recalled-text">
+                  <p>该消息已撤回</p>
+                  <span v-if="message.recalledAt">{{ formatTime(message.recalledAt) }}</span>
+                </div>
+              </div>
+              <div class="bubble-content placeholder" v-else>
+                <p class="placeholder-text">对方发送了附件或空白消息</p>
               </div>
             </div>
           </div>
@@ -83,8 +121,8 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue'
-import { Lock } from '@element-plus/icons-vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { Lock, RefreshLeft } from '@element-plus/icons-vue'
 
 const props = defineProps({
   messages: {
@@ -113,9 +151,11 @@ const props = defineProps({
   }
 })
 
-defineEmits(['close'])
+defineEmits(['close', 'recall'])
 
 const scrollbar = ref()
+const now = ref(Date.now())
+let timer = null
 
 const isClosed = computed(() => (props.conversation?.status || '').toLowerCase() === 'closed')
 
@@ -183,6 +223,77 @@ const formatTime = value => {
     return value
   }
 }
+
+const recallDeadline = message => {
+  if (!message?.recallableUntil) {
+    return null
+  }
+  const deadline = new Date(message.recallableUntil)
+  return Number.isNaN(deadline.getTime()) ? null : deadline
+}
+
+const canShowRecallButton = message => {
+  if (!message || message.recalled) {
+    return false
+  }
+  if (isMine(message)) {
+    return true
+  }
+  return Boolean(message?.canRecall)
+}
+
+const isRecallable = message => {
+  if (!message || message.recalled) {
+    return false
+  }
+  if (!isMine(message) && message?.canRecall) {
+    return true
+  }
+  if (!isMine(message)) {
+    return false
+  }
+  const deadline = recallDeadline(message)
+  if (!deadline) {
+    return Boolean(message?.canRecall)
+  }
+  return now.value <= deadline.getTime()
+}
+
+const recallCountdown = message => {
+  if (!isMine(message)) {
+    return ''
+  }
+  const deadline = recallDeadline(message)
+  if (!deadline) {
+    return ''
+  }
+  const remaining = Math.floor((deadline.getTime() - now.value) / 1000)
+  if (remaining <= 0) {
+    return ''
+  }
+  const minutes = Math.floor(remaining / 60)
+  const seconds = remaining % 60
+  if (minutes > 0) {
+    return `${minutes}分${seconds.toString().padStart(2, '0')}秒`
+  }
+  return `${seconds}秒`
+}
+
+onMounted(() => {
+  if (typeof window === 'undefined') {
+    return
+  }
+  timer = window.setInterval(() => {
+    now.value = Date.now()
+  }, 1000)
+})
+
+onBeforeUnmount(() => {
+  if (timer) {
+    window.clearInterval(timer)
+    timer = null
+  }
+})
 
 watch(
   () => props.messages?.length,
@@ -265,6 +376,22 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 16px;
+  background: linear-gradient(180deg, #f4faf5 0%, #ffffff 40%, #f1f6f3 100%);
+  border-left: 1px solid rgba(27, 67, 50, 0.08);
+  border-right: 1px solid rgba(27, 67, 50, 0.08);
+  position: relative;
+}
+
+.thread-body :deep(.el-scrollbar__wrap) {
+  background: transparent;
+}
+
+.thread-body :deep(.el-scrollbar__view) {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 100%;
+  padding-bottom: 16px;
 }
 
 .thread-notice {
@@ -328,11 +455,63 @@ watch(
   color: #ffffff;
 }
 
+.bubble.recalled {
+  background: rgba(27, 67, 50, 0.05);
+  color: #1b4332;
+}
+
+.message-item.mine .bubble.recalled {
+  background: rgba(27, 67, 50, 0.12);
+  color: #fefefe;
+}
+
 .bubble-header {
   display: flex;
   align-items: baseline;
   gap: 8px;
   margin-bottom: 8px;
+}
+
+.bubble-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.bubble-actions :deep(.el-button.is-link) {
+  padding: 0;
+  color: #1b4332;
+}
+
+.bubble-actions :deep(.el-button.is-link) span {
+  font-size: 12px;
+}
+
+.message-item.mine .bubble-actions :deep(.el-button.is-link) {
+  color: #f0fff4;
+}
+
+.bubble-actions :deep(.el-button.is-disabled) {
+  opacity: 0.5;
+}
+
+.recall-countdown {
+  font-size: 12px;
+  color: #1b4332;
+}
+
+.message-item.mine .recall-countdown {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.recall-expired {
+  font-size: 12px;
+  color: rgba(96, 125, 139, 0.8);
+}
+
+.message-item.mine .recall-expired {
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .sender-name {
@@ -362,5 +541,45 @@ watch(
   margin: 0;
   line-height: 1.6;
   white-space: pre-wrap;
+}
+
+.bubble-content.recalled {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #1b4332;
+}
+
+.message-item.mine .bubble-content.recalled {
+  color: #f0fff4;
+}
+
+.recalled-icon {
+  font-size: 18px;
+}
+
+.bubble-content.recalled .recalled-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bubble-content.recalled span {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.bubble-content.placeholder {
+  font-size: 13px;
+  color: rgba(96, 125, 139, 0.8);
+}
+
+.message-item.mine .bubble-content.placeholder {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.placeholder-text {
+  margin: 0;
 }
 </style>

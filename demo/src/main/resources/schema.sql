@@ -741,6 +741,8 @@ CREATE TABLE IF NOT EXISTS consultation_message (
     sender_id BIGINT UNSIGNED NOT NULL,
     sender_role VARCHAR(64),
     content TEXT,
+    recalled TINYINT(1) NOT NULL DEFAULT 0,
+    recalled_at TIMESTAMP NULL DEFAULT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     KEY idx_message_consultation (consultation_id),

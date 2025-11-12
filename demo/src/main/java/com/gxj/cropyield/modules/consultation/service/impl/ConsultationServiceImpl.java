@@ -31,9 +31,9 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
@@ -202,7 +202,7 @@ public class ConsultationServiceImpl implements ConsultationService {
         List<ConsultationMessageResponse> items = messages.stream()
             .sorted(Comparator.comparing(ConsultationMessage::getCreatedAt))
             .limit(limit)
-            .map(this::toMessageResponse)
+            .map(message -> toMessageResponse(message, currentUser))
             .collect(Collectors.toList());
         return new ConsultationMessagesResponse(toSummary(consultation, currentUser), items, messages.size());
     }
@@ -243,7 +243,50 @@ public class ConsultationServiceImpl implements ConsultationService {
         participant.setLastReadAt(LocalDateTime.now());
         participantRepository.save(participant);
 
-        return toMessageResponse(savedMessage);
+        return toMessageResponse(savedMessage, currentUser);
+    }
+
+    @Override
+    public ConsultationMessageResponse recallMessage(Long consultationId, Long messageId) {
+        Consultation consultation = loadAccessibleConsultation(consultationId);
+        User currentUser = currentUserService.getCurrentUser();
+        ConsultationMessage message = messageRepository.findByIdAndConsultationId(messageId, consultationId)
+            .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "消息不存在"));
+        if (message.isRecalled()) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "该消息已被撤回");
+        }
+        Set<String> roles = resolveRoles(currentUser);
+        boolean isAdmin = roles.contains(ROLE_ADMIN);
+        boolean isSender = message.getSender().getId().equals(currentUser.getId());
+        if (!isSender && !isAdmin) {
+            throw new BusinessException(ResultCode.FORBIDDEN, "只能撤回自己发送的消息");
+        }
+        LocalDateTime createdAt = message.getCreatedAt();
+        if (!isAdmin) {
+            if (createdAt == null) {
+                throw new BusinessException(ResultCode.BAD_REQUEST, "当前消息无法撤回");
+            }
+            LocalDateTime deadline = createdAt.plusMinutes(2);
+            if (LocalDateTime.now().isAfter(deadline)) {
+                throw new BusinessException(ResultCode.BAD_REQUEST, "超过可撤回时间窗口");
+            }
+        }
+
+        message.setRecalled(true);
+        message.setRecalledAt(LocalDateTime.now());
+        ConsultationMessage updated = messageRepository.save(message);
+
+        ConsultationMessage latestVisible = messageRepository
+            .findFirstByConsultationIdAndRecalledFalseOrderByCreatedAtDesc(consultationId)
+            .orElse(null);
+        if (latestVisible != null) {
+            consultation.setLastMessageAt(latestVisible.getCreatedAt());
+        } else {
+            consultation.setLastMessageAt(null);
+        }
+        consultationRepository.save(consultation);
+
+        return toMessageResponse(updated, currentUser);
     }
 
     @Override
@@ -316,10 +359,15 @@ public class ConsultationServiceImpl implements ConsultationService {
     }
 
     private ConsultationSummary toSummary(Consultation consultation, User currentUser) {
-        ConsultationMessage lastMessage = messageRepository
-            .findFirstByConsultationIdOrderByCreatedAtDesc(consultation.getId())
+        ConsultationMessage lastVisibleMessage = messageRepository
+            .findFirstByConsultationIdAndRecalledFalseOrderByCreatedAtDesc(consultation.getId())
             .orElse(null);
-        ConsultationMessageResponse lastMessageResponse = lastMessage == null ? null : toMessageResponse(lastMessage);
+        ConsultationMessage lastMessage = lastVisibleMessage != null
+            ? lastVisibleMessage
+            : messageRepository.findFirstByConsultationIdOrderByCreatedAtDesc(consultation.getId()).orElse(null);
+        ConsultationMessageResponse lastMessageResponse = lastMessage == null
+            ? null
+            : toMessageResponse(lastMessage, currentUser);
         long unreadCount = calculateUnreadCount(consultation.getId(), currentUser.getId());
         List<ConsultationParticipantResponse> participants = consultation.getParticipants().stream()
             .map(participant -> new ConsultationParticipantResponse(
@@ -366,18 +414,46 @@ public class ConsultationServiceImpl implements ConsultationService {
     }
 
     private ConsultationMessageResponse toMessageResponse(ConsultationMessage message) {
+        return toMessageResponse(message, null);
+    }
+
+    private ConsultationMessageResponse toMessageResponse(ConsultationMessage message, User currentUser) {
         User sender = message.getSender();
         String senderName = sender.getFullName() != null && !sender.getFullName().isBlank()
             ? sender.getFullName()
             : sender.getUsername();
+        LocalDateTime createdAt = message.getCreatedAt();
+        LocalDateTime recallableUntil = createdAt == null ? null : createdAt.plusMinutes(2);
+        boolean recalled = message.isRecalled();
+        LocalDateTime recalledAt = message.getRecalledAt();
+        boolean isSender = currentUser != null && sender.getId().equals(currentUser.getId());
+        boolean isAdmin = false;
+        if (currentUser != null) {
+            isAdmin = resolveRoles(currentUser).contains(ROLE_ADMIN);
+        }
+        LocalDateTime now = LocalDateTime.now();
+        boolean withinWindow = recallableUntil != null && !now.isAfter(recallableUntil);
+        boolean canRecall;
+        if (isAdmin) {
+            canRecall = !recalled;
+        } else {
+            canRecall = !recalled && isSender && withinWindow;
+        }
+
+        String content = recalled ? null : message.getContent();
+
         return new ConsultationMessageResponse(
             message.getId(),
             message.getConsultation().getId(),
             sender.getId(),
             senderName,
             message.getSenderRole(),
-            message.getContent(),
-            message.getCreatedAt()
+            content,
+            createdAt,
+            recalled,
+            recalledAt,
+            recallableUntil,
+            canRecall
         );
     }
 

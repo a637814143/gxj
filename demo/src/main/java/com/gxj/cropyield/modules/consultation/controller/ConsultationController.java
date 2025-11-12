@@ -67,6 +67,12 @@ public class ConsultationController {
         return ApiResponse.success(consultationService.sendMessage(consultationId, request));
     }
 
+    @PostMapping("/{consultationId}/messages/{messageId}/recall")
+    public ApiResponse<ConsultationMessageResponse> recallMessage(@PathVariable Long consultationId,
+                                                                  @PathVariable Long messageId) {
+        return ApiResponse.success(consultationService.recallMessage(consultationId, messageId));
+    }
+
     @PatchMapping("/{consultationId}")
     public ApiResponse<ConsultationSummary> updateConsultation(@PathVariable Long consultationId,
                                                                @RequestBody ConsultationUpdateRequest request) {

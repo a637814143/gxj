@@ -20,6 +20,7 @@
         :allow-close="canCloseActiveConversation"
         :closing="consultationStore.closing"
         @close="handleCloseConversation"
+        @recall="handleRecallMessage"
       />
       <ReplyComposer
         :disabled="composerDisabled"
@@ -213,6 +214,22 @@ const handleSendReply = async payload => {
   } catch (error) {
     const message = error?.response?.data?.message || error.message || '发送失败，请稍后重试'
     ElMessage.error(message)
+  }
+}
+
+const handleRecallMessage = async message => {
+  if (!message?.id) {
+    return
+  }
+  try {
+    await consultationStore.recallMessage({
+      consultationId: activeConversationId.value,
+      messageId: message.id
+    })
+    ElMessage.success('消息已撤回')
+  } catch (error) {
+    const text = error?.response?.data?.message || error.message || '撤回失败，请稍后重试'
+    ElMessage.error(text)
   }
 }
 

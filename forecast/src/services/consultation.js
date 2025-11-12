@@ -18,6 +18,9 @@ export const sendConsultationMessage = (consultationId, payload) =>
 export const updateConsultation = (consultationId, payload) =>
   apiClient.patch(`/api/consultations/${consultationId}`, payload)
 
+export const recallConsultationMessage = (consultationId, messageId) =>
+  apiClient.post(`/api/consultations/${consultationId}/messages/${messageId}/recall`)
+
 export const markConsultationRead = consultationId =>
   apiClient.post(`/api/consultations/${consultationId}/read`)
 

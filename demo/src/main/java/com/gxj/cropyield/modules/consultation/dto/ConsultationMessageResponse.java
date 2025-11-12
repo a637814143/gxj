@@ -11,6 +11,10 @@ public record ConsultationMessageResponse(
     String senderName,
     String senderRole,
     String content,
-    LocalDateTime createdAt
+    LocalDateTime createdAt,
+    boolean recalled,
+    LocalDateTime recalledAt,
+    LocalDateTime recallableUntil,
+    boolean canRecall
 ) {
 }
