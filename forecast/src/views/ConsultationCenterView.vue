@@ -362,7 +362,27 @@ watch(
   background: #ffffff;
   border-radius: 18px;
   overflow: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(27, 67, 50, 0.28) transparent;
   box-shadow: 0 24px 60px rgba(21, 82, 56, 0.12);
+}
+
+.consultation-center::-webkit-scrollbar {
+  width: 8px;
+}
+
+.consultation-center::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.consultation-center::-webkit-scrollbar-thumb {
+  background: rgba(27, 67, 50, 0.28);
+  border-radius: 8px;
+}
+
+.consultation-center:hover::-webkit-scrollbar-thumb {
+  background: rgba(27, 67, 50, 0.4);
 }
 
 .conversation-panel {
