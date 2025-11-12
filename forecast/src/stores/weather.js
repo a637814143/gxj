@@ -107,9 +107,10 @@ export const useWeatherStore = defineStore('weather', {
             longitude: location.longitude,
             latitude: location.latitude
           })
-          const forecastPayload = forecastResponse?.data?.daily || []
-          this.forecast = Array.isArray(forecastPayload) ? forecastPayload : []
-          this.forecastUpdated = Date.now()
+          const payloadData = forecastResponse?.data
+          const daily = Array.isArray(payloadData?.daily) ? payloadData.daily : []
+          this.forecast = daily
+          this.forecastUpdated = resolveForecastTimestamp(payloadData?.fetchedAt)
           this.forecastError = null
         } catch (forecastError) {
           console.warn('获取未来天气预报失败', forecastError)
@@ -156,3 +157,11 @@ export const useWeatherStore = defineStore('weather', {
     }
   }
 })
+
+const resolveForecastTimestamp = value => {
+  if (!value) {
+    return Date.now()
+  }
+  const time = new Date(value).getTime()
+  return Number.isNaN(time) ? Date.now() : time
+}
