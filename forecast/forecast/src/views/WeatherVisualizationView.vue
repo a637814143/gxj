@@ -360,22 +360,37 @@ const fetchRegions = async () => {
   }
 }
 
+const resolveDataSource = item => {
+  if (!item || typeof item !== 'object') {
+    return ''
+  }
+  const primary = (item.dataSource ?? '').toString().trim()
+  if (primary) {
+    return primary
+  }
+  return (item.datasetName ?? '').toString().trim()
+}
+
 const sanitizeRecords = rawRecords => {
   if (!Array.isArray(rawRecords)) {
     return []
   }
-  return rawRecords
-    .filter(item => {
-      const source = (item?.dataSource ?? '').toString().trim()
-      if (!source) {
-        return false
-      }
-      return source !== '示例数据'
-    })
-    .map(item => ({
+  return rawRecords.reduce((accumulator, item) => {
+    const source = resolveDataSource(item)
+    if (!source) {
+      return accumulator
+    }
+    const normalized = source.toLowerCase()
+    if (normalized.includes('示例')) {
+      return accumulator
+    }
+    accumulator.push({
       ...item,
+      dataSource: source,
       recordDate: item.recordDate
-    }))
+    })
+    return accumulator
+  }, [])
 }
 
 const loadWeatherData = async () => {
@@ -391,7 +406,15 @@ const loadWeatherData = async () => {
     }
     const { data } = await fetchWeatherDataset(params)
     const payload = data?.data
-    const sanitized = sanitizeRecords(payload?.records)
+    const rawRecords = Array.isArray(payload?.records) ? payload.records : []
+    const sanitized = sanitizeRecords(rawRecords)
+    if (rawRecords.length > sanitized.length) {
+      const hidden = rawRecords.length - sanitized.length
+      const message = sanitized.length
+        ? `已隐藏 ${hidden} 条缺少数据来源或示例来源的记录`
+        : '导入的天气记录缺少数据来源，已被全部隐藏，请补充数据来源后重试'
+      ElMessage.info(message)
+    }
     records.value = sanitized
     summary.value = sanitized.length ? payload?.summary || null : null
     if (!userCustomizedRange.value && summary.value?.firstRecordDate && summary.value?.lastRecordDate) {

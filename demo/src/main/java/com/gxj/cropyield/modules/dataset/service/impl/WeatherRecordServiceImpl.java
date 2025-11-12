@@ -130,6 +130,15 @@ public class WeatherRecordServiceImpl implements WeatherRecordService {
     }
 
     private WeatherRecordView mapToView(WeatherRecord record) {
+        String resolvedDataSource = Optional.ofNullable(record.getDataSource())
+                .map(String::trim)
+                .filter(source -> !source.isEmpty())
+                .orElseGet(() -> Optional.ofNullable(record.getDatasetFile())
+                        .map(file -> Optional.ofNullable(file.getDescription()).orElse(file.getName()))
+                        .map(String::trim)
+                        .filter(source -> !source.isEmpty())
+                        .orElse(null));
+
         return new WeatherRecordView(
                 record.getId(),
                 Optional.ofNullable(record.getRegion()).map(r -> r.getId()).orElse(null),
@@ -140,7 +149,7 @@ public class WeatherRecordServiceImpl implements WeatherRecordService {
                 record.getWeatherText(),
                 record.getWind(),
                 record.getSunshineHours(),
-                record.getDataSource(),
+                resolvedDataSource,
                 Optional.ofNullable(record.getDatasetFile()).map(DatasetFile::getName).orElse(null)
         );
     }
