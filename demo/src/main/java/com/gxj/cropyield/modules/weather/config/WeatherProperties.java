@@ -43,6 +43,11 @@ public class WeatherProperties {
         private String baseUrl = "https://m776x8rde7.re.qweatherapi.com/v7";
 
         /**
+         * 空气质量接口基础地址，未设置时默认与 baseUrl 同源。
+         */
+        private String airQualityBaseUrl;
+
+        /**
          * 和风天气地理位置接口基础地址。
          */
         private String geoBaseUrl;
@@ -114,6 +119,14 @@ public class WeatherProperties {
 
         public void setBaseUrl(String baseUrl) {
             this.baseUrl = baseUrl;
+        }
+
+        public String getAirQualityBaseUrl() {
+            return airQualityBaseUrl;
+        }
+
+        public void setAirQualityBaseUrl(String airQualityBaseUrl) {
+            this.airQualityBaseUrl = airQualityBaseUrl;
         }
 
         public String getKey() {
