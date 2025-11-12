@@ -751,8 +751,38 @@ CREATE TABLE IF NOT EXISTS consultation_message (
     CONSTRAINT fk_message_sender FOREIGN KEY (sender_id) REFERENCES sys_user (id) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '在线咨询消息';
 
-ALTER TABLE consultation_message
-    ADD COLUMN IF NOT EXISTS recalled TINYINT(1) NOT NULL DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS recalled_at TIMESTAMP NULL DEFAULT NULL;
+-- Backfill recall columns for existing installations without relying on
+-- MySQL 8 "IF NOT EXISTS" support so MySQL 5.7 deployments succeed.
+SET @missing_recalled := (
+    SELECT COUNT(*) = 0
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'consultation_message'
+      AND COLUMN_NAME = 'recalled'
+);
+SET @ddl_recalled := IF(
+    @missing_recalled,
+    'ALTER TABLE consultation_message ADD COLUMN recalled TINYINT(1) NOT NULL DEFAULT 0;',
+    'DO 0'
+);
+PREPARE stmt FROM @ddl_recalled;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @missing_recalled_at := (
+    SELECT COUNT(*) = 0
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'consultation_message'
+      AND COLUMN_NAME = 'recalled_at'
+);
+SET @ddl_recalled_at := IF(
+    @missing_recalled_at,
+    'ALTER TABLE consultation_message ADD COLUMN recalled_at TIMESTAMP NULL DEFAULT NULL;',
+    'DO 0'
+);
+PREPARE stmt2 FROM @ddl_recalled_at;
+EXECUTE stmt2;
+DEALLOCATE PREPARE stmt2;
 
 SET FOREIGN_KEY_CHECKS = 1;
