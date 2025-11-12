@@ -360,6 +360,24 @@ const fetchRegions = async () => {
   }
 }
 
+const sanitizeRecords = rawRecords => {
+  if (!Array.isArray(rawRecords)) {
+    return []
+  }
+  return rawRecords
+    .filter(item => {
+      const source = (item?.dataSource ?? '').toString().trim()
+      if (!source) {
+        return false
+      }
+      return source !== '示例数据'
+    })
+    .map(item => ({
+      ...item,
+      recordDate: item.recordDate
+    }))
+}
+
 const loadWeatherData = async () => {
   if (!selectedRegionId.value) {
     return
@@ -373,7 +391,9 @@ const loadWeatherData = async () => {
     }
     const { data } = await fetchWeatherDataset(params)
     const payload = data?.data
-    summary.value = payload?.summary || null
+    const sanitized = sanitizeRecords(payload?.records)
+    records.value = sanitized
+    summary.value = sanitized.length ? payload?.summary || null : null
     if (!userCustomizedRange.value && summary.value?.firstRecordDate && summary.value?.lastRecordDate) {
       const coverageRange = [summary.value.firstRecordDate, summary.value.lastRecordDate]
       const currentRange = Array.isArray(dateRange.value) ? dateRange.value : []
@@ -382,12 +402,6 @@ const loadWeatherData = async () => {
         dateRange.value = coverageRange
       }
     }
-    records.value = Array.isArray(payload?.records)
-      ? payload.records.map(item => ({
-          ...item,
-          recordDate: item.recordDate
-        }))
-      : []
     selectedWeatherType.value = 'ALL'
     currentPage.value = 1
   } catch (error) {
