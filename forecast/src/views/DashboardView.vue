@@ -257,14 +257,15 @@ const cycleOptions = [
   { label: '冬季', value: 'WINTER' }
 ]
 
-const SCENARIO_CONFIGS = [
+const DEFAULT_SCENARIO_CONFIGS = [
   {
     key: 'baseline',
     label: '基准',
     temperature: '当前气候',
     delta: 0,
     color: '#2563eb',
-    description: '保持当前气候条件，沿用历史增长趋势的预测基线。'
+    description: '保持当前气候条件，沿用历史增长趋势的预测基线。',
+    isBaseline: true
   },
   {
     key: 'warming15',
@@ -284,7 +285,7 @@ const SCENARIO_CONFIGS = [
   }
 ]
 
-const scenarioConfigMap = new Map(SCENARIO_CONFIGS.map(config => [config.label, config]))
+const SCENARIO_COLOR_PALETTE = ['#2563eb', '#f97316', '#dc2626', '#0f766e', '#9333ea', '#facc15']
 
 const filterForm = reactive({
   crop: 'ALL',
@@ -407,7 +408,7 @@ const totalTablePages = computed(() => {
 
 const searching = computed(() => summaryLoading.value)
 
-const applyScenarioValue = (value, scenario) => {
+const applyScenarioDelta = (value, delta) => {
   if (value === null || value === undefined) {
     return null
   }
@@ -415,13 +416,82 @@ const applyScenarioValue = (value, scenario) => {
   if (Number.isNaN(numeric)) {
     return null
   }
-  const scaled = numeric * (1 + scenario.delta)
+  const scaled = numeric * (1 + (delta ?? 0))
   return Math.round(scaled * 100) / 100
 }
 
 const forecastPoints = computed(() => summary.value?.forecastOutlook ?? [])
 
-const hasScenarioData = computed(() => forecastPoints.value.length > 0)
+const resolvedScenarioConfigs = computed(() => {
+  const scenarios = Array.isArray(summary.value?.scenarioComparisons)
+    ? summary.value.scenarioComparisons
+    : []
+
+  if (scenarios.length) {
+    return scenarios.map((scenario, index) => {
+      const color = scenario.color || SCENARIO_COLOR_PALETTE[index % SCENARIO_COLOR_PALETTE.length]
+      const normalizeSeries = Array.isArray(scenario.series)
+        ? scenario.series.map(point => ({
+            label: point?.label ?? point?.period ?? point?.name ?? '',
+            value: point?.value ?? null
+          }))
+        : []
+      return {
+        key: scenario.key ?? scenario.code ?? `scenario-${index}`,
+        label: scenario.label ?? scenario.name ?? `情景${index + 1}`,
+        temperature: scenario.temperature ?? scenario.temperatureLabel ?? '',
+        color,
+        description: scenario.description ?? '',
+        isBaseline:
+          typeof scenario.isBaseline === 'boolean'
+            ? scenario.isBaseline
+            : /基准|baseline/i.test(String(scenario.label ?? '')),
+        delta: typeof scenario.delta === 'number' ? scenario.delta : null,
+        series: normalizeSeries,
+        change: typeof scenario.change === 'number' ? scenario.change : null
+      }
+    })
+  }
+
+  return DEFAULT_SCENARIO_CONFIGS.map((config, index) => ({
+    ...config,
+    color: config.color || SCENARIO_COLOR_PALETTE[index % SCENARIO_COLOR_PALETTE.length],
+    series: [],
+    change: null
+  }))
+})
+
+const scenarioSeries = computed(() => {
+  const points = forecastPoints.value
+  return resolvedScenarioConfigs.value.map((config, index) => {
+    let series = Array.isArray(config.series) ? config.series.filter(point => point && typeof point === 'object') : []
+    if (!series.length && points.length) {
+      if (config.delta !== null && config.delta !== undefined) {
+        series = points.map(point => ({
+          label: point?.label ?? '',
+          value: applyScenarioDelta(point?.value, config.delta)
+        }))
+      } else if (config.isBaseline || index === 0) {
+        series = points.map(point => ({
+          label: point?.label ?? '',
+          value: point?.value ?? null
+        }))
+      }
+    }
+    return {
+      ...config,
+      series
+    }
+  })
+})
+
+const scenarioConfigMap = computed(
+  () => new Map(scenarioSeries.value.map(config => [config.label, config]))
+)
+
+const hasScenarioData = computed(() =>
+  scenarioSeries.value.some(config => Array.isArray(config.series) && config.series.length)
+)
 
 const formatScenarioTooltip = params => {
   if (!Array.isArray(params) || !params.length) {
@@ -430,7 +500,7 @@ const formatScenarioTooltip = params => {
   const axisLabel = params[0]?.axisValueLabel ?? ''
   const lines = [`<div style="font-weight:600;margin-bottom:6px;">${axisLabel}</div>`]
   params.forEach(item => {
-    const config = scenarioConfigMap.get(item.seriesName)
+    const config = scenarioConfigMap.value.get(item.seriesName)
     const temperature = config?.temperature ? `（${config.temperature}）` : ''
     lines.push(
       `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">` +
@@ -443,24 +513,46 @@ const formatScenarioTooltip = params => {
 }
 
 const scenarioChartOption = computed(() => {
-  const points = forecastPoints.value
-  const categories = points.map(point => point?.label ?? '')
-  const series = SCENARIO_CONFIGS.map(config => ({
-    name: config.label,
-    type: 'line',
-    smooth: true,
-    showSymbol: true,
-    symbolSize: 8,
-    lineStyle: {
-      width: 3
-    },
-    areaStyle: config.key === 'baseline' ? { opacity: 0.1 } : undefined,
-    emphasis: { focus: 'series' },
-    data: points.map(point => applyScenarioValue(point?.value, config))
-  }))
+  const scenarios = scenarioSeries.value.filter(config => config.series.length)
+  if (!scenarios.length) {
+    return {
+      color: [],
+      series: [],
+      xAxis: { data: [] },
+      yAxis: { type: 'value' }
+    }
+  }
+
+  const baseline = scenarios.find(config => config.isBaseline) ?? scenarios[0]
+  const categories = baseline.series.map(point => point?.label ?? '')
+
+  const series = scenarios.map(config => {
+    const valueMap = new Map(config.series.map(point => [point?.label ?? '', point?.value ?? null]))
+    const data = categories.map(label => {
+      const value = valueMap.get(label)
+      if (value === null || value === undefined || Number.isNaN(Number(value))) {
+        return null
+      }
+      return Math.round(Number(value) * 100) / 100
+    })
+
+    return {
+      name: config.label,
+      type: 'line',
+      smooth: true,
+      showSymbol: true,
+      symbolSize: 8,
+      lineStyle: {
+        width: 3
+      },
+      areaStyle: config.isBaseline ? { opacity: 0.1 } : undefined,
+      emphasis: { focus: 'series' },
+      data
+    }
+  })
 
   return {
-    color: SCENARIO_CONFIGS.map(config => config.color),
+    color: scenarios.map(config => config.color),
     tooltip: {
       trigger: 'axis',
       backgroundColor: 'rgba(15, 23, 42, 0.92)',
@@ -470,7 +562,7 @@ const scenarioChartOption = computed(() => {
       formatter: formatScenarioTooltip
     },
     legend: {
-      data: SCENARIO_CONFIGS.map(config => config.label),
+      data: scenarios.map(config => config.label),
       top: 18,
       textStyle: { color: '#475569', fontSize: 13 }
     },
@@ -497,31 +589,47 @@ const scenarioChartOption = computed(() => {
 })
 
 const scenarioInsightCards = computed(() => {
-  const points = forecastPoints.value
-  if (!points.length) {
+  const scenarios = scenarioSeries.value.filter(config => config.series.length)
+  if (!scenarios.length) {
     return []
   }
-  const baselineConfig = SCENARIO_CONFIGS.find(config => config.key === 'baseline') ?? SCENARIO_CONFIGS[0]
-  const baselineValues = points.map(point => applyScenarioValue(point?.value, baselineConfig))
-  const baselineLast = baselineValues[baselineValues.length - 1]
+  const baseline = scenarios.find(config => config.isBaseline) ?? scenarios[0]
+  const baselineSeries = baseline.series
+  const baselineLast = baselineSeries.length
+    ? baselineSeries[baselineSeries.length - 1]?.value ?? null
+    : null
 
-  return SCENARIO_CONFIGS.map(config => {
-    const values = points.map(point => applyScenarioValue(point?.value, config))
-    const lastValue = values[values.length - 1]
-    let change = 0
-    if (config.key !== 'baseline' && baselineLast && baselineLast !== 0 && lastValue !== null && lastValue !== undefined) {
-      change = (lastValue - baselineLast) / baselineLast
-    }
-    return {
-      key: config.key,
-      label: config.label,
-      temperature: config.temperature,
-      value: lastValue,
-      change,
-      description: config.description,
-      color: config.color
-    }
-  }).filter(card => card.value !== null && card.value !== undefined)
+  return scenarios
+    .map(config => {
+      const series = config.series
+      const lastPoint = series.length ? series[series.length - 1] : null
+      const lastValue = lastPoint?.value ?? null
+      let change = 0
+      if (config.change !== null && config.change !== undefined) {
+        change = config.change
+      } else if (
+        !config.isBaseline &&
+        baselineLast !== null &&
+        baselineLast !== undefined &&
+        baselineLast !== 0 &&
+        lastValue !== null &&
+        lastValue !== undefined
+      ) {
+        change = (Number(lastValue) - Number(baselineLast)) / Number(baselineLast)
+      }
+      const temperature = config.temperature || (config.isBaseline ? '当前气候' : '')
+
+      return {
+        key: config.key,
+        label: config.label,
+        temperature,
+        value: lastValue,
+        change,
+        description: config.description,
+        color: config.color
+      }
+    })
+    .filter(card => card.value !== null && card.value !== undefined)
 })
 
 const updateFilterOptions = () => {
