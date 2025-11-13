@@ -125,6 +125,11 @@ public class AuthServiceImpl implements AuthService {
                 throw new BusinessException(ResultCode.BAD_REQUEST, "用户名已存在");
             });
 
+        userRepository.findByEmail(request.email())
+            .ifPresent(user -> {
+                throw new BusinessException(ResultCode.BAD_REQUEST, "该邮箱已经被注册");
+            });
+
         emailVerificationService.validateAndConsume(request.email(), request.emailCode());
         passwordPolicyValidator.validate(request.password());
 
