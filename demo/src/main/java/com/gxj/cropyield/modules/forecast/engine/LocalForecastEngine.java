@@ -23,6 +23,7 @@ import java.util.regex.Pattern;
 public class LocalForecastEngine {
 
     private static final Pattern QUARTER_PATTERN = Pattern.compile("^(\\d{4})[-_/]?Q([1-4])$");
+    private static final int MIN_LSTM_HISTORY = 6;
 
     private static final class DoubleExponentialModel {
         private final double alpha;
@@ -65,6 +66,40 @@ public class LocalForecastEngine {
                                         ForecastEngineResponse.EvaluationMetrics metrics) {
             this.forecast = forecast;
             this.metrics = metrics;
+        }
+    }
+
+    private static final class ForecastCandidate {
+        private final String label;
+        private final List<Double> forecast;
+        private final ForecastEngineResponse.EvaluationMetrics metrics;
+        private final double rmseScore;
+        private final double mapeScore;
+
+        private ForecastCandidate(String label,
+                                   List<Double> forecast,
+                                   ForecastEngineResponse.EvaluationMetrics metrics,
+                                   double rmseScore,
+                                   double mapeScore) {
+            this.label = label;
+            this.forecast = forecast;
+            this.metrics = metrics;
+            this.rmseScore = rmseScore;
+            this.mapeScore = mapeScore;
+        }
+    }
+
+    private static final class ForecastEvaluation {
+        private final ForecastEngineResponse.EvaluationMetrics metrics;
+        private final double rmseScore;
+        private final double mapeScore;
+
+        private ForecastEvaluation(ForecastEngineResponse.EvaluationMetrics metrics,
+                                   double rmseScore,
+                                   double mapeScore) {
+            this.metrics = metrics;
+            this.rmseScore = rmseScore;
+            this.mapeScore = mapeScore;
         }
     }
 
@@ -116,9 +151,73 @@ public class LocalForecastEngine {
                 ? regressionResult.metrics
                 : buildBaselineMetrics(historyValues);
         } else {
-            rawForecast = lstmForecaster.forecast(historyValues, forecastPeriods)
-                .orElseGet(() -> exponentialSmoothingForecast(historyValues, forecastPeriods));
-            metrics = buildBaselineMetrics(historyValues);
+            List<ForecastCandidate> candidates = new ArrayList<>();
+
+            DoubleExponentialModel optimizedModel = fitDoubleExponentialModel(historyValues);
+            List<Double> smoothingForecast = optimizedModel != null
+                ? projectDoubleExponential(optimizedModel, forecastPeriods)
+                : exponentialSmoothingForecast(historyValues, forecastPeriods);
+            ForecastEvaluation smoothingEvaluation = null;
+            if (optimizedModel != null && optimizedModel.comparisons > 0) {
+                ForecastEngineResponse.EvaluationMetrics smoothingMetrics = new ForecastEngineResponse.EvaluationMetrics(
+                    round(optimizedModel.mae),
+                    round(optimizedModel.rmse),
+                    round(optimizedModel.mape),
+                    optimizedModel.r2 != null ? round(optimizedModel.r2) : null
+                );
+                smoothingEvaluation = new ForecastEvaluation(
+                    smoothingMetrics,
+                    optimizedModel.rmse,
+                    optimizedModel.mape
+                );
+            }
+            ForecastEngineResponse.EvaluationMetrics smoothingMetrics = smoothingEvaluation != null
+                ? smoothingEvaluation.metrics
+                : buildBaselineMetrics(historyValues);
+            candidates.add(new ForecastCandidate(
+                "DOUBLE_EXPONENTIAL",
+                smoothingForecast,
+                smoothingMetrics,
+                smoothingEvaluation != null ? smoothingEvaluation.rmseScore : scoreFromMetric(smoothingMetrics.rmse()),
+                smoothingEvaluation != null ? smoothingEvaluation.mapeScore : scoreFromMetric(smoothingMetrics.mape())
+            ));
+
+            List<Double> trendForecast = linearTrendForecast(historyValues, forecastPeriods);
+            ForecastEvaluation linearEvaluation = evaluateLinearTrendPerformance(historyValues);
+            ForecastEngineResponse.EvaluationMetrics linearMetrics = linearEvaluation != null
+                ? linearEvaluation.metrics
+                : buildBaselineMetrics(historyValues);
+            candidates.add(new ForecastCandidate(
+                "LINEAR_TREND",
+                trendForecast,
+                linearMetrics,
+                linearEvaluation != null ? linearEvaluation.rmseScore : scoreFromMetric(linearMetrics.rmse()),
+                linearEvaluation != null ? linearEvaluation.mapeScore : scoreFromMetric(linearMetrics.mape())
+            ));
+
+            Optional<List<Double>> lstmForecast = lstmForecaster.forecast(historyValues, forecastPeriods);
+            if (lstmForecast.isPresent()) {
+                ForecastEvaluation lstmEvaluation = evaluateLstmPerformance(historyValues);
+                ForecastEngineResponse.EvaluationMetrics lstmMetrics = lstmEvaluation != null
+                    ? lstmEvaluation.metrics
+                    : buildBaselineMetrics(historyValues);
+                candidates.add(new ForecastCandidate(
+                    "LSTM",
+                    lstmForecast.get(),
+                    lstmMetrics,
+                    lstmEvaluation != null ? lstmEvaluation.rmseScore : scoreFromMetric(lstmMetrics.rmse()),
+                    lstmEvaluation != null ? lstmEvaluation.mapeScore : scoreFromMetric(lstmMetrics.mape())
+                ));
+            }
+
+            ForecastCandidate bestCandidate = selectBestCandidate(candidates);
+            if (bestCandidate == null) {
+                rawForecast = exponentialSmoothingForecast(historyValues, forecastPeriods);
+                metrics = buildBaselineMetrics(historyValues);
+            } else {
+                rawForecast = bestCandidate.forecast;
+                metrics = bestCandidate.metrics;
+            }
         }
         List<String> nextPeriods = buildNextPeriods(sanitizedHistory, request.frequency(), rawForecast.size());
 
@@ -493,38 +592,10 @@ public class LocalForecastEngine {
 
     private ForecastEngineResponse.EvaluationMetrics buildRegressionMetrics(double[] actual,
                                                                             double[] predicted) {
-        if (actual.length == 0) {
-            return new ForecastEngineResponse.EvaluationMetrics(null, null, null, null);
-        }
-        double sumAbs = 0d;
-        double sumSq = 0d;
-        double sumPct = 0d;
-        double sumActual = 0d;
-        for (int i = 0; i < actual.length; i++) {
-            double error = actual[i] - predicted[i];
-            sumAbs += Math.abs(error);
-            sumSq += error * error;
-            if (Math.abs(actual[i]) > 1e-9) {
-                sumPct += Math.abs(error / actual[i]);
-            }
-            sumActual += actual[i];
-        }
-        double mae = sumAbs / actual.length;
-        double rmse = Math.sqrt(sumSq / actual.length);
-        double mean = sumActual / actual.length;
-        double sst = 0d;
-        for (double v : actual) {
-            double diff = v - mean;
-            sst += diff * diff;
-        }
-        Double r2 = sst == 0 ? null : 1 - (sumSq / Math.max(sst, 1e-9));
-        double mape = (sumPct / actual.length) * 100;
-        return new ForecastEngineResponse.EvaluationMetrics(
-            round(mae),
-            round(rmse),
-            round(mape),
-            r2 != null ? round(r2) : null
-        );
+        ForecastEvaluation evaluation = computeEvaluation(actual, predicted);
+        return evaluation != null
+            ? evaluation.metrics
+            : new ForecastEngineResponse.EvaluationMetrics(null, null, null, null);
     }
 
     private List<Double> rollingWindowForecast(List<Double> historyValues, int periods) {
@@ -645,19 +716,6 @@ public class LocalForecastEngine {
         return Math.sqrt(variance);
     }
 
-    private ForecastEngineResponse.EvaluationMetrics buildMetrics(List<Double> historyValues,
-                                                                  DoubleExponentialModel optimizedModel) {
-        if (optimizedModel != null && optimizedModel.comparisons > 0) {
-            return new ForecastEngineResponse.EvaluationMetrics(
-                round(optimizedModel.mae),
-                round(optimizedModel.rmse),
-                round(optimizedModel.mape),
-                optimizedModel.r2 != null ? round(optimizedModel.r2) : null
-            );
-        }
-        return buildBaselineMetrics(historyValues);
-    }
-
     private ForecastEngineResponse.EvaluationMetrics buildBaselineMetrics(List<Double> historyValues) {
         if (historyValues.size() < 2) {
             return new ForecastEngineResponse.EvaluationMetrics(null, null, null, null);
@@ -774,6 +832,139 @@ public class LocalForecastEngine {
             results.add(forecast);
         }
         return results;
+    }
+
+    private ForecastEvaluation evaluateLinearTrendPerformance(List<Double> historyValues) {
+        if (historyValues.size() < 3) {
+            return null;
+        }
+        int n = historyValues.size();
+        double sumX = 0d;
+        double sumY = 0d;
+        double sumXY = 0d;
+        double sumXX = 0d;
+        for (int i = 0; i < n; i++) {
+            double x = i + 1;
+            double y = historyValues.get(i);
+            sumX += x;
+            sumY += y;
+            sumXY += x * y;
+            sumXX += x * x;
+        }
+        double denominator = n * sumXX - sumX * sumX;
+        double slope = denominator == 0 ? 0 : (n * sumXY - sumX * sumY) / denominator;
+        double intercept = (sumY - slope * sumX) / n;
+        double[] actual = historyValues.stream().mapToDouble(Double::doubleValue).toArray();
+        double[] predicted = new double[n];
+        for (int i = 0; i < n; i++) {
+            double x = i + 1;
+            predicted[i] = intercept + slope * x;
+        }
+        return computeEvaluation(actual, predicted);
+    }
+
+    private ForecastEvaluation evaluateLstmPerformance(List<Double> historyValues) {
+        int validationPoints = Math.min(3, historyValues.size() - MIN_LSTM_HISTORY);
+        if (validationPoints <= 0) {
+            return null;
+        }
+        List<Double> actual = new ArrayList<>();
+        List<Double> predicted = new ArrayList<>();
+        for (int offset = validationPoints; offset > 0; offset--) {
+            int trainSize = historyValues.size() - offset;
+            if (trainSize < MIN_LSTM_HISTORY) {
+                continue;
+            }
+            List<Double> training = new ArrayList<>(historyValues.subList(0, trainSize));
+            Optional<List<Double>> forecast = lstmForecaster.forecast(training, 1);
+            if (forecast.isEmpty()) {
+                return null;
+            }
+            predicted.add(forecast.get(0));
+            actual.add(historyValues.get(trainSize));
+        }
+        if (actual.isEmpty() || predicted.size() != actual.size()) {
+            return null;
+        }
+        double[] actualArray = actual.stream().mapToDouble(Double::doubleValue).toArray();
+        double[] predictedArray = predicted.stream().mapToDouble(Double::doubleValue).toArray();
+        return computeEvaluation(actualArray, predictedArray);
+    }
+
+    private ForecastEvaluation computeEvaluation(double[] actual, double[] predicted) {
+        if (actual == null || predicted == null || actual.length == 0 || actual.length != predicted.length) {
+            return null;
+        }
+        double sumAbs = 0d;
+        double sumSq = 0d;
+        double sumPct = 0d;
+        double sumActual = 0d;
+        for (int i = 0; i < actual.length; i++) {
+            double error = actual[i] - predicted[i];
+            sumAbs += Math.abs(error);
+            sumSq += error * error;
+            if (Math.abs(actual[i]) > 1e-9) {
+                sumPct += Math.abs(error / actual[i]);
+            }
+            sumActual += actual[i];
+        }
+        if (actual.length == 0) {
+            return null;
+        }
+        double mae = sumAbs / actual.length;
+        double rmse = Math.sqrt(sumSq / actual.length);
+        double mean = sumActual / actual.length;
+        double sst = 0d;
+        for (double value : actual) {
+            double diff = value - mean;
+            sst += diff * diff;
+        }
+        Double r2 = sst == 0 ? null : 1 - (sumSq / Math.max(sst, 1e-9));
+        double mape = (sumPct / actual.length) * 100;
+        ForecastEngineResponse.EvaluationMetrics metrics = new ForecastEngineResponse.EvaluationMetrics(
+            round(mae),
+            round(rmse),
+            round(mape),
+            r2 != null ? round(r2) : null
+        );
+        return new ForecastEvaluation(metrics, rmse, mape);
+    }
+
+    private ForecastCandidate selectBestCandidate(List<ForecastCandidate> candidates) {
+        ForecastCandidate best = null;
+        double bestScore = Double.POSITIVE_INFINITY;
+        for (ForecastCandidate candidate : candidates) {
+            if (candidate == null || candidate.forecast == null || candidate.forecast.isEmpty()) {
+                continue;
+            }
+            double score = candidate.rmseScore;
+            if (!Double.isFinite(score) || score <= 0) {
+                score = candidate.mapeScore;
+            }
+            if (!Double.isFinite(score)) {
+                continue;
+            }
+            if (best == null || score < bestScore - 1e-9) {
+                best = candidate;
+                bestScore = score;
+            }
+        }
+        if (best != null) {
+            return best;
+        }
+        for (ForecastCandidate candidate : candidates) {
+            if (candidate != null && candidate.forecast != null && !candidate.forecast.isEmpty()) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private double scoreFromMetric(Double metric) {
+        if (metric == null || !Double.isFinite(metric)) {
+            return Double.POSITIVE_INFINITY;
+        }
+        return metric;
     }
 
     private String generateRequestId() {
