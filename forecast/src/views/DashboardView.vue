@@ -85,6 +85,47 @@
       </el-form>
     </el-card>
 
+    <el-card class="scenario-card" shadow="hover">
+      <template #header>
+        <div class="card-header">
+          <div>
+            <div class="card-title">多情景产量对比</div>
+            <div class="card-subtitle">将全球变暖影响纳入预测，直观比较基准与暖化情景的产量差异</div>
+          </div>
+          <el-tag type="warning" effect="light">气候情景假设：基于长期升温敏感度推演</el-tag>
+        </div>
+      </template>
+      <div class="scenario-content">
+        <div class="scenario-chart">
+          <BaseChart v-if="hasScenarioData" :option="scenarioChartOption" :height="340" />
+          <el-empty v-else description="暂无预测结果可用于生成情景对比" />
+        </div>
+        <div v-if="scenarioInsightCards.length" class="scenario-insights">
+          <div
+            v-for="card in scenarioInsightCards"
+            :key="card.key"
+            class="scenario-insight-card"
+            :style="{
+              '--scenario-accent': card.color,
+              '--scenario-accent-soft': `${card.color}1a`,
+              '--scenario-accent-border': `${card.color}33`
+            }"
+          >
+            <div class="scenario-insight-header">
+              <span class="scenario-insight-dot" :style="{ background: card.color }"></span>
+              <span class="scenario-insight-label">{{ card.label }}</span>
+            </div>
+            <div class="scenario-insight-temp">{{ card.temperature }}</div>
+            <div class="scenario-insight-value">{{ formatNumber(card.value) }} 吨</div>
+            <div class="scenario-insight-change" :class="{ negative: card.change < 0, positive: card.change > 0 }">
+              {{ formatScenarioChange(card.change) }}
+            </div>
+            <div class="scenario-insight-desc">{{ card.description }}</div>
+          </div>
+        </div>
+      </div>
+    </el-card>
+
     <el-card class="table-card" shadow="hover">
       <template #header>
         <div class="card-header">
@@ -183,6 +224,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import apiClient from '../services/http'
 import { deleteForecastRun } from '@/services/forecast'
 import { useAuthStore } from '@/stores/auth'
+import BaseChart from '@/components/charts/BaseChart.vue'
 
 const authStore = useAuthStore()
 const isUserTheme = computed(() => {
@@ -214,6 +256,35 @@ const cycleOptions = [
   { label: '秋季', value: 'AUTUMN' },
   { label: '冬季', value: 'WINTER' }
 ]
+
+const SCENARIO_CONFIGS = [
+  {
+    key: 'baseline',
+    label: '基准',
+    temperature: '当前气候',
+    delta: 0,
+    color: '#2563eb',
+    description: '保持当前气候条件，沿用历史增长趋势的预测基线。'
+  },
+  {
+    key: 'warming15',
+    label: '暖化+1.5℃',
+    temperature: '+1.5℃ 情景',
+    delta: -0.045,
+    color: '#f97316',
+    description: '较强暖化下预估轻微减产，需关注抗热品种与水肥调控。'
+  },
+  {
+    key: 'warming20',
+    label: '暖化+2℃',
+    temperature: '+2℃ 情景',
+    delta: -0.065,
+    color: '#dc2626',
+    description: '极端暖化风险显著增大，建议提前部署减灾与保障措施。'
+  }
+]
+
+const scenarioConfigMap = new Map(SCENARIO_CONFIGS.map(config => [config.label, config]))
 
 const filterForm = reactive({
   crop: 'ALL',
@@ -335,6 +406,123 @@ const totalTablePages = computed(() => {
 })
 
 const searching = computed(() => summaryLoading.value)
+
+const applyScenarioValue = (value, scenario) => {
+  if (value === null || value === undefined) {
+    return null
+  }
+  const numeric = Number(value)
+  if (Number.isNaN(numeric)) {
+    return null
+  }
+  const scaled = numeric * (1 + scenario.delta)
+  return Math.round(scaled * 100) / 100
+}
+
+const forecastPoints = computed(() => summary.value?.forecastOutlook ?? [])
+
+const hasScenarioData = computed(() => forecastPoints.value.length > 0)
+
+const formatScenarioTooltip = params => {
+  if (!Array.isArray(params) || !params.length) {
+    return ''
+  }
+  const axisLabel = params[0]?.axisValueLabel ?? ''
+  const lines = [`<div style="font-weight:600;margin-bottom:6px;">${axisLabel}</div>`]
+  params.forEach(item => {
+    const config = scenarioConfigMap.get(item.seriesName)
+    const temperature = config?.temperature ? `（${config.temperature}）` : ''
+    lines.push(
+      `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">` +
+        `<span>${item.marker}${item.seriesName}${temperature}</span>` +
+        `<span style="font-weight:600;">${formatNumber(item.data)} 吨</span>` +
+      `</div>`
+    )
+  })
+  return lines.join('')
+}
+
+const scenarioChartOption = computed(() => {
+  const points = forecastPoints.value
+  const categories = points.map(point => point?.label ?? '')
+  const series = SCENARIO_CONFIGS.map(config => ({
+    name: config.label,
+    type: 'line',
+    smooth: true,
+    showSymbol: true,
+    symbolSize: 8,
+    lineStyle: {
+      width: 3
+    },
+    areaStyle: config.key === 'baseline' ? { opacity: 0.1 } : undefined,
+    emphasis: { focus: 'series' },
+    data: points.map(point => applyScenarioValue(point?.value, config))
+  }))
+
+  return {
+    color: SCENARIO_CONFIGS.map(config => config.color),
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: 'rgba(15, 23, 42, 0.92)',
+      borderWidth: 0,
+      padding: 12,
+      textStyle: { color: '#f8fafc' },
+      formatter: formatScenarioTooltip
+    },
+    legend: {
+      data: SCENARIO_CONFIGS.map(config => config.label),
+      top: 18,
+      textStyle: { color: '#475569', fontSize: 13 }
+    },
+    grid: { top: 78, left: 64, right: 28, bottom: 40 },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: categories,
+      axisTick: { alignWithLabel: true },
+      axisLine: { lineStyle: { color: '#d0d7ff' } },
+      axisLabel: { color: '#4b5563' }
+    },
+    yAxis: {
+      type: 'value',
+      axisLine: { show: false },
+      axisLabel: {
+        color: '#4b5563',
+        formatter: value => formatNumber(value)
+      },
+      splitLine: { lineStyle: { type: 'dashed', color: '#e2e8f0' } }
+    },
+    series
+  }
+})
+
+const scenarioInsightCards = computed(() => {
+  const points = forecastPoints.value
+  if (!points.length) {
+    return []
+  }
+  const baselineConfig = SCENARIO_CONFIGS.find(config => config.key === 'baseline') ?? SCENARIO_CONFIGS[0]
+  const baselineValues = points.map(point => applyScenarioValue(point?.value, baselineConfig))
+  const baselineLast = baselineValues[baselineValues.length - 1]
+
+  return SCENARIO_CONFIGS.map(config => {
+    const values = points.map(point => applyScenarioValue(point?.value, config))
+    const lastValue = values[values.length - 1]
+    let change = 0
+    if (config.key !== 'baseline' && baselineLast && baselineLast !== 0 && lastValue !== null && lastValue !== undefined) {
+      change = (lastValue - baselineLast) / baselineLast
+    }
+    return {
+      key: config.key,
+      label: config.label,
+      temperature: config.temperature,
+      value: lastValue,
+      change,
+      description: config.description,
+      color: config.color
+    }
+  }).filter(card => card.value !== null && card.value !== undefined)
+})
 
 const updateFilterOptions = () => {
   const data = summary.value
@@ -741,6 +929,17 @@ function formatPercent(value) {
   return `${(Number(value) * 100).toFixed(1)}%`
 }
 
+function formatScenarioChange(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value)) || Math.abs(Number(value)) < 0.0001) {
+    return '较基准 持平'
+  }
+  const percent = (Number(value) * 100).toFixed(1)
+  if (Number(value) > 0) {
+    return `较基准 +${percent}%`
+  }
+  return `较基准 ${percent}%`
+}
+
 function formatTrend(value) {
   if (value > 0) return `较昨日 +${value}`
   if (value < 0) return `较昨日 ${value}`
@@ -1003,12 +1202,14 @@ const tableCellStyle = () => ({
 }
 
 .filter-card,
+.scenario-card,
 .table-card {
   border-radius: 20px;
   overflow: hidden;
 }
 
 .dashboard-page.user-friendly .filter-card,
+.dashboard-page.user-friendly .scenario-card,
 .dashboard-page.user-friendly .table-card {
   border: none;
   background: linear-gradient(160deg, rgba(255, 255, 255, 0.92) 0%, rgba(237, 248, 255, 0.9) 60%, rgba(255, 255, 255, 0.95) 100%);
@@ -1017,12 +1218,14 @@ const tableCellStyle = () => ({
 }
 
 .dashboard-page.user-friendly :deep(.filter-card .el-card__header),
+.dashboard-page.user-friendly :deep(.scenario-card .el-card__header),
 .dashboard-page.user-friendly :deep(.table-card .el-card__header) {
   background: linear-gradient(120deg, rgba(230, 244, 255, 0.8), rgba(255, 255, 255, 0.85));
   border-bottom: 1px solid rgba(209, 213, 255, 0.35);
 }
 
 .dashboard-page.user-friendly :deep(.filter-card .el-card__body),
+.dashboard-page.user-friendly :deep(.scenario-card .el-card__body),
 .dashboard-page.user-friendly :deep(.table-card .el-card__body) {
   background: transparent;
 }
@@ -1050,6 +1253,98 @@ const tableCellStyle = () => ({
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.scenario-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+@media (min-width: 992px) {
+  .scenario-content {
+    flex-direction: row;
+    align-items: stretch;
+  }
+}
+
+.scenario-chart {
+  flex: 1.6;
+  min-height: 320px;
+}
+
+.scenario-insights {
+  flex: 1;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.scenario-insight-card {
+  position: relative;
+  padding: 18px 20px;
+  border-radius: 18px;
+  background: linear-gradient(145deg, var(--scenario-accent-soft, rgba(37, 99, 235, 0.1)), rgba(255, 255, 255, 0.95));
+  border: 1px solid var(--scenario-accent-border, rgba(37, 99, 235, 0.18));
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.scenario-insight-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+}
+
+.scenario-insight-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.scenario-insight-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--scenario-accent, #2563eb);
+  box-shadow: 0 0 0 4px var(--scenario-accent-soft, rgba(37, 99, 235, 0.16));
+}
+
+.scenario-insight-temp {
+  font-size: 12px;
+  color: #64748b;
+  letter-spacing: 0.2px;
+}
+
+.scenario-insight-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.scenario-insight-change {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1e293b;
+}
+
+.scenario-insight-change.negative {
+  color: #b91c1c;
+}
+
+.scenario-insight-change.positive {
+  color: #047857;
+}
+
+.scenario-insight-desc {
+  margin-top: auto;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #475569;
 }
 
 .filter-form {
