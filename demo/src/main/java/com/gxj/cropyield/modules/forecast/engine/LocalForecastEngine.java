@@ -880,7 +880,7 @@ public class LocalForecastEngine {
             if (forecast.isEmpty()) {
                 return null;
             }
-            predicted.add(forecast.get(0));
+            predicted.add(forecast.get().get(0));
             actual.add(historyValues.get(trainSize));
         }
         if (actual.isEmpty() || predicted.size() != actual.size()) {
