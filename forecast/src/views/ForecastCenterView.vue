@@ -162,7 +162,7 @@
             <div class="card-title">多情景预测对比</div>
             <div class="card-subtitle">结合预测结果推演不同气候情景下的产量变化</div>
           </div>
-          <el-tag type="warning" effect="light">情景依据：预测结果 + 气候敏感度</el-tag>
+          <el-tag type="warning" effect="light">气候范围：0 - 0.2℃（微幅增温情景）</el-tag>
         </div>
       </template>
       <div class="scenario-content">
@@ -427,27 +427,27 @@ const DEFAULT_SCENARIO_CONFIGS = [
   {
     key: 'baseline',
     label: '基准',
-    temperature: '当前气候',
+    temperature: '当前气候（0℃ 基准）',
     delta: 0,
     color: '#2563eb',
     description: '保持当前气候条件，沿用历史增长趋势的预测基线。',
     isBaseline: true
   },
   {
-    key: 'warming15',
-    label: '暖化+1.5℃',
-    temperature: '+1.5℃ 情景',
-    delta: -0.045,
+    key: 'warming01',
+    label: '微升+0.1℃',
+    temperature: '+0.1℃ 轻微增温情景',
+    delta: -0.015,
     color: '#f97316',
-    description: '较强暖化下预估轻微减产，需关注抗热品种与水肥调控。'
+    description: '在 0.1℃ 的增温假设下，模型推测轻微减产，可关注灌溉与遮阴调控。'
   },
   {
-    key: 'warming20',
-    label: '暖化+2℃',
-    temperature: '+2℃ 情景',
-    delta: -0.065,
+    key: 'warming02',
+    label: '微升+0.2℃',
+    temperature: '+0.2℃ 微幅增温情景',
+    delta: -0.028,
     color: '#dc2626',
-    description: '极端暖化风险显著增大，建议提前部署减灾与保障措施。'
+    description: '当气温提升至 0.2℃ 时，需及早部署抗热品种与生产保障方案。'
   }
 ]
 

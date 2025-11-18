@@ -3,6 +3,11 @@ package com.gxj.cropyield.common.web;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.util.StringUtils;
 
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
+import java.util.Enumeration;
 import java.util.List;
 
 /**
@@ -56,9 +61,41 @@ public final class IpAddressResolver {
             return "UNKNOWN";
         }
         String trimmed = ip.trim();
-        if ("0:0:0:0:0:0:0:1".equals(trimmed) || "::1".equals(trimmed)) {
-            return "127.0.0.1";
+        if (isLoopback(trimmed)) {
+            return resolveNonLoopbackLocalAddress();
         }
         return trimmed;
+    }
+
+    private static boolean isLoopback(String ip) {
+        return "127.0.0.1".equals(ip) || "0:0:0:0:0:0:0:1".equals(ip) || "::1".equals(ip);
+    }
+
+    private static String resolveNonLoopbackLocalAddress() {
+        try {
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            while (interfaces.hasMoreElements()) {
+                NetworkInterface networkInterface = interfaces.nextElement();
+                if (!networkInterface.isUp() || networkInterface.isLoopback() || networkInterface.isVirtual()) {
+                    continue;
+                }
+                Enumeration<InetAddress> addresses = networkInterface.getInetAddresses();
+                while (addresses.hasMoreElements()) {
+                    InetAddress address = addresses.nextElement();
+                    if (!address.isLoopbackAddress() && address instanceof Inet4Address inet4Address) {
+                        return inet4Address.getHostAddress();
+                    }
+                }
+            }
+            InetAddress localHost = InetAddress.getLocalHost();
+            if (localHost != null && !localHost.isLoopbackAddress()) {
+                return localHost.getHostAddress();
+            }
+        } catch (SocketException ignored) {
+            // ignore and fall through to default value
+        } catch (Exception ignored) {
+            // ignore and fall through to default value
+        }
+        return "127.0.0.1";
     }
 }
