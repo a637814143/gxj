@@ -2,6 +2,7 @@ package com.gxj.cropyield.modules.auth.controller;
 
 import com.gxj.cropyield.common.exception.BusinessException;
 import com.gxj.cropyield.common.response.ApiResponse;
+import com.gxj.cropyield.common.web.IpAddressResolver;
 import com.gxj.cropyield.modules.auth.dto.AuthTokens;
 import com.gxj.cropyield.modules.auth.dto.CaptchaResponse;
 import com.gxj.cropyield.modules.auth.dto.EmailCodeRequest;
@@ -59,21 +60,21 @@ public class AuthController {
 
     @PostMapping("/email-code")
     public ApiResponse<Void> emailCode(@Valid @RequestBody EmailCodeRequest request, HttpServletRequest httpRequest) {
-        String ipAddress = resolveClientIp(httpRequest);
+        String ipAddress = IpAddressResolver.resolve(httpRequest);
         emailVerificationService.sendVerificationCode(request.email(), request.captchaId(), request.captchaCode(), ipAddress);
         return ApiResponse.success();
     }
 
     @PostMapping("/password/reset-code")
     public ApiResponse<Void> passwordResetCode(@Valid @RequestBody PasswordResetCodeRequest request, HttpServletRequest httpRequest) {
-        String ipAddress = resolveClientIp(httpRequest);
+        String ipAddress = IpAddressResolver.resolve(httpRequest);
         passwordResetService.sendResetCode(request, ipAddress);
         return ApiResponse.success();
     }
 
     @PostMapping("/password/reset")
     public ApiResponse<Void> passwordReset(@Valid @RequestBody PasswordResetRequest request, HttpServletRequest httpRequest) {
-        String ipAddress = resolveClientIp(httpRequest);
+        String ipAddress = IpAddressResolver.resolve(httpRequest);
         String userAgent = httpRequest.getHeader("User-Agent");
         passwordResetService.resetPassword(request, ipAddress, userAgent);
         return ApiResponse.success();
@@ -81,7 +82,7 @@ public class AuthController {
 
     @PostMapping("/register")
     public ApiResponse<LoginResponse> register(@Valid @RequestBody RegisterRequest request, HttpServletRequest httpRequest) {
-        String ipAddress = resolveClientIp(httpRequest);
+        String ipAddress = IpAddressResolver.resolve(httpRequest);
         String userAgent = httpRequest.getHeader("User-Agent");
         try {
             return ApiResponse.success(authService.register(request, ipAddress, userAgent));
@@ -93,7 +94,7 @@ public class AuthController {
 
     @PostMapping("/login")
     public ApiResponse<LoginResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
-        String ipAddress = resolveClientIp(httpRequest);
+        String ipAddress = IpAddressResolver.resolve(httpRequest);
         String userAgent = httpRequest.getHeader("User-Agent");
         try {
             return ApiResponse.success(authService.login(request, ipAddress, userAgent));
@@ -105,7 +106,7 @@ public class AuthController {
 
     @PostMapping("/login/admin")
     public ApiResponse<LoginResponse> adminLogin(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
-        String ipAddress = resolveClientIp(httpRequest);
+        String ipAddress = IpAddressResolver.resolve(httpRequest);
         String userAgent = httpRequest.getHeader("User-Agent");
         try {
             return ApiResponse.success(authService.loginAsAdmin(request, ipAddress, userAgent));
@@ -117,7 +118,7 @@ public class AuthController {
 
     @PostMapping("/login/user")
     public ApiResponse<LoginResponse> userLogin(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
-        String ipAddress = resolveClientIp(httpRequest);
+        String ipAddress = IpAddressResolver.resolve(httpRequest);
         String userAgent = httpRequest.getHeader("User-Agent");
         try {
             return ApiResponse.success(authService.loginAsUser(request, ipAddress, userAgent));
@@ -142,11 +143,4 @@ public class AuthController {
         return ApiResponse.success(authService.hasRole(roleCode));
     }
 
-    private String resolveClientIp(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].trim();
-        }
-        return request.getRemoteAddr();
-    }
 }
