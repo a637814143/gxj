@@ -36,7 +36,9 @@
               <div class="user-name">{{ displayName }}</div>
               <div class="user-role">{{ displayRoles }}</div>
             </div>
-            <el-button type="primary" @click="handleLogout">退出登录</el-button>
+            <el-button type="primary" :loading="authStore.isLoggingOut" @click="handleLogout">
+              退出登录
+            </el-button>
           </div>
         </div>
         <div v-if="navLinks.length" class="nav-links">
@@ -179,9 +181,18 @@ const handleAction = action => {
   }
 }
 
-const handleLogout = () => {
-  authStore.logout()
-  router.push({ name: 'login', query: { redirect: route.fullPath } }).catch(() => {})
+const handleLogout = async () => {
+  if (authStore.isLoggingOut) {
+    return
+  }
+  authStore.beginLogout()
+  try {
+    await router.push({ name: 'login', query: { redirect: route.fullPath } })
+  } catch (error) {
+    console.warn('导航至登录页失败', error)
+  } finally {
+    authStore.logout()
+  }
 }
 
 watch(

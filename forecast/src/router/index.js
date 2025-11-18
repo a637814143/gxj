@@ -133,7 +133,11 @@ router.beforeEach(async (to, from, next) => {
   }
 
   if (to.meta.public) {
-    if ((to.name === 'login' || to.name === 'register') && authStore.isAuthenticated) {
+    if (
+      (to.name === 'login' || to.name === 'register') &&
+      authStore.isAuthenticated &&
+      !authStore.isLoggingOut
+    ) {
       return next({ path: to.query.redirect || '/dashboard' })
     }
     return next()

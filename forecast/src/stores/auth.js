@@ -81,7 +81,8 @@ export const useAuthStore = defineStore('auth', {
     expiresAt: 0,
     rememberMe: false,
     refreshTimer: null,
-    user: null
+    user: null,
+    isLoggingOut: false
   }),
   getters: {
     isAuthenticated: state => Boolean(state.token) && Date.now() < state.expiresAt,
@@ -139,12 +140,16 @@ export const useAuthStore = defineStore('auth', {
       this.expiresAt = 0
       this.rememberMe = false
       this.user = null
+      this.isLoggingOut = false
       if (this.refreshTimer) {
         window.clearTimeout(this.refreshTimer)
         this.refreshTimer = null
       }
       removeStorage(LOCAL_STORAGE_KEY)
       removeSessionStorage(SESSION_STORAGE_KEY)
+    },
+    beginLogout() {
+      this.isLoggingOut = true
     },
     hasAnyRole(roles) {
       if (!Array.isArray(roles) || roles.length === 0) {
