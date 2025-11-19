@@ -63,6 +63,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -99,6 +100,29 @@ public class DataImportService {
     private static final Pattern INTEGER_PATTERN = Pattern.compile("\\d+");
     private static final Pattern INVISIBLE_CHARACTERS = Pattern.compile("[\\p{Cf}]");
     private static final Map<String, List<String>> HEADER_SYNONYMS = createHeaderSynonyms();
+    private static final List<String> REGION_SUFFIXES = List.of(
+            "特别行政区",
+            "自治州",
+            "自治县",
+            "自治旗",
+            "地区",
+            "盟",
+            "市",
+            "州",
+            "县",
+            "区",
+            "旗"
+    );
+    private static final List<String> REGION_SUFFIX_VARIANTS = List.of(
+            "市",
+            "自治州",
+            "州",
+            "地区",
+            "盟",
+            "县",
+            "区",
+            "旗"
+    );
     private static final JaroWinklerSimilarity SIMILARITY = new JaroWinklerSimilarity();
     private static final Pattern NUMBER_PATTERN = Pattern.compile("[-+]?\\d+(\\.\\d+)?");
 
@@ -700,7 +724,7 @@ public class DataImportService {
         if (cache.containsKey(key)) {
             return cache.get(key);
         }
-        Region region = regionRepository.findByNameIgnoreCase(regionName)
+        Region region = findRegionByFlexibleName(regionName)
                 .orElseGet(() -> {
                     Region created = new Region();
                     created.setCode(generateUniqueRegionCode(regionName, parentName));
@@ -718,9 +742,48 @@ public class DataImportService {
 
     private String resolveParentCode(String parentName) {
         return Optional.ofNullable(trimToNull(parentName))
-                .flatMap(regionRepository::findByNameIgnoreCase)
+                .flatMap(this::findRegionByFlexibleName)
                 .map(Region::getCode)
                 .orElse(null);
+    }
+
+    private Optional<Region> findRegionByFlexibleName(String regionName) {
+        String trimmed = trimToNull(regionName);
+        if (trimmed == null) {
+            return Optional.empty();
+        }
+        for (String candidate : buildRegionNameCandidates(trimmed)) {
+            Optional<Region> found = regionRepository.findByNameIgnoreCase(candidate);
+            if (found.isPresent()) {
+                return found;
+            }
+        }
+        return Optional.empty();
+    }
+
+    private List<String> buildRegionNameCandidates(String regionName) {
+        String trimmed = trimToNull(regionName);
+        if (trimmed == null) {
+            return Collections.emptyList();
+        }
+        String base = trimmed;
+        for (String suffix : REGION_SUFFIXES) {
+            if (base.endsWith(suffix) && base.length() > suffix.length()) {
+                base = base.substring(0, base.length() - suffix.length());
+                break;
+            }
+        }
+        LinkedHashSet<String> candidates = new LinkedHashSet<>();
+        candidates.add(trimmed);
+        if (!base.equals(trimmed)) {
+            candidates.add(base);
+        }
+        if (!base.isEmpty()) {
+            for (String suffix : REGION_SUFFIX_VARIANTS) {
+                candidates.add(base + suffix);
+            }
+        }
+        return new ArrayList<>(candidates);
     }
 
     private YieldRecordResponse toYieldPreview(ValidRecord record) {
