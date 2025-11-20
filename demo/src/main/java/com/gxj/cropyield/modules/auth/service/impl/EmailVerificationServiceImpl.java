@@ -50,10 +50,58 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
     @Override
     @Transactional
     public void sendVerificationCode(String email, String captchaId, String captchaCode, String ipAddress) {
+        validateCaptcha(captchaId, captchaCode);
+        doSend(email, ipAddress);
+    }
+
+    @Override
+    @Transactional
+    public void sendVerificationCodeWithoutCaptcha(String email, String ipAddress) {
+        doSend(email, ipAddress);
+    }
+
+    @Override
+    @Transactional
+    public void validateAndConsume(String email, String code) {
+        if (!StringUtils.hasText(email) || !StringUtils.hasText(code)) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "邮箱验证码不能为空");
+        }
+
+        EmailVerificationCode verification = repository.findTopByEmailAndCodeOrderByCreatedAtDesc(email, code)
+            .orElseThrow(() -> new BusinessException(ResultCode.BAD_REQUEST, "验证码不正确"));
+
+        if (verification.isUsed()) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "验证码已被使用");
+        }
+
+        if (verification.getExpiresAt().isBefore(LocalDateTime.now())) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "验证码已过期");
+        }
+
+        verification.setUsed(true);
+        repository.save(verification);
+    }
+
+    @Transactional
+    @Scheduled(cron = "0 0/30 * * * ?")
+    public void purgeExpired() {
+        LocalDateTime threshold = LocalDateTime.now();
+        repository.deleteByExpiresAtBefore(threshold.minusDays(1));
+    }
+
+    private String generateCode() {
+        int value = ThreadLocalRandom.current().nextInt(100000, 1000000);
+        return Integer.toString(value);
+    }
+
+    private void validateCaptcha(String captchaId, String captchaCode) {
+        captchaService.validate(captchaId, captchaCode);
+    }
+
+    private void doSend(String email, String ipAddress) {
         if (!StringUtils.hasText(email)) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "邮箱不能为空");
         }
-        captchaService.validate(captchaId, captchaCode);
 
         LocalDateTime now = LocalDateTime.now();
         repository.findTopByEmailOrderByCreatedAtDesc(email)
@@ -89,39 +137,5 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
             log.error("发送邮箱验证码失败: {}", ex.getMessage(), ex);
             throw new BusinessException(ResultCode.SERVER_ERROR, "验证码发送失败，请稍后重试");
         }
-    }
-
-    @Override
-    @Transactional
-    public void validateAndConsume(String email, String code) {
-        if (!StringUtils.hasText(email) || !StringUtils.hasText(code)) {
-            throw new BusinessException(ResultCode.BAD_REQUEST, "邮箱验证码不能为空");
-        }
-
-        EmailVerificationCode verification = repository.findTopByEmailAndCodeOrderByCreatedAtDesc(email, code)
-            .orElseThrow(() -> new BusinessException(ResultCode.BAD_REQUEST, "验证码不正确"));
-
-        if (verification.isUsed()) {
-            throw new BusinessException(ResultCode.BAD_REQUEST, "验证码已被使用");
-        }
-
-        if (verification.getExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new BusinessException(ResultCode.BAD_REQUEST, "验证码已过期");
-        }
-
-        verification.setUsed(true);
-        repository.save(verification);
-    }
-
-    @Transactional
-    @Scheduled(cron = "0 0/30 * * * ?")
-    public void purgeExpired() {
-        LocalDateTime threshold = LocalDateTime.now();
-        repository.deleteByExpiresAtBefore(threshold.minusDays(1));
-    }
-
-    private String generateCode() {
-        int value = ThreadLocalRandom.current().nextInt(100000, 1000000);
-        return Integer.toString(value);
     }
 }

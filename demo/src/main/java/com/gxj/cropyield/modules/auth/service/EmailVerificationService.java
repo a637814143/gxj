@@ -7,5 +7,7 @@ public interface EmailVerificationService {
 
     void sendVerificationCode(String email, String captchaId, String captchaCode, String ipAddress);
 
+    void sendVerificationCodeWithoutCaptcha(String email, String ipAddress);
+
     void validateAndConsume(String email, String code);
 }

@@ -5,7 +5,9 @@ import com.gxj.cropyield.modules.auth.dto.ProfilePasswordRequest;
 import com.gxj.cropyield.modules.auth.dto.ProfileResponse;
 import com.gxj.cropyield.modules.auth.dto.ProfileUpdateRequest;
 import com.gxj.cropyield.modules.auth.service.ProfileService;
+import com.gxj.cropyield.common.web.IpAddressResolver;
 import jakarta.validation.Valid;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -39,6 +41,13 @@ public class ProfileController {
     @PutMapping("/password")
     public ApiResponse<Void> changePassword(@Valid @RequestBody ProfilePasswordRequest request) {
         profileService.changePassword(request);
+        return ApiResponse.success();
+    }
+
+    @GetMapping("/email-code")
+    public ApiResponse<Void> sendPasswordEmailCode(HttpServletRequest request) {
+        String ipAddress = IpAddressResolver.resolve(request);
+        profileService.sendPasswordChangeCode(ipAddress);
         return ApiResponse.success();
     }
 }

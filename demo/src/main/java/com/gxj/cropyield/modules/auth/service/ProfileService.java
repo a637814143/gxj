@@ -15,4 +15,6 @@ public interface ProfileService {
     ProfileResponse updateProfile(ProfileUpdateRequest request);
 
     void changePassword(ProfilePasswordRequest request);
+
+    void sendPasswordChangeCode(String ipAddress);
 }

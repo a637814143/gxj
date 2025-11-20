@@ -13,3 +13,7 @@ export async function updateProfile(payload) {
 export async function changePassword(payload) {
   await apiClient.put('/api/auth/profile/password', payload)
 }
+
+export async function sendPasswordEmailCode() {
+  await apiClient.get('/api/auth/profile/email-code')
+}
