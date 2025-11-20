@@ -118,6 +118,22 @@
               placeholder="请输入6-128位新密码"
             />
           </el-form-item>
+          <el-form-item label="邮箱验证码" prop="emailCode">
+            <el-input v-model.trim="passwordForm.emailCode" placeholder="请输入邮箱验证码" maxlength="16">
+              <template #append>
+                <el-button
+                  :disabled="!profile?.email || emailCodeCountdown > 0"
+                  :loading="emailCodeSending"
+                  @click="sendEmailCode"
+                >
+                  {{ emailCodeCountdown > 0 ? `${emailCodeCountdown}s` : '获取验证码' }}
+                </el-button>
+              </template>
+            </el-input>
+            <div class="form-helper">
+              验证码将发送至 {{ profile?.email || '未绑定邮箱，请先在基础信息中绑定' }}
+            </div>
+          </el-form-item>
           <el-form-item label="确认密码" prop="confirmPassword">
             <el-input
               v-model="passwordForm.confirmPassword"
@@ -134,9 +150,9 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { fetchProfile, updateProfile, changePassword } from '../services/profile'
+import { fetchProfile, updateProfile, changePassword, sendPasswordEmailCode } from '../services/profile'
 import { useAuthStore } from '../stores/auth'
 
 const authStore = useAuthStore()
@@ -145,6 +161,9 @@ const profile = ref(null)
 const loadingProfile = ref(false)
 const savingProfile = ref(false)
 const passwordSubmitting = ref(false)
+const emailCodeSending = ref(false)
+const emailCodeCountdown = ref(0)
+let emailCodeTimer = null
 
 const profileFormRef = ref()
 const passwordFormRef = ref()
@@ -157,7 +176,8 @@ const profileForm = reactive({
 const passwordForm = reactive({
   currentPassword: '',
   newPassword: '',
-  confirmPassword: ''
+  confirmPassword: '',
+  emailCode: ''
 })
 
 const profileRules = {
@@ -201,6 +221,10 @@ const passwordRules = {
       },
       trigger: ['blur', 'change']
     }
+  ],
+  emailCode: [
+    { required: true, message: '请输入邮箱验证码', trigger: 'blur' },
+    { min: 4, max: 16, message: '验证码长度应在4-16位之间', trigger: 'blur' }
   ]
 }
 
@@ -282,7 +306,49 @@ const resetPasswordForm = () => {
   passwordForm.currentPassword = ''
   passwordForm.newPassword = ''
   passwordForm.confirmPassword = ''
+  passwordForm.emailCode = ''
   passwordFormRef.value?.clearValidate?.()
+}
+
+const clearEmailCountdown = () => {
+  if (emailCodeTimer) {
+    clearInterval(emailCodeTimer)
+    emailCodeTimer = null
+  }
+}
+
+const startEmailCountdown = seconds => {
+  emailCodeCountdown.value = seconds
+  clearEmailCountdown()
+  emailCodeTimer = setInterval(() => {
+    if (emailCodeCountdown.value <= 1) {
+      clearEmailCountdown()
+      emailCodeCountdown.value = 0
+    } else {
+      emailCodeCountdown.value -= 1
+    }
+  }, 1000)
+}
+
+const sendEmailCode = async () => {
+  if (!profile.value?.email) {
+    ElMessage.warning('请先在基础信息中绑定邮箱')
+    return
+  }
+  if (emailCodeCountdown.value > 0 || emailCodeSending.value) {
+    return
+  }
+  emailCodeSending.value = true
+  try {
+    await sendPasswordEmailCode()
+    ElMessage.success('验证码已发送，请查收邮箱')
+    startEmailCountdown(60)
+  } catch (error) {
+    const message = error?.response?.data?.message || '发送验证码失败，请稍后再试'
+    ElMessage.error(message)
+  } finally {
+    emailCodeSending.value = false
+  }
 }
 
 const submitPasswordForm = () => {
@@ -294,7 +360,8 @@ const submitPasswordForm = () => {
     try {
       await changePassword({
         currentPassword: passwordForm.currentPassword,
-        newPassword: passwordForm.newPassword
+        newPassword: passwordForm.newPassword,
+        emailCode: passwordForm.emailCode
       })
       ElMessage.success('密码更新成功')
       resetPasswordForm()
@@ -309,6 +376,10 @@ const submitPasswordForm = () => {
 
 onMounted(() => {
   loadProfile()
+})
+
+onBeforeUnmount(() => {
+  clearEmailCountdown()
 })
 </script>
 
@@ -425,6 +496,12 @@ onMounted(() => {
 
 .form-card {
   min-height: 260px;
+}
+
+.form-helper {
+  margin-top: 6px;
+  color: #607d8b;
+  font-size: 12px;
 }
 
 .form-header {

@@ -9,6 +9,7 @@ import com.gxj.cropyield.modules.auth.dto.RoleSummary;
 import com.gxj.cropyield.modules.auth.entity.Role;
 import com.gxj.cropyield.modules.auth.entity.User;
 import com.gxj.cropyield.modules.auth.repository.UserRepository;
+import com.gxj.cropyield.modules.auth.service.EmailVerificationService;
 import com.gxj.cropyield.modules.auth.service.PasswordPolicyValidator;
 import com.gxj.cropyield.modules.auth.service.ProfileService;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
@@ -17,6 +18,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.util.Comparator;
 import java.util.LinkedHashSet;
@@ -33,13 +35,16 @@ public class ProfileServiceImpl implements ProfileService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final PasswordPolicyValidator passwordPolicyValidator;
+    private final EmailVerificationService emailVerificationService;
 
     public ProfileServiceImpl(UserRepository userRepository,
                               PasswordEncoder passwordEncoder,
-                              PasswordPolicyValidator passwordPolicyValidator) {
+                              PasswordPolicyValidator passwordPolicyValidator,
+                              EmailVerificationService emailVerificationService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.passwordPolicyValidator = passwordPolicyValidator;
+        this.emailVerificationService = emailVerificationService;
     }
 
     @Override
@@ -77,9 +82,24 @@ public class ProfileServiceImpl implements ProfileService {
             throw new BusinessException(ResultCode.BAD_REQUEST, "原密码不正确");
         }
 
+        if (!StringUtils.hasText(user.getEmail())) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "请先在个人资料中绑定邮箱后再修改密码");
+        }
+
         passwordPolicyValidator.validate(request.newPassword());
+        emailVerificationService.validateAndConsume(user.getEmail(), request.emailCode());
         user.setPassword(passwordEncoder.encode(request.newPassword()));
         userRepository.save(user);
+    }
+
+    @Override
+    @Transactional
+    public void sendPasswordChangeCode(String ipAddress) {
+        User user = loadCurrentUser();
+        if (!StringUtils.hasText(user.getEmail())) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "请先在个人资料中绑定邮箱后再获取验证码");
+        }
+        emailVerificationService.sendVerificationCodeWithoutCaptcha(user.getEmail(), ipAddress);
     }
 
     private User loadCurrentUser() {
