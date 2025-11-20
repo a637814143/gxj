@@ -372,10 +372,14 @@ public class LocalForecastEngine {
         Map<String, Double> featureStds = computeFeatureStds(usable, featureKeys, featureMeans);
 
         RegressionFit fit = fitWeatherRegression(usable, featureKeys, featureMeans, featureStds, historyValues);
+        ForecastEvaluation linearEvaluation = evaluateLinearTrendPerformance(historyValues);
+        double linearR2 = linearEvaluation != null && linearEvaluation.metrics != null
+            ? Optional.ofNullable(linearEvaluation.metrics.r2()).orElse(Double.NaN)
+            : Double.NaN;
         if (fit == null || fit.coefficients == null) {
             return new WeatherRegressionResult(
                 linearTrendForecast(historyValues, periods),
-                buildBaselineMetrics(historyValues)
+                linearEvaluation != null ? linearEvaluation.metrics : buildBaselineMetrics(historyValues)
             );
         }
 
@@ -421,10 +425,24 @@ public class LocalForecastEngine {
             forecast.add(prediction);
         }
 
-        ForecastEngineResponse.EvaluationMetrics metrics = fit.metrics != null
+        ForecastEngineResponse.EvaluationMetrics regressionMetrics = fit.metrics != null
             ? fit.metrics
             : buildBaselineMetrics(historyValues);
-        return new WeatherRegressionResult(forecast, metrics);
+        Double regressionR2 = regressionMetrics.r2();
+        boolean preferRegression = regressionR2 != null && regressionR2 >= 0.8;
+        if (!preferRegression && regressionR2 != null && Double.isFinite(linearR2) && regressionR2 >= linearR2 + 0.05) {
+            preferRegression = true;
+        } else if (!preferRegression && regressionR2 != null && !Double.isFinite(linearR2) && regressionR2 > 0.6) {
+            preferRegression = true;
+        }
+
+        List<Double> chosenForecast = preferRegression
+            ? forecast
+            : linearTrendForecast(historyValues, periods);
+        ForecastEngineResponse.EvaluationMetrics metrics = preferRegression
+            ? regressionMetrics
+            : (linearEvaluation != null ? linearEvaluation.metrics : buildBaselineMetrics(historyValues));
+        return new WeatherRegressionResult(chosenForecast, metrics);
     }
 
     private Map<Integer, Map<String, Double>> extractFutureWeatherFeatures(Map<String, Object> parameters) {
@@ -1113,7 +1131,7 @@ public class LocalForecastEngine {
             double diff = value - mean;
             sst += diff * diff;
         }
-        Double r2 = sst == 0 ? null : 1 - (sumSq / Math.max(sst, 1e-9));
+        Double r2 = sst == 0 ? null : Math.max(0d, 1 - (sumSq / Math.max(sst, 1e-9)));
         double mape = (sumPct / actual.length) * 100;
         ForecastEngineResponse.EvaluationMetrics metrics = new ForecastEngineResponse.EvaluationMetrics(
             round(mae),
