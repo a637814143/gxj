@@ -62,7 +62,7 @@
       </template>
       <el-table
         ref="datasetTableRef"
-        :data="datasets"
+        :data="paginatedDatasets"
         v-loading="datasetLoading"
         empty-text="暂无导入记录"
         :header-cell-style="tableHeaderStyle"
@@ -83,8 +83,20 @@
         </el-table-column>
         <el-table-column prop="description" label="描述" min-width="240" show-overflow-tooltip />
       </el-table>
-      <div class="table-footer">
-        <div class="table-tip">共 {{ datasets.length }} 个数据集，建议定期核验文件完整性</div>
+      <div class="table-footer dataset-pagination-area">
+        <div class="table-tip">共 {{ datasetPagination.total }} 个数据集，建议定期核验文件完整性</div>
+        <div class="dataset-pagination">
+          <span class="pagination-badge">每页显示 5 条</span>
+          <span class="pagination-info">第 {{ datasetPagination.page }}/{{ datasetTotalPages }} 页</span>
+          <el-pagination
+            :current-page="datasetPagination.page"
+            :page-size="datasetPagination.size"
+            :total="datasetPagination.total"
+            layout="prev, pager, next"
+            background
+            @current-change="handleDatasetPageChange"
+          />
+        </div>
         <el-button type="primary" link @click="openUpload">立即导入</el-button>
       </div>
     </el-card>
@@ -403,6 +415,7 @@ const isUserTheme = computed(() => {
   return roles !== 'ADMIN'
 })
 
+const DATASET_PAGE_SIZE = 5
 const TASK_PAGE_SIZE = 5
 
 const datasets = ref([])
@@ -411,6 +424,18 @@ const datasetLoading = ref(false)
 const datasetTableRef = ref(null)
 const datasetSelection = ref([])
 const datasetDeleting = ref(false)
+const datasetPagination = reactive({ page: 1, size: DATASET_PAGE_SIZE, total: 0 })
+const datasetTotalPages = computed(() => {
+  const total = Math.max(datasetPagination.total, 0)
+  const size = datasetPagination.size || DATASET_PAGE_SIZE
+  return Math.max(1, Math.ceil(total / size || 1))
+})
+const paginatedDatasets = computed(() => {
+  const size = datasetPagination.size || DATASET_PAGE_SIZE
+  const page = Math.min(Math.max(datasetPagination.page, 1), datasetTotalPages.value)
+  const start = (page - 1) * size
+  return datasets.value.slice(start, start + size)
+})
 
 const clearDatasetSelection = () => {
   datasetSelection.value = []
@@ -674,12 +699,23 @@ const fetchDatasets = async () => {
   try {
     const { data } = await apiClient.get('/api/datasets/files')
     datasets.value = data?.data ?? []
+    datasetPagination.total = datasets.value.length
+    datasetPagination.size = DATASET_PAGE_SIZE
+    const totalPages = datasetTotalPages.value
+    if (datasetPagination.page > totalPages) {
+      datasetPagination.page = totalPages
+    }
     clearDatasetSelection()
   } catch (error) {
     ElMessage.error(error?.response?.data?.message || '加载数据集列表失败')
   } finally {
     datasetLoading.value = false
   }
+}
+
+const handleDatasetPageChange = page => {
+  datasetPagination.page = page
+  clearDatasetSelection()
 }
 
 const clearTaskSelection = () => {
@@ -1269,6 +1305,21 @@ onBeforeUnmount(() => {
   gap: 12px;
   color: #5f6f8c;
   font-size: 12px;
+}
+
+.dataset-pagination-area {
+  gap: 16px;
+}
+
+.dataset-pagination {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.dataset-pagination .el-pagination {
+  margin-left: 6px;
 }
 
 .table-tip {
