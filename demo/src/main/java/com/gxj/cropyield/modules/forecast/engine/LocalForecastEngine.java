@@ -69,6 +69,26 @@ public class LocalForecastEngine {
         }
     }
 
+    private static final class RegressionFit {
+        private final double[] coefficients;
+        private final List<String> featureKeys;
+        private final Map<String, Double> featureMeans;
+        private final Map<String, Double> featureStds;
+        private final ForecastEngineResponse.EvaluationMetrics metrics;
+
+        private RegressionFit(double[] coefficients,
+                               List<String> featureKeys,
+                               Map<String, Double> featureMeans,
+                               Map<String, Double> featureStds,
+                               ForecastEngineResponse.EvaluationMetrics metrics) {
+            this.coefficients = coefficients;
+            this.featureKeys = featureKeys;
+            this.featureMeans = featureMeans;
+            this.featureStds = featureStds;
+            this.metrics = metrics;
+        }
+    }
+
     private static final class ForecastCandidate {
         private final String label;
         private final List<Double> forecast;
@@ -348,50 +368,15 @@ public class LocalForecastEngine {
         }
 
         List<String> featureKeys = new ArrayList<>(featureNames);
-        Map<String, Double> featureMeans = new HashMap<>();
-        for (String key : featureKeys) {
-            double sum = 0d;
-            int count = 0;
-            for (ForecastEngineRequest.HistoryPoint point : usable) {
-                Double value = point.features().get(key);
-                if (value != null) {
-                    sum += value;
-                    count++;
-                }
-            }
-            featureMeans.put(key, count > 0 ? sum / count : 0d);
-        }
+        Map<String, Double> featureMeans = computeFeatureMeans(usable, featureKeys);
+        Map<String, Double> featureStds = computeFeatureStds(usable, featureKeys, featureMeans);
 
-        int samples = usable.size();
-        int columns = featureKeys.size() + 1;
-        double[][] design = new double[samples][columns];
-        double[] outputs = new double[samples];
-        for (int i = 0; i < samples; i++) {
-            design[i][0] = 1d;
-            ForecastEngineRequest.HistoryPoint point = usable.get(i);
-            outputs[i] = point.value();
-            for (int j = 0; j < featureKeys.size(); j++) {
-                String key = featureKeys.get(j);
-                Double value = point.features().get(key);
-                design[i][j + 1] = value != null ? value : featureMeans.getOrDefault(key, 0d);
-            }
-        }
-
-        double[] coefficients = solveNormalEquation(design, outputs);
-        if (coefficients == null) {
+        RegressionFit fit = fitWeatherRegression(usable, featureKeys, featureMeans, featureStds, historyValues);
+        if (fit == null || fit.coefficients == null) {
             return new WeatherRegressionResult(
                 linearTrendForecast(historyValues, periods),
                 buildBaselineMetrics(historyValues)
             );
-        }
-
-        double[] fitted = new double[samples];
-        for (int i = 0; i < samples; i++) {
-            double estimate = 0d;
-            for (int j = 0; j < coefficients.length; j++) {
-                estimate += design[i][j] * coefficients[j];
-            }
-            fitted[i] = estimate;
         }
 
         Map<String, FeatureTrend> featureTrends = computeFeatureTrends(usable, years, featureKeys);
@@ -410,10 +395,10 @@ public class LocalForecastEngine {
         List<Double> forecast = new ArrayList<>();
         for (int step = 1; step <= periods; step++) {
             int targetYear = lastYear + step;
-            double prediction = coefficients[0];
+            double prediction = fit.coefficients[0];
             Map<String, Double> providedForYear = providedFutureFeatures.get(targetYear);
-            for (int j = 0; j < featureKeys.size(); j++) {
-                String key = featureKeys.get(j);
+            for (int j = 0; j < fit.featureKeys.size(); j++) {
+                String key = fit.featureKeys.get(j);
                 FeatureTrend trend = featureTrends.get(key);
                 Double providedValue = providedForYear != null ? providedForYear.get(key) : null;
                 double projected;
@@ -426,7 +411,9 @@ public class LocalForecastEngine {
                 } else {
                     projected = featureMeans.getOrDefault(key, lastKnown.getOrDefault(key, 0d));
                 }
-                prediction += coefficients[j + 1] * projected;
+                double std = fit.featureStds.getOrDefault(key, 1d);
+                double normalized = std == 0 ? 0 : (projected - fit.featureMeans.getOrDefault(key, 0d)) / std;
+                prediction += fit.coefficients[j + 1] * normalized;
             }
             if (!historyValues.isEmpty() && prediction <= 0) {
                 prediction = Math.max(historyValues.get(historyValues.size() - 1) * 0.9, 0d);
@@ -434,7 +421,9 @@ public class LocalForecastEngine {
             forecast.add(prediction);
         }
 
-        ForecastEngineResponse.EvaluationMetrics metrics = buildRegressionMetrics(outputs, fitted);
+        ForecastEngineResponse.EvaluationMetrics metrics = fit.metrics != null
+            ? fit.metrics
+            : buildBaselineMetrics(historyValues);
         return new WeatherRegressionResult(forecast, metrics);
     }
 
@@ -588,6 +577,211 @@ public class LocalForecastEngine {
             }
         }
         return trends;
+    }
+
+    private Map<String, Double> computeFeatureMeans(List<ForecastEngineRequest.HistoryPoint> history,
+                                                    List<String> featureKeys) {
+        Map<String, Double> featureMeans = new HashMap<>();
+        for (String key : featureKeys) {
+            double sum = 0d;
+            int count = 0;
+            for (ForecastEngineRequest.HistoryPoint point : history) {
+                Double value = point.features().get(key);
+                if (value != null) {
+                    sum += value;
+                    count++;
+                }
+            }
+            featureMeans.put(key, count > 0 ? sum / count : 0d);
+        }
+        return featureMeans;
+    }
+
+    private Map<String, Double> computeFeatureStds(List<ForecastEngineRequest.HistoryPoint> history,
+                                                   List<String> featureKeys,
+                                                   Map<String, Double> featureMeans) {
+        Map<String, Double> featureStds = new HashMap<>();
+        for (String key : featureKeys) {
+            double sumSq = 0d;
+            int count = 0;
+            double mean = featureMeans.getOrDefault(key, 0d);
+            for (ForecastEngineRequest.HistoryPoint point : history) {
+                Double value = point.features().get(key);
+                if (value != null) {
+                    double diff = value - mean;
+                    sumSq += diff * diff;
+                    count++;
+                }
+            }
+            double variance = count > 1 ? sumSq / (count - 1) : 0d;
+            double std = Math.sqrt(variance);
+            featureStds.put(key, std > 0 ? std : 1d);
+        }
+        return featureStds;
+    }
+
+    private RegressionFit fitWeatherRegression(List<ForecastEngineRequest.HistoryPoint> usable,
+                                               List<String> featureKeys,
+                                               Map<String, Double> featureMeans,
+                                               Map<String, Double> featureStds,
+                                               List<Double> historyValues) {
+        if (usable.isEmpty()) {
+            return null;
+        }
+        double[] lambdaGrid = new double[] {0d, 0.05d, 0.1d, 0.3d, 1d};
+        RegressionFit bestFit = null;
+        double bestScore = Double.NEGATIVE_INFINITY;
+        for (double lambda : lambdaGrid) {
+            RegressionFit candidate = solveRegressionWithValidation(
+                usable,
+                featureKeys,
+                featureMeans,
+                featureStds,
+                lambda
+            );
+            if (candidate == null || candidate.metrics == null || candidate.metrics.r2() == null) {
+                continue;
+            }
+            double score = candidate.metrics.r2();
+            if (score > bestScore) {
+                bestScore = score;
+                bestFit = candidate;
+            }
+        }
+        if (bestFit != null) {
+            return bestFit;
+        }
+        RegressionFit baselineFit = solveRegressionWithValidation(
+            usable,
+            featureKeys,
+            featureMeans,
+            featureStds,
+            0.2d
+        );
+        if (baselineFit != null && baselineFit.metrics != null) {
+            return baselineFit;
+        }
+        double[] coefficients = solveStandardizedNormalEquation(usable, featureKeys, featureMeans, featureStds, 0.2d);
+        if (coefficients == null) {
+            return null;
+        }
+        return new RegressionFit(
+            coefficients,
+            featureKeys,
+            featureMeans,
+            featureStds,
+            buildBaselineMetrics(historyValues)
+        );
+    }
+
+    private RegressionFit solveRegressionWithValidation(List<ForecastEngineRequest.HistoryPoint> history,
+                                                        List<String> featureKeys,
+                                                        Map<String, Double> featureMeans,
+                                                        Map<String, Double> featureStds,
+                                                        double lambda) {
+        int samples = history.size();
+        List<Double> actual = new ArrayList<>();
+        List<Double> predicted = new ArrayList<>();
+        for (int holdout = 0; holdout < samples; holdout++) {
+            double[] coefficients = solveStandardizedNormalEquation(history, featureKeys, featureMeans, featureStds, lambda, holdout);
+            if (coefficients == null) {
+                return null;
+            }
+            double estimate = estimateWithCoefficients(history.get(holdout), coefficients, featureKeys, featureMeans, featureStds);
+            actual.add(history.get(holdout).value());
+            predicted.add(estimate);
+        }
+        double[] coeffs = solveStandardizedNormalEquation(history, featureKeys, featureMeans, featureStds, lambda);
+        if (coeffs == null) {
+            return null;
+        }
+        ForecastEvaluation evaluation = computeEvaluation(
+            actual.stream().mapToDouble(Double::doubleValue).toArray(),
+            predicted.stream().mapToDouble(Double::doubleValue).toArray()
+        );
+        ForecastEngineResponse.EvaluationMetrics metrics = evaluation != null
+            ? evaluation.metrics
+            : null;
+        return new RegressionFit(coeffs, featureKeys, featureMeans, featureStds, metrics);
+    }
+
+    private double estimateWithCoefficients(ForecastEngineRequest.HistoryPoint point,
+                                            double[] coefficients,
+                                            List<String> featureKeys,
+                                            Map<String, Double> featureMeans,
+                                            Map<String, Double> featureStds) {
+        double estimate = coefficients[0];
+        for (int j = 0; j < featureKeys.size(); j++) {
+            String key = featureKeys.get(j);
+            Double raw = point.features().get(key);
+            double centered = (raw != null ? raw : featureMeans.getOrDefault(key, 0d)) - featureMeans.getOrDefault(key, 0d);
+            double std = featureStds.getOrDefault(key, 1d);
+            double normalized = std == 0 ? 0 : centered / std;
+            estimate += coefficients[j + 1] * normalized;
+        }
+        return estimate;
+    }
+
+    private double[] solveStandardizedNormalEquation(List<ForecastEngineRequest.HistoryPoint> history,
+                                                     List<String> featureKeys,
+                                                     Map<String, Double> featureMeans,
+                                                     Map<String, Double> featureStds,
+                                                     double lambda) {
+        return solveStandardizedNormalEquation(history, featureKeys, featureMeans, featureStds, lambda, -1);
+    }
+
+    private double[] solveStandardizedNormalEquation(List<ForecastEngineRequest.HistoryPoint> history,
+                                                     List<String> featureKeys,
+                                                     Map<String, Double> featureMeans,
+                                                     Map<String, Double> featureStds,
+                                                     double lambda,
+                                                     int skipIndex) {
+        int samples = skipIndex >= 0 ? history.size() - 1 : history.size();
+        int columns = featureKeys.size() + 1;
+        double[][] design = new double[samples][columns];
+        double[] outputs = new double[samples];
+        int row = 0;
+        for (int i = 0; i < history.size(); i++) {
+            if (i == skipIndex) {
+                continue;
+            }
+            design[row][0] = 1d;
+            ForecastEngineRequest.HistoryPoint point = history.get(i);
+            outputs[row] = point.value();
+            for (int j = 0; j < featureKeys.size(); j++) {
+                String key = featureKeys.get(j);
+                Double value = point.features().get(key);
+                double centered = (value != null ? value : featureMeans.getOrDefault(key, 0d)) - featureMeans.getOrDefault(key, 0d);
+                double std = featureStds.getOrDefault(key, 1d);
+                design[row][j + 1] = std == 0 ? 0 : centered / std;
+            }
+            row++;
+        }
+        return solveRidgeNormalEquation(design, outputs, lambda);
+    }
+
+    private double[] solveRidgeNormalEquation(double[][] designMatrix, double[] outputs, double lambda) {
+        if (designMatrix.length == 0) {
+            return null;
+        }
+        int columns = designMatrix[0].length;
+        double[][] xtx = new double[columns][columns];
+        double[] xty = new double[columns];
+        for (int i = 0; i < designMatrix.length; i++) {
+            for (int j = 0; j < columns; j++) {
+                xty[j] += designMatrix[i][j] * outputs[i];
+                for (int k = 0; k < columns; k++) {
+                    xtx[j][k] += designMatrix[i][j] * designMatrix[i][k];
+                }
+            }
+        }
+        for (int j = 0; j < columns; j++) {
+            if (j == 0) {
+                continue;
+            }
+            xtx[j][j] += lambda;
+        }
+        return gaussianElimination(xtx, xty);
     }
 
     private ForecastEngineResponse.EvaluationMetrics buildRegressionMetrics(double[] actual,
