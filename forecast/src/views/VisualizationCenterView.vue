@@ -817,6 +817,31 @@ const normalizePrefectureName = name => {
   if (direct) {
     return direct
   }
+  const candidates = (() => {
+    const base = stripRegionSuffix(sanitized)
+    const list = [sanitized]
+    if (base && base !== sanitized) {
+      list.unshift(base)
+    }
+    if (base) {
+      REGION_SUFFIX_VARIANTS.forEach(suffix => {
+        list.push(`${base}${suffix}`)
+      })
+    }
+    return Array.from(new Set(list))
+  })()
+  for (const candidate of candidates) {
+    if (canonicalMap.has(candidate)) {
+      return canonicalMap.get(candidate)
+    }
+    const mapped = regionAliasMap.value.get(candidate)
+    if (mapped) {
+      return mapped
+    }
+    if (regionNameSet.value.has(candidate)) {
+      return candidate
+    }
+  }
   for (const [alias, canonical] of regionAliasEntries.value) {
     if (alias && sanitized.includes(alias)) {
       return canonical
