@@ -554,28 +554,21 @@ const numberFormatters = {
 
 const colorPalette = ['#42a5f5', '#66bb6a', '#ffca28', '#ab47bc', '#ef5350', '#26a69a', '#8d6e63', '#29b6f6', '#9ccc65']
 
-const prefectureProfiles = [
-  { name: '昆明市', short: '昆明', aliases: ['昆明'] },
-  { name: '曲靖市', short: '曲靖', aliases: ['曲靖'] },
-  { name: '玉溪市', short: '玉溪', aliases: ['玉溪'] },
-  { name: '保山市', short: '保山', aliases: ['保山'] },
-  { name: '昭通市', short: '昭通', aliases: ['昭通'] },
-  { name: '丽江市', short: '丽江', aliases: ['丽江'] },
-  { name: '普洱市', short: '普洱', aliases: ['普洱', '思茅', '思茅市'] },
-  { name: '临沧市', short: '临沧', aliases: ['临沧'] },
-  { name: '楚雄彝族自治州', short: '楚雄', aliases: ['楚雄州', '楚雄'] },
-  { name: '红河哈尼族彝族自治州', short: '红河', aliases: ['红河州', '红河'] },
-  { name: '文山壮族苗族自治州', short: '文山', aliases: ['文山州', '文山'] },
-  { name: '西双版纳傣族自治州', short: '西双版纳', aliases: ['西双版纳州', '西双版纳', '版纳'] },
-  { name: '大理白族自治州', short: '大理', aliases: ['大理州', '大理'] },
-  { name: '德宏傣族景颇族自治州', short: '德宏', aliases: ['德宏州', '德宏'] },
-  { name: '怒江傈僳族自治州', short: '怒江', aliases: ['怒江州', '怒江'] },
-  { name: '迪庆藏族自治州', short: '迪庆', aliases: ['迪庆州', '迪庆'] }
+const REGION_SUFFIXES = [
+  '特别行政区',
+  '自治州',
+  '自治县',
+  '自治旗',
+  '地区',
+  '盟',
+  '市',
+  '州',
+  '县',
+  '区',
+  '旗'
 ]
 
-const prefectureNameSet = new Set(prefectureProfiles.map(item => item.name))
-const prefectureShortNameMap = new Map(prefectureProfiles.map(item => [item.name, item.short]))
-const prefectureOrderMap = new Map(prefectureProfiles.map((item, index) => [item.name, index]))
+const REGION_SUFFIX_VARIANTS = ['市', '自治州', '州', '地区', '盟', '县', '区', '旗']
 
 const sanitizeRegionText = raw => {
   if (!raw) return ''
@@ -587,18 +580,84 @@ const sanitizeRegionText = raw => {
     .replace(/^中国云南省?/, '')
 }
 
-const prefectureAliasTuples = prefectureProfiles.flatMap(item => {
-  const aliasSet = new Set([item.name, item.short, ...(item.aliases ?? [])])
-  aliasSet.add(`${item.short}市`)
-  aliasSet.add(`${item.short}州`)
-  aliasSet.add(`${item.short}自治州`)
-  return Array.from(aliasSet)
-    .map(alias => sanitizeRegionText(alias))
-    .filter(Boolean)
-    .map(alias => [alias, item.name])
-})
+const stripRegionSuffix = value => {
+  if (!value) return ''
+  for (const suffix of REGION_SUFFIXES) {
+    if (value.endsWith(suffix) && value.length > suffix.length) {
+      return value.slice(0, -suffix.length)
+    }
+  }
+  return value
+}
 
-const prefectureAliasMap = new Map(prefectureAliasTuples)
+const buildRegionProfiles = (records = []) => {
+  const list = Array.isArray(records) ? records : []
+  const map = new Map()
+  list.forEach(record => {
+    const name = record?.regionName
+    if (!name) return
+    const displayName = String(name).trim()
+    if (!displayName) return
+    const sanitized = sanitizeRegionText(displayName)
+    if (!sanitized) return
+    const base = stripRegionSuffix(sanitized)
+    const key = base || sanitized
+    const profile = map.get(key) ?? {
+      name: displayName,
+      short: base || sanitized || displayName,
+      aliases: new Set()
+    }
+    if (displayName.length > profile.name.length) {
+      profile.name = displayName
+    }
+    profile.aliases.add(displayName)
+    profile.aliases.add(sanitized)
+    if (base) {
+      profile.aliases.add(base)
+    }
+    if (profile.short) {
+      REGION_SUFFIX_VARIANTS.forEach(suffix => {
+        profile.aliases.add(`${profile.short}${suffix}`)
+      })
+    }
+    map.set(key, profile)
+  })
+  return Array.from(map.values()).map(profile => ({
+    name: profile.name,
+    short: profile.short && profile.short !== profile.name ? profile.short : profile.name,
+    aliases: Array.from(profile.aliases).filter(Boolean)
+  }))
+}
+
+const buildRegionAliasMap = profiles => {
+  const map = new Map()
+  profiles.forEach(profile => {
+    profile.aliases.forEach(alias => {
+      const sanitized = sanitizeRegionText(alias)
+      if (sanitized && !map.has(sanitized)) {
+        map.set(sanitized, profile.name)
+      }
+    })
+  })
+  return map
+}
+
+const regionProfiles = computed(() => buildRegionProfiles(yieldRecords.value))
+const regionAliasMap = computed(() => buildRegionAliasMap(regionProfiles.value))
+const regionAliasEntries = computed(() => Array.from(regionAliasMap.value.entries()))
+const regionCanonicalMap = computed(() => {
+  const map = new Map()
+  regionProfiles.value.forEach(profile => {
+    const sanitized = sanitizeRegionText(profile.name)
+    if (sanitized) {
+      map.set(sanitized, profile.name)
+    }
+  })
+  return map
+})
+const regionNameSet = computed(() => new Set(regionProfiles.value.map(profile => profile.name)))
+const regionShortNameMap = computed(() => new Map(regionProfiles.value.map(profile => [profile.name, profile.short])))
+const regionOrderMap = computed(() => new Map(regionProfiles.value.map((profile, index) => [profile.name, index])))
 
 const extractCoordinatesFromGeometry = geometry => {
   if (!geometry) return []
@@ -750,23 +809,17 @@ const hexToRgba = (hex, alpha) => {
 const normalizePrefectureName = name => {
   const sanitized = sanitizeRegionText(name)
   if (!sanitized) return ''
-  if (prefectureNameSet.has(sanitized)) {
-    return sanitized
+  const canonicalMap = regionCanonicalMap.value
+  if (canonicalMap.has(sanitized)) {
+    return canonicalMap.get(sanitized)
   }
-  const direct = prefectureAliasMap.get(sanitized)
+  const direct = regionAliasMap.value.get(sanitized)
   if (direct) {
     return direct
   }
-  for (const [alias, canonical] of prefectureAliasMap.entries()) {
+  for (const [alias, canonical] of regionAliasEntries.value) {
     if (alias && sanitized.includes(alias)) {
       return canonical
-    }
-  }
-  for (const profile of prefectureProfiles) {
-    if (!profile?.short) continue
-    const shortSanitized = sanitizeRegionText(profile.short)
-    if (shortSanitized && sanitized.includes(shortSanitized)) {
-      return profile.name
     }
   }
   return ''
@@ -996,15 +1049,15 @@ const regionOptions = computed(() => {
   })
   return Array.from(counter.entries())
     .sort((a, b) => {
-      const orderA = prefectureOrderMap.get(a[0]) ?? Number.POSITIVE_INFINITY
-      const orderB = prefectureOrderMap.get(b[0]) ?? Number.POSITIVE_INFINITY
+      const orderA = regionOrderMap.value.get(a[0]) ?? Number.POSITIVE_INFINITY
+      const orderB = regionOrderMap.value.get(b[0]) ?? Number.POSITIVE_INFINITY
       if (orderA === orderB) {
         return a[0].localeCompare(b[0], 'zh-CN')
       }
       return orderA - orderB
     })
     .map(([label, count]) => {
-      const short = prefectureShortNameMap.get(label)
+      const short = regionShortNameMap.value.get(label)
       const displayLabel = short && short !== label ? `${label}（${short}）` : label
       return { label, value: label, count, short, displayLabel }
     })
@@ -1038,7 +1091,7 @@ const selectedRegionLabel = computed(() => {
     return '全部地区'
   }
   const value = selectedRegion.value
-  const short = prefectureShortNameMap.get(value)
+  const short = regionShortNameMap.value.get(value)
   return short && short !== value ? `${value}（${short}）` : value
 })
 
@@ -1456,7 +1509,7 @@ const mapData = computed(() => {
 
   records.forEach(record => {
     const normalizedName = normalizePrefectureName(record?.regionName)
-    if (!normalizedName || !prefectureNameSet.has(normalizedName)) {
+    if (!normalizedName || !regionNameSet.value.has(normalizedName)) {
       excluded += 1
       return
     }
@@ -1467,8 +1520,8 @@ const mapData = computed(() => {
 
   const items = Array.from(regionMap.entries())
     .sort((a, b) => {
-      const orderA = prefectureOrderMap.get(a[0]) ?? Number.POSITIVE_INFINITY
-      const orderB = prefectureOrderMap.get(b[0]) ?? Number.POSITIVE_INFINITY
+      const orderA = regionOrderMap.value.get(a[0]) ?? Number.POSITIVE_INFINITY
+      const orderB = regionOrderMap.value.get(b[0]) ?? Number.POSITIVE_INFINITY
       if (orderA === orderB) {
         return a[0].localeCompare(b[0], 'zh-CN')
       }
