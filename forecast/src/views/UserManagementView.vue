@@ -221,6 +221,7 @@ const passwordSubmitting = ref(false)
 const passwordForm = reactive({
   id: null,
   username: '',
+  email: '',
   newPassword: ''
 })
 
@@ -362,6 +363,7 @@ const openPasswordDialog = user => {
   }
   passwordForm.id = user.id ?? null
   passwordForm.username = user.username ?? ''
+  passwordForm.email = user.email ?? ''
   passwordForm.newPassword = ''
   passwordDialogVisible.value = true
 }
@@ -456,6 +458,29 @@ const submitEditForm = async () => {
   }
 }
 
+const notifyPasswordResetByEmail = async () => {
+  if (!passwordForm.email) {
+    ElMessage.info('密码已重置，但用户未绑定邮箱，无法自动发送邮件通知')
+    return
+  }
+
+  try {
+    await apiClient.post('/api/notifications/email', {
+      to: passwordForm.email,
+      subject: '密码重置通知',
+      template: 'PASSWORD_RESET',
+      context: {
+        username: passwordForm.username,
+        newPassword: passwordForm.newPassword
+      }
+    })
+    ElMessage.success('密码已重置，并已通过邮箱通知用户新密码')
+  } catch (error) {
+    console.warn('Failed to send password reset email', error)
+    ElMessage.warning('密码已重置，但邮件通知未发送，请手动告知用户')
+  }
+}
+
 const submitPasswordForm = async () => {
   if (!passwordFormRef.value) {
     return
@@ -472,6 +497,7 @@ const submitPasswordForm = async () => {
       newPassword: passwordForm.newPassword
     })
     ElMessage.success('密码已重置')
+    await notifyPasswordResetByEmail()
     passwordDialogVisible.value = false
   } catch (error) {
     ElMessage.error(error?.response?.data?.message || '重置密码失败')

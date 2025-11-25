@@ -575,6 +575,7 @@ const chartOption = computed(() => {
         name: '预测区间',
         type: 'line',
         data: upperBand,
+        showSymbol: false,
         lineStyle: { opacity: 0 },
         stack: 'confidence-band',
         areaStyle: {
