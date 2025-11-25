@@ -553,7 +553,8 @@ const switchToMode = mode => {
 
 .captcha-item {
   display: flex;
-  gap: 12px;
+  gap: 10px;
+  align-items: center;
 }
 
 .captcha-item .el-input {
@@ -561,22 +562,29 @@ const switchToMode = mode => {
 }
 
 .captcha-image {
+  box-sizing: border-box;
   flex-shrink: 0;
-  width: 260px;
-  height: 96px;
-  padding: 10px 12px;
+  width: 200px;
+  height: 76px;
+  padding: 6px 10px;
   border: 1px solid #dcdfe6;
-  border-radius: 6px;
+  border-radius: 8px;
+  background: #f7f9fb;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.captcha-image:hover {
+  border-color: #409eff;
+  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.1);
 }
 
 .captcha-image img {
   width: 100%;
   height: 100%;
-  max-height: 100%;
   object-fit: contain;
   display: block;
 }
