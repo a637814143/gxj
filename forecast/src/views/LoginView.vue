@@ -561,8 +561,9 @@ const switchToMode = mode => {
 }
 
 .captcha-image {
-  width: 180px;
-  height: 44px;
+  width: 220px;
+  height: 64px;
+  padding: 6px 8px;
   border: 1px solid #dcdfe6;
   border-radius: 6px;
   display: flex;
@@ -576,8 +577,6 @@ const switchToMode = mode => {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  transform: scale(0.88);
-  transform-origin: center;
 }
 
 .form-footer {
