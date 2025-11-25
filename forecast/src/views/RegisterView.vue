@@ -296,6 +296,11 @@ const sendRegistrationEmail = async () => {
     })
   } catch (error) {
     console.warn('Failed to send registration email', error)
+    const message = error?.response?.data?.message || error?.message || ''
+    if (error?.response?.status === 404 || /notifications\/email/i.test(message)) {
+      ElMessage.info('系统未开启注册邮件通知，已跳过发送')
+      return
+    }
     ElMessage.warning('账户已创建，但邮件通知发送失败，请稍后重试')
   }
 }
