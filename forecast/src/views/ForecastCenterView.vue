@@ -522,13 +522,8 @@ const chartOption = computed(() => {
   const xAxis = combinedPeriods.value
   const historyMap = Object.fromEntries(historySeries.value.map(item => [item.period, item.value]))
   const forecastMap = Object.fromEntries(forecastSeries.value.map(item => [item.period, item.value]))
-  const lowerMap = Object.fromEntries(forecastSeries.value.map(item => [item.period, item.lowerBound ?? null]))
-  const upperMap = Object.fromEntries(forecastSeries.value.map(item => [item.period, item.upperBound ?? null]))
-
   const historyData = xAxis.map(period => historyMap[period] ?? null)
   const forecastData = xAxis.map(period => forecastMap[period] ?? null)
-  const lowerBand = xAxis.map(period => lowerMap[period] ?? null)
-  const upperBand = xAxis.map(period => upperMap[period] ?? null)
 
   return {
     grid: { top: 48, left: 60, right: 28, bottom: 40 },
@@ -536,7 +531,7 @@ const chartOption = computed(() => {
       trigger: 'axis'
     },
     legend: {
-      data: [historyLegendLabel.value, forecastLegendLabel.value, '预测区间'],
+      data: [historyLegendLabel.value, forecastLegendLabel.value],
       top: 10
     },
     xAxis: {
@@ -570,28 +565,6 @@ const chartOption = computed(() => {
           type: 'dashed',
           color: '#67C23A'
         }
-      },
-      {
-        name: '预测区间',
-        type: 'line',
-        data: upperBand,
-        lineStyle: { opacity: 0 },
-        stack: 'confidence-band',
-        areaStyle: {
-          color: 'rgba(103, 194, 58, 0.18)'
-        },
-        emphasis: { focus: 'series' }
-      },
-      {
-        name: '预测区间',
-        type: 'line',
-        data: lowerBand,
-        lineStyle: { opacity: 0 },
-        stack: 'confidence-band',
-        areaStyle: {
-          color: 'rgba(103, 194, 58, 0.18)'
-        },
-        emphasis: { focus: 'series' }
       }
     ]
   }

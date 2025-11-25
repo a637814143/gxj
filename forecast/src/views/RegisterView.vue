@@ -281,6 +281,30 @@ const validateForm = () => {
   )
 }
 
+const sendRegistrationEmail = async () => {
+  if (!form.email) {
+    return
+  }
+  try {
+    await apiClient.post('/api/notifications/email', {
+      to: form.email,
+      subject: '注册成功通知',
+      template: 'REGISTRATION_SUCCESS',
+      context: {
+        username: form.username
+      }
+    })
+  } catch (error) {
+    console.warn('Failed to send registration email', error)
+    const message = error?.response?.data?.message || error?.message || ''
+    if (error?.response?.status === 404 || /notifications\/email/i.test(message)) {
+      ElMessage.info('系统未开启注册邮件通知，已跳过发送')
+      return
+    }
+    ElMessage.warning('账户已创建，但邮件通知发送失败，请稍后重试')
+  }
+}
+
 const validateEmailForCode = () => {
   errors.email = ''
   errors.captchaCode = ''
@@ -345,7 +369,7 @@ const handleSubmit = async () => {
   }
   loading.value = true
   try {
-    const result = await authStore.register({
+    await authStore.register({
       username: form.username,
       password: form.password,
       fullName: form.fullName || undefined,
@@ -354,13 +378,12 @@ const handleSubmit = async () => {
       roleCode: form.roleCode,
       rememberMe: form.rememberMe
     })
+    const successMessage = `用户 ${form.username} 注册成功，欢迎使用平台`
+    await sendRegistrationEmail()
     const redirect = route.query.redirect
-    const query = { registered: '1' }
+    const query = { registered: '1', registrationMessage: successMessage }
     if (redirect) {
       query.redirect = redirect
-    }
-    if (result?.message) {
-      query.registrationMessage = result.message
     }
     await router.replace({ name: 'login', query })
   } catch (error) {
