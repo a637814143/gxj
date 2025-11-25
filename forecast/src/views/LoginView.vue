@@ -564,9 +564,9 @@ const switchToMode = mode => {
 .captcha-image {
   box-sizing: border-box;
   flex-shrink: 0;
-  width: 200px;
-  height: 76px;
-  padding: 6px 10px;
+  width: 160px;
+  height: 40px;
+  padding: 4px 10px;
   border: 1px solid #dcdfe6;
   border-radius: 8px;
   background: #f7f9fb;
