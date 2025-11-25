@@ -561,22 +561,23 @@ const switchToMode = mode => {
 }
 
 .captcha-image {
-  width: 220px;
-  height: 64px;
-  padding: 6px 8px;
+  width: 240px;
+  height: 82px;
+  padding: 8px 10px;
   border: 1px solid #dcdfe6;
   border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  overflow: hidden;
 }
 
 .captcha-image img {
-  width: 100%;
+  width: auto;
+  max-width: 100%;
   height: 100%;
   object-fit: contain;
+  display: block;
 }
 
 .form-footer {
