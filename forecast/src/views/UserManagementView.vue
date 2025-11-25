@@ -460,7 +460,7 @@ const submitEditForm = async () => {
 
 const notifyPasswordResetByEmail = async () => {
   if (!passwordForm.email) {
-    ElMessage.info('密码已重置，但用户未绑定邮箱，无法自动发送邮件通知')
+    ElMessage.info('用户未绑定邮箱，已跳过邮件通知')
     return
   }
 
@@ -474,10 +474,10 @@ const notifyPasswordResetByEmail = async () => {
         newPassword: passwordForm.newPassword
       }
     })
-    ElMessage.success('密码已重置，并已通过邮箱通知用户新密码')
+    ElMessage.success('已通过邮箱通知用户新密码')
   } catch (error) {
     console.warn('Failed to send password reset email', error)
-    ElMessage.warning('密码已重置，但邮件通知未发送，请手动告知用户')
+    ElMessage.error('邮件通知未能自动发送，请检查邮箱服务后重试')
   }
 }
 
