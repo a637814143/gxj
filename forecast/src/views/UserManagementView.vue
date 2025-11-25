@@ -479,7 +479,8 @@ const notifyPasswordResetByEmail = async () => {
     ElMessage.success('已通过邮箱通知用户新密码')
   } catch (error) {
     console.warn('Failed to send password reset email', error)
-    ElMessage.error('邮件通知未能自动发送，请检查邮箱服务后重试')
+    const errorMessage = error?.response?.data?.message || error?.message
+    ElMessage.error(errorMessage ? `邮件通知未能自动发送：${errorMessage}` : '邮件通知未能自动发送，请检查邮箱服务后重试')
   }
 }
 
