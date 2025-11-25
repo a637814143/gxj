@@ -561,9 +561,10 @@ const switchToMode = mode => {
 }
 
 .captcha-image {
-  width: 240px;
-  height: 82px;
-  padding: 8px 10px;
+  flex-shrink: 0;
+  width: 260px;
+  height: 96px;
+  padding: 10px 12px;
   border: 1px solid #dcdfe6;
   border-radius: 6px;
   display: flex;
@@ -573,9 +574,9 @@ const switchToMode = mode => {
 }
 
 .captcha-image img {
-  width: auto;
-  max-width: 100%;
+  width: 100%;
   height: 100%;
+  max-height: 100%;
   object-fit: contain;
   display: block;
 }
