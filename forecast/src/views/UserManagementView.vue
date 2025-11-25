@@ -361,9 +361,10 @@ const openPasswordDialog = user => {
   if (!user) {
     return
   }
+  const normalizedEmail = (user.email || user.mail || user.emailAddress || '').trim()
   passwordForm.id = user.id ?? null
   passwordForm.username = user.username ?? ''
-  passwordForm.email = user.email ?? ''
+  passwordForm.email = normalizedEmail
   passwordForm.newPassword = ''
   passwordDialogVisible.value = true
 }
@@ -459,14 +460,15 @@ const submitEditForm = async () => {
 }
 
 const notifyPasswordResetByEmail = async () => {
-  if (!passwordForm.email) {
+  const email = (passwordForm.email || '').trim()
+  if (!email) {
     ElMessage.info('用户未绑定邮箱，已跳过邮件通知')
     return
   }
 
   try {
     await apiClient.post('/api/notifications/email', {
-      to: passwordForm.email,
+      to: email,
       subject: '密码重置通知',
       template: 'PASSWORD_RESET',
       context: {
