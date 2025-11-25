@@ -25,8 +25,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class CaptchaServiceImpl implements CaptchaService {
 
-    private static final int WIDTH = 180;
-    private static final int HEIGHT = 60;
+    private static final int WIDTH = 160;
+    private static final int HEIGHT = 40;
     private static final long EXPIRE_SECONDS = 120;
 
     private final Map<String, CaptchaHolder> captchaStore = new ConcurrentHashMap<>();
@@ -122,7 +122,7 @@ public class CaptchaServiceImpl implements CaptchaService {
             g2d.drawLine(x1, y1, x2, y2);
         }
 
-        g2d.setFont(new Font("Arial", Font.BOLD, 32));
+        g2d.setFont(new Font("Arial", Font.BOLD, 26));
         FontMetrics fontMetrics = g2d.getFontMetrics();
         int x = (WIDTH - fontMetrics.stringWidth(expression)) / 2;
         int y = ((HEIGHT - fontMetrics.getHeight()) / 2) + fontMetrics.getAscent();

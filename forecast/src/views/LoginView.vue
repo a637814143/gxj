@@ -566,7 +566,7 @@ const switchToMode = mode => {
   flex-shrink: 0;
   width: 160px;
   height: 40px;
-  padding: 4px 10px;
+  padding: 0;
   border: 1px solid #dcdfe6;
   border-radius: 8px;
   background: #f7f9fb;
@@ -585,7 +585,7 @@ const switchToMode = mode => {
 .captcha-image img {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   display: block;
 }
 
