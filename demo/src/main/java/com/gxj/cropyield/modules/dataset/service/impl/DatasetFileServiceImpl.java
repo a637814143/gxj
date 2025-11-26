@@ -166,8 +166,6 @@ public class DatasetFileServiceImpl implements DatasetFileService {
         Set<Long> regionIds = new LinkedHashSet<>();
         cropIds.addAll(yieldRecordRepository.findDistinctCropIdsByDatasetFileId(file.getId()));
         regionIds.addAll(yieldRecordRepository.findDistinctRegionIdsByDatasetFileId(file.getId()));
-        cropIds.addAll(priceRecordRepository.findDistinctCropIdsByDatasetFileId(file.getId()));
-        regionIds.addAll(priceRecordRepository.findDistinctRegionIdsByDatasetFileId(file.getId()));
         return new CleanupImpact(cropIds, regionIds);
     }
 
@@ -176,7 +174,6 @@ public class DatasetFileServiceImpl implements DatasetFileService {
             List<Long> removableCrops = cropIds.stream()
                     .filter(Objects::nonNull)
                     .filter(id -> !yieldRecordRepository.existsByCropId(id))
-                    .filter(id -> !priceRecordRepository.existsByCropId(id))
                     .filter(id -> !forecastTaskRepository.existsByCropId(id))
                     .filter(id -> !forecastRunRepository.existsByCropId(id))
                     .collect(Collectors.toList());
@@ -188,7 +185,6 @@ public class DatasetFileServiceImpl implements DatasetFileService {
             List<Long> removableRegions = regionIds.stream()
                     .filter(Objects::nonNull)
                     .filter(id -> !yieldRecordRepository.existsByRegionId(id))
-                    .filter(id -> !priceRecordRepository.existsByRegionId(id))
                     .filter(id -> !forecastTaskRepository.existsByRegionId(id))
                     .filter(id -> !forecastRunRepository.existsByRegionId(id))
                     .collect(Collectors.toList());
