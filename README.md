@@ -44,7 +44,7 @@ cd demo
 | --- | --- | --- |
 | 鉴权与账号 | `/api/auth/captcha`、`/api/auth/register`、`/api/auth/login`、`/api/auth/refresh`、`/api/auth/me` | 图形验证码、注册登录、刷新令牌与当前用户查询，并记录登录日志。 |
 | 基础资料 | `/api/base/crops`、`/api/base/regions` | 维护作物与行政区域信息（增删改查）。 |
-| 数据集管理 | `/api/datasets/files`、`/api/datasets/yield-records`、`/api/datasets/price-records` | 登记原始数据文件，录入产量与价格记录，为仪表盘与预测提供数据基础。 |
+| 数据集管理 | `/api/datasets/files`、`/api/datasets/yield-records` | 登记原始数据文件，录入产量记录，为仪表盘与预测提供数据基础。 |
 | 数据导入 | `/api/data-import/upload`、`/api/data-import/tasks` | 上传 CSV/Excel、查询导入任务状态、查看明细并批量清理任务记录。 |
 | 预测管理 | `/api/forecast/models`、`/api/forecast/tasks`、`/api/forecast/predict`、`/api/forecast/history` | 定义预测模型与任务，调用预测执行接口并查询近期预测历史，用于驱动前端可视化。 |
 | 报告中心 | `/api/report` | 汇总预测结果并生成报告实体，供前端展示与导出扩展。 |
