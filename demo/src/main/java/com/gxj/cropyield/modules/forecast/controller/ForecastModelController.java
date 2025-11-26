@@ -1,14 +1,19 @@
 package com.gxj.cropyield.modules.forecast.controller;
 
 import com.gxj.cropyield.common.response.ApiResponse;
-import com.gxj.cropyield.modules.forecast.config.ForecastModelSettings;
 import com.gxj.cropyield.modules.forecast.dto.ForecastModelOptionsResponse;
 import com.gxj.cropyield.modules.forecast.dto.ForecastModelRequest;
+import com.gxj.cropyield.modules.forecast.dto.ForecastModelPolicyRequest;
+import com.gxj.cropyield.modules.forecast.dto.ForecastModelPolicyResponse;
 import com.gxj.cropyield.modules.forecast.dto.ToggleForecastModelRequest;
 import com.gxj.cropyield.modules.forecast.entity.ForecastModel;
+import com.gxj.cropyield.modules.forecast.service.ForecastModelAccessService;
 import com.gxj.cropyield.modules.forecast.service.ForecastModelService;
+import com.gxj.cropyield.modules.auth.entity.User;
+import com.gxj.cropyield.modules.auth.service.CurrentUserService;
 import jakarta.validation.Valid;
 import java.util.List;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -28,12 +33,15 @@ import org.springframework.web.bind.annotation.RestController;
 public class ForecastModelController {
 
     private final ForecastModelService forecastModelService;
-    private final ForecastModelSettings forecastModelSettings;
+    private final ForecastModelAccessService forecastModelAccessService;
+    private final CurrentUserService currentUserService;
 
     public ForecastModelController(ForecastModelService forecastModelService,
-                                   ForecastModelSettings forecastModelSettings) {
+                                   ForecastModelAccessService forecastModelAccessService,
+                                   CurrentUserService currentUserService) {
         this.forecastModelService = forecastModelService;
-        this.forecastModelSettings = forecastModelSettings;
+        this.forecastModelAccessService = forecastModelAccessService;
+        this.currentUserService = currentUserService;
     }
 
     @GetMapping
@@ -48,7 +56,12 @@ public class ForecastModelController {
 
     @GetMapping("/options")
     public ApiResponse<ForecastModelOptionsResponse> listAllowedTypes() {
-        return ApiResponse.success(new ForecastModelOptionsResponse(forecastModelSettings.getAllowedTypes()));
+        User user = currentUserService.getCurrentUser();
+        return ApiResponse.success(new ForecastModelOptionsResponse(
+                forecastModelAccessService.getEffectiveAllowedTypesForCurrentUser(),
+                forecastModelAccessService.canCurrentUserManageModels(),
+                user == null ? null : user.getDepartmentCode()
+        ));
     }
 
     @PostMapping
@@ -69,5 +82,17 @@ public class ForecastModelController {
     @PatchMapping("/{id}/enabled")
     public ApiResponse<ForecastModel> toggleModel(@PathVariable Long id, @Valid @RequestBody ToggleForecastModelRequest request) {
         return ApiResponse.success(forecastModelService.toggleEnabled(id, request.enabled()));
+    }
+
+    @GetMapping("/policies")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<List<ForecastModelPolicyResponse>> listPolicies() {
+        return ApiResponse.success(forecastModelAccessService.listPolicies());
+    }
+
+    @PutMapping("/policies")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<List<ForecastModelPolicyResponse>> savePolicies(@Valid @RequestBody List<ForecastModelPolicyRequest> requests) {
+        return ApiResponse.success(forecastModelAccessService.savePolicies(requests));
     }
 }

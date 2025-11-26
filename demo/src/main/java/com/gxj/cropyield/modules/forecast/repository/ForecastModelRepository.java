@@ -14,4 +14,6 @@ public interface ForecastModelRepository extends JpaRepository<ForecastModel, Lo
     Optional<ForecastModel> findByType(ForecastModel.ModelType type);
 
     List<ForecastModel> findByEnabledTrueAndTypeIn(List<ForecastModel.ModelType> types);
+
+    List<ForecastModel> findByTypeIn(List<ForecastModel.ModelType> types);
 }

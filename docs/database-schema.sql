@@ -8,6 +8,7 @@ DROP TABLE IF EXISTS forecast_run_series;
 DROP TABLE IF EXISTS forecast_result;
 DROP TABLE IF EXISTS forecast_run;
 DROP TABLE IF EXISTS forecast_task;
+DROP TABLE IF EXISTS forecast_model_department_policy;
 DROP TABLE IF EXISTS forecast_model;
 DROP TABLE IF EXISTS dataset_yield_record;
 DROP TABLE IF EXISTS dataset_file;
@@ -133,6 +134,15 @@ CREATE TABLE forecast_model (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_forecast_model_name (name)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '预测模型定义';
+
+CREATE TABLE forecast_model_department_policy (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    department_code VARCHAR(64) NOT NULL UNIQUE,
+    allowed_types VARCHAR(512),
+    can_manage TINYINT(1) NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '预测模型部门权限';
 
 CREATE TABLE forecast_task (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

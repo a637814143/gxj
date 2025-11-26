@@ -343,7 +343,7 @@
           </div>
           <div class="card-actions">
             <el-button @click="loadModelList">刷新列表</el-button>
-            <el-button type="primary" @click="openCreateModel">新增模型</el-button>
+            <el-button type="primary" :disabled="modelActionsDisabled" @click="openCreateModel">新增模型</el-button>
           </div>
         </div>
       </template>
@@ -351,8 +351,20 @@
       <div class="model-allowed-types">
         <span class="model-allowed-label">允许的模型类型：</span>
         <el-tag v-for="item in modelTypeOptions" :key="item.value" type="info" class="model-type-tag">{{ item.label }}</el-tag>
+        <el-tag v-if="modelOptions.departmentCode && !isAdmin" type="info" effect="plain">所属部门：{{ modelOptions.departmentCode }}</el-tag>
         <el-tag type="warning" effect="plain">管理员可在配置中限制类型与管理权限</el-tag>
+        <el-tag v-if="modelActionsDisabled" type="danger" effect="light">当前账号未获模型管理授权</el-tag>
       </div>
+
+      <el-alert
+        v-if="modelActionsDisabled"
+        type="warning"
+        show-icon
+        class="panel-alert"
+        :closable="false"
+        title="仅系统管理员或被授权的部门账号可新增/编辑/停用模型"
+        description="如需调整权限，请联系管理员在“模型部门权限”中启用管理权限或调整可用模型类型。"
+      />
 
       <el-tabs v-model="modelTab">
         <el-tab-pane label="模型列表" name="list">
@@ -387,12 +399,13 @@
             <el-table-column label="操作" width="220" fixed="right">
               <template #default="{ row }">
                 <el-space>
-                  <el-button type="primary" link size="small" @click="openEditModel(row)">编辑</el-button>
-                  <el-button type="primary" link size="small" @click="handleCopyModel(row)">复制</el-button>
+                  <el-button type="primary" link size="small" :disabled="modelActionsDisabled" @click="openEditModel(row)">编辑</el-button>
+                  <el-button type="primary" link size="small" :disabled="modelActionsDisabled" @click="handleCopyModel(row)">复制</el-button>
                   <el-button
                     :type="row.enabled ? 'warning' : 'success'"
                     link
                     size="small"
+                    :disabled="modelActionsDisabled"
                     @click="handleToggleModel(row)"
                   >
                     {{ row.enabled ? '停用' : '启用' }}
@@ -403,6 +416,38 @@
           </el-table>
         </el-tab-pane>
       </el-tabs>
+
+      <el-divider v-if="isAdmin" content-position="left">模型部门权限</el-divider>
+      <div v-if="isAdmin" class="policy-editor">
+        <el-table :data="policyRows" v-loading="policyLoading" size="small" empty-text="尚未配置部门权限">
+          <el-table-column label="部门编码" prop="departmentCode" min-width="160">
+            <template #default="{ row }">
+              <el-input v-model="row.departmentCode" placeholder="输入部门编码" />
+            </template>
+          </el-table-column>
+          <el-table-column label="允许的模型类型" min-width="220">
+            <template #default="{ row }">
+              <el-select v-model="row.allowedTypes" multiple placeholder="留空则继承全局配置" style="width: 100%">
+                <el-option v-for="item in modelTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+              </el-select>
+            </template>
+          </el-table-column>
+          <el-table-column label="可管理模型" width="140">
+            <template #default="{ row }">
+              <el-switch v-model="row.canManage" />
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="120">
+            <template #default="{ $index }">
+              <el-button type="danger" link size="small" @click="removePolicyRow($index)">移除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <div class="policy-actions">
+          <el-button size="small" @click="addPolicyRow">新增部门</el-button>
+          <el-button type="primary" size="small" :loading="policyLoading" @click="persistPolicyList">保存权限</el-button>
+        </div>
+      </div>
     </el-card>
 
     <el-dialog
@@ -506,6 +551,7 @@ import {
   fetchForecastHistory,
   fetchModelList,
   fetchModelOptions,
+  fetchModelPolicies,
   fetchModels,
   createModel,
   updateModel,
@@ -513,6 +559,7 @@ import {
   toggleModel,
   fetchRegionCrops,
   fetchRegions,
+  saveModelPolicies,
 } from '@/services/forecast'
 import { useAuthStore } from '@/stores/auth'
 
@@ -535,7 +582,9 @@ const modelTab = ref('list')
 const modelList = ref([])
 const modelTableLoading = ref(false)
 const modelOptions = reactive({
-  allowedTypes: []
+  allowedTypes: [],
+  canManage: false,
+  departmentCode: null
 })
 
 const modelFormRef = ref()
@@ -554,9 +603,15 @@ const modelForm = reactive({
   enabled: true
 })
 
+const policyRows = ref([])
+const policyLoading = ref(false)
+
 const cropRequestId = ref(0)
 
 const authStore = useAuthStore()
+const isAdmin = computed(() => authStore.hasAnyRole(['ADMIN']))
+const canManageModels = computed(() => isAdmin.value || modelOptions.canManage)
+const modelActionsDisabled = computed(() => !canManageModels.value)
 const isUserTheme = computed(() => {
   const roles = authStore.user?.roles
   if (!roles) return true
@@ -1215,9 +1270,13 @@ const loadModelOptions = async () => {
     const payload = await fetchModelOptions()
     const allowed = Array.isArray(payload?.allowedTypes) ? payload.allowedTypes : []
     modelOptions.allowedTypes = allowed
+    modelOptions.canManage = Boolean(payload?.canManageModels)
+    modelOptions.departmentCode = payload?.departmentCode || null
   } catch (error) {
     ElMessage.warning('无法获取模型类型限制，已显示全部类型')
     modelOptions.allowedTypes = []
+    modelOptions.canManage = false
+    modelOptions.departmentCode = null
   }
 }
 
@@ -1231,6 +1290,60 @@ const loadModelList = async () => {
     ElMessage.error(error?.response?.data?.message || '加载模型列表失败')
   } finally {
     modelTableLoading.value = false
+  }
+}
+
+const normalizePolicyRow = item => ({
+  departmentCode: item?.departmentCode ?? '',
+  allowedTypes: Array.isArray(item?.allowedTypes) ? item.allowedTypes : [],
+  canManage: Boolean(item?.canManage),
+})
+
+const loadPolicyList = async () => {
+  if (!isAdmin.value) {
+    policyRows.value = []
+    return
+  }
+  policyLoading.value = true
+  try {
+    const list = await fetchModelPolicies()
+    policyRows.value = Array.isArray(list) ? list.map(normalizePolicyRow) : []
+  } catch (error) {
+    policyRows.value = []
+    ElMessage.error(error?.response?.data?.message || '加载部门权限失败')
+  } finally {
+    policyLoading.value = false
+  }
+}
+
+const addPolicyRow = () => {
+  policyRows.value = policyRows.value || []
+  policyRows.value.push({ departmentCode: '', allowedTypes: [], canManage: false })
+}
+
+const removePolicyRow = index => {
+  if (!Array.isArray(policyRows.value)) return
+  policyRows.value.splice(index, 1)
+}
+
+const persistPolicyList = async () => {
+  if (!isAdmin.value) return
+  policyLoading.value = true
+  try {
+    const payload = (policyRows.value || [])
+      .map(row => ({
+        departmentCode: (row.departmentCode || '').trim(),
+        allowedTypes: Array.isArray(row.allowedTypes) ? row.allowedTypes : [],
+        canManage: Boolean(row.canManage),
+      }))
+      .filter(row => row.departmentCode)
+    const saved = await saveModelPolicies(payload)
+    policyRows.value = Array.isArray(saved) ? saved.map(normalizePolicyRow) : []
+    ElMessage.success('部门模型权限已更新')
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.message || '保存部门权限失败')
+  } finally {
+    policyLoading.value = false
   }
 }
 
@@ -1249,11 +1362,19 @@ const resetModelForm = () => {
 }
 
 const openCreateModel = () => {
+  if (modelActionsDisabled.value) {
+    ElMessage.warning('当前账号未被授权管理模型')
+    return
+  }
   resetModelForm()
   modelDialogVisible.value = true
 }
 
 const openEditModel = row => {
+  if (modelActionsDisabled.value) {
+    ElMessage.warning('当前账号未被授权管理模型')
+    return
+  }
   if (!row) return
   editingModelId.value = row.id
   modelForm.name = row.name ?? ''
@@ -1310,6 +1431,10 @@ const modelRules = {
 }
 
 const submitModelForm = async () => {
+  if (modelActionsDisabled.value) {
+    ElMessage.warning('当前账号未被授权管理模型')
+    return
+  }
   const formRef = modelFormRef.value
   if (!formRef) return
   await formRef.validate()
@@ -1330,6 +1455,10 @@ const submitModelForm = async () => {
 }
 
 const handleCopyModel = async row => {
+  if (modelActionsDisabled.value) {
+    ElMessage.warning('当前账号未被授权管理模型')
+    return
+  }
   if (!row?.id) return
   try {
     await copyModel(row.id)
@@ -1341,6 +1470,10 @@ const handleCopyModel = async row => {
 }
 
 const handleToggleModel = async row => {
+  if (modelActionsDisabled.value) {
+    ElMessage.warning('当前账号未被授权管理模型')
+    return
+  }
   if (!row?.id) return
   const nextEnabled = !row.enabled
   try {
@@ -1399,6 +1532,9 @@ onMounted(async () => {
     loadModelOptions(),
     loadModelList()
   ])
+  if (isAdmin.value) {
+    await loadPolicyList()
+  }
   historyPagination.currentPage = 1
   await loadForecastHistory(1)
 })
@@ -1731,6 +1867,19 @@ function formatScenarioChange(value) {
 
 .panel-alert {
   margin-top: 16px;
+}
+
+.policy-editor {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.policy-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .chart-body {

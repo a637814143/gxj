@@ -55,7 +55,7 @@ export const fetchModels = async () => {
 
 export const fetchModelOptions = async () => {
   const { data } = await apiClient.get('/api/forecast/models/options')
-  return data?.data ?? data ?? { allowedTypes: [] }
+  return data?.data ?? data ?? { allowedTypes: [], canManageModels: false }
 }
 
 export const fetchModelList = async () => {
@@ -81,6 +81,16 @@ export const copyModel = async id => {
 export const toggleModel = async (id, enabled) => {
   const { data } = await apiClient.patch(`/api/forecast/models/${id}/enabled`, { enabled })
   return data?.data ?? data
+}
+
+export const fetchModelPolicies = async () => {
+  const { data } = await apiClient.get('/api/forecast/models/policies')
+  return extractData(data)
+}
+
+export const saveModelPolicies = async payload => {
+  const { data } = await apiClient.put('/api/forecast/models/policies', payload)
+  return extractData(data)
 }
 
 export const fetchForecastHistory = async params => {
@@ -152,6 +162,8 @@ export default {
   updateModel,
   copyModel,
   toggleModel,
+  fetchModelPolicies,
+  saveModelPolicies,
   fetchForecastHistory,
   deleteForecastRun,
   executeForecast,

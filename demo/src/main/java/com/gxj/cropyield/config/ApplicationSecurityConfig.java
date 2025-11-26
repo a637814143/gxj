@@ -88,6 +88,7 @@ public class ApplicationSecurityConfig {
                 .requestMatchers(HttpMethod.PATCH, "/api/forecast/models/**").hasAnyRole("ADMIN", "AGRICULTURE_DEPT")
                 .requestMatchers(HttpMethod.GET, "/api/report/export/**").hasAnyRole("ADMIN", "AGRICULTURE_DEPT")
                 .requestMatchers(HttpMethod.POST, "/api/report/**", "/api/report/export/**").hasAnyRole("ADMIN", "AGRICULTURE_DEPT")
+                .requestMatchers("/api/forecast/models/policies/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/datasets/**", "/api/base/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/datasets/**", "/api/base/**", "/api/system/settings").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/datasets/**", "/api/base/**").hasRole("ADMIN")

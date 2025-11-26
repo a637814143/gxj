@@ -25,6 +25,16 @@ public class ForecastModelSchemaMigrator implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         try {
+            jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS forecast_model_department_policy (
+                    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                    department_code VARCHAR(64) NOT NULL UNIQUE,
+                    allowed_types VARCHAR(512),
+                    can_manage TINYINT(1) NOT NULL DEFAULT 0,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '预测模型部门权限'
+                """);
             jdbcTemplate.execute("ALTER TABLE forecast_model ADD COLUMN IF NOT EXISTS enabled TINYINT(1) NOT NULL DEFAULT 1");
             jdbcTemplate.execute("ALTER TABLE forecast_model ADD COLUMN IF NOT EXISTS granularity VARCHAR(32) NOT NULL DEFAULT 'YEARLY'");
             jdbcTemplate.execute("ALTER TABLE forecast_model ADD COLUMN IF NOT EXISTS history_window INT NOT NULL DEFAULT 5");
