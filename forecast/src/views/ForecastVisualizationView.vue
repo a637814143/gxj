@@ -179,7 +179,6 @@ const metricOptions = [
   { value: 'predictedProduction', label: '推算总产量', unit: '吨' },
   { value: 'predictedYield', label: '推算单产', unit: '吨/公顷' },
   { value: 'measurementValue', label: '指标预测值', unit: '' },
-  { value: 'estimatedRevenue', label: '预计收益', unit: '万元' },
 ]
 
 const chartTypeOptions = [
@@ -198,7 +197,6 @@ const metricAccessorMap = {
   predictedProduction: record => record.predictedProduction,
   predictedYield: record => record.predictedYield,
   measurementValue: record => record.measurementValue,
-  estimatedRevenue: record => record.estimatedRevenue,
 }
 
 const isUserTheme = computed(() => {
@@ -438,13 +436,12 @@ const normalizeRecord = record => ({
   modelName: record.modelName || '未命名模型',
   modelType: record.modelType || '',
   periodLabel: record.period || record.periodLabel || record.periodName || formatDateTime(record.generatedAt),
-  measurementValue: record.measurementValue ?? null,
-  measurementUnit: record.measurementUnit || '',
-  predictedProduction: record.predictedProduction ?? null,
-  predictedYield: record.predictedYield ?? null,
-  estimatedRevenue: record.estimatedRevenue ?? null,
-  generatedAt: record.generatedAt || null,
-})
+    measurementValue: record.measurementValue ?? null,
+    measurementUnit: record.measurementUnit || '',
+    predictedProduction: record.predictedProduction ?? null,
+    predictedYield: record.predictedYield ?? null,
+    generatedAt: record.generatedAt || null,
+  })
 
 const loadVisualizationData = async () => {
   loading.value = true

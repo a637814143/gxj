@@ -302,12 +302,6 @@
         <el-table-column label="参考播种面积 (公顷)" min-width="190">
           <template #default="{ row }">{{ formatHistoryNumber(row.sownArea) }}</template>
         </el-table-column>
-        <el-table-column label="参考均价 (元/公斤)" min-width="190">
-          <template #default="{ row }">{{ formatHistoryNumber(row.averagePrice) }}</template>
-        </el-table-column>
-        <el-table-column label="预计收益 (万元)" min-width="170">
-          <template #default="{ row }">{{ formatHistoryNumber(row.estimatedRevenue) }}</template>
-        </el-table-column>
         <el-table-column label="生成时间" min-width="200">
           <template #default="{ row }">{{ formatHistoryDateTime(row.generatedAt) }}</template>
         </el-table-column>

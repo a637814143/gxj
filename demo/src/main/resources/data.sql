@@ -114,37 +114,24 @@ ON DUPLICATE KEY UPDATE
 INSERT INTO dataset_file (id, name, type, storage_path, description)
 VALUES
     (1, '云南小麦历年产量', 'YIELD', '/data/demo/yield-yunnan-wheat.csv', '报告中心示例数据：2019-2023 年云南小麦产量'),
-    (2, '云南小麦月度价格', 'PRICE', '/data/demo/price-yunnan-wheat.csv', '报告中心示例数据：近两年市场价格'),
     (3, '昆明逐日气象监测', 'WEATHER', '/data/demo/weather-kunming.csv', '示例气象数据：昆明地区逐日天气统计')
 ON DUPLICATE KEY UPDATE
     storage_path = VALUES(storage_path),
     description = VALUES(description);
 
-INSERT INTO dataset_yield_record (id, crop_id, region_id, dataset_file_id, year, sown_area, production, yield_per_hectare, average_price, data_source, collected_at)
+INSERT INTO dataset_yield_record (id, crop_id, region_id, dataset_file_id, year, sown_area, production, yield_per_hectare, data_source, collected_at)
 VALUES
-    (1, 1, 2, 1, 2019, 118.2, 410.5, 3.47, 2280, '云南省统计局', '2020-01-15'),
-    (2, 1, 2, 1, 2020, 119.6, 415.8, 3.48, 2310, '云南省统计局', '2021-01-16'),
-    (3, 1, 2, 1, 2021, 120.1, 420.3, 3.50, 2355, '云南省统计局', '2022-01-18'),
-    (4, 1, 2, 1, 2022, 121.0, 428.9, 3.55, 2390, '云南省统计局', '2023-01-20'),
-    (5, 1, 2, 1, 2023, 122.4, 439.6, 3.59, 2425, '云南省统计局', '2024-01-19')
+    (1, 1, 2, 1, 2019, 118.2, 410.5, 3.47, '云南省统计局', '2020-01-15'),
+    (2, 1, 2, 1, 2020, 119.6, 415.8, 3.48, '云南省统计局', '2021-01-16'),
+    (3, 1, 2, 1, 2021, 120.1, 420.3, 3.50, '云南省统计局', '2022-01-18'),
+    (4, 1, 2, 1, 2022, 121.0, 428.9, 3.55, '云南省统计局', '2023-01-20'),
+    (5, 1, 2, 1, 2023, 122.4, 439.6, 3.59, '云南省统计局', '2024-01-19')
 ON DUPLICATE KEY UPDATE
     sown_area = VALUES(sown_area),
     production = VALUES(production),
     yield_per_hectare = VALUES(yield_per_hectare),
-    average_price = VALUES(average_price),
     data_source = VALUES(data_source),
     collected_at = VALUES(collected_at);
-
-INSERT INTO dataset_price_record (id, crop_id, region_id, dataset_file_id, record_date, price)
-VALUES
-    (1, 1, 2, 2, '2023-01-01', 2360),
-    (2, 1, 2, 2, '2023-04-01', 2395),
-    (3, 1, 2, 2, '2023-07-01', 2420),
-    (4, 1, 2, 2, '2023-10-01', 2455),
-    (5, 1, 2, 2, '2024-01-01', 2480),
-    (6, 1, 2, 2, '2024-04-01', 2525)
-ON DUPLICATE KEY UPDATE
-    price = VALUES(price);
 
 INSERT INTO dataset_weather_record (id, region_id, dataset_file_id, record_date, max_temperature, min_temperature, weather_text, wind, sunshine_hours, data_source)
 VALUES
