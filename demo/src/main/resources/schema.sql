@@ -142,6 +142,13 @@ CREATE TABLE IF NOT EXISTS forecast_model (
     name VARCHAR(128) NOT NULL,
     type VARCHAR(32) NOT NULL,
     description VARCHAR(512),
+    enabled TINYINT(1) NOT NULL DEFAULT 1,
+    granularity VARCHAR(32) NOT NULL DEFAULT 'YEARLY',
+    history_window INT NOT NULL DEFAULT 5,
+    forecast_horizon INT NOT NULL DEFAULT 1,
+    crop_scope VARCHAR(128) NOT NULL,
+    region_scope VARCHAR(128) NOT NULL,
+    hyper_parameters VARCHAR(512),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_forecast_model_name (name)
