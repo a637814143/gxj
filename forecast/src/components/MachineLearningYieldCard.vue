@@ -59,10 +59,6 @@
             />
             <span class="input-hint">千公顷</span>
           </el-form-item>
-          <el-form-item label="平均价格" prop="avg_price_yuan_per_ton">
-            <el-input-number v-model="form.avg_price_yuan_per_ton" :min="0" :step="1" />
-            <span class="input-hint">元 / 吨</span>
-          </el-form-item>
           <div class="form-actions">
             <el-button @click="resetForm">重置</el-button>
             <el-button
@@ -101,9 +97,6 @@
             <el-descriptions-item label="年份">{{ prediction.inputs.year }}</el-descriptions-item>
             <el-descriptions-item label="播种面积(千公顷)">
               {{ formatNumber(prediction.inputs.sown_area_kha, 1) }}
-            </el-descriptions-item>
-            <el-descriptions-item label="平均价格(元/吨)">
-              {{ formatNumber(prediction.inputs.avg_price_yuan_per_ton, 0) }}
             </el-descriptions-item>
           </el-descriptions>
         </div>
@@ -196,7 +189,6 @@ const sanitizePrefill = value => {
     region: typeof value.region === 'string' && value.region.trim() ? value.region.trim() : undefined,
     year: toNumber(value.year),
     sown_area_kha: toNumber(value.sown_area_kha),
-    avg_price_yuan_per_ton: toNumber(value.avg_price_yuan_per_ton),
   }
 }
 
@@ -208,7 +200,6 @@ const defaultForm = (overrides = {}) => ({
   region: '云南省',
   year: new Date().getFullYear(),
   sown_area_kha: 240,
-  avg_price_yuan_per_ton: 2300,
   ...overrides,
 })
 
@@ -225,19 +216,6 @@ const formRules = {
       validator: (_, value, callback) => {
         if (value == null || Number.isNaN(value)) {
           callback(new Error('播种面积需要是数值'))
-        } else {
-          callback()
-        }
-      },
-      trigger: 'change',
-    },
-  ],
-  avg_price_yuan_per_ton: [
-    { required: true, message: '请输入平均价格', trigger: 'change' },
-    {
-      validator: (_, value, callback) => {
-        if (value == null || Number.isNaN(value)) {
-          callback(new Error('平均价格需要是数值'))
         } else {
           callback()
         }
@@ -276,14 +254,6 @@ const applyPrefill = (sanitized, previous = {}) => {
   ) {
     form.sown_area_kha = sanitized.sown_area_kha
   }
-  if (
-    Number.isFinite(sanitized.avg_price_yuan_per_ton) &&
-    (!Number.isFinite(form.avg_price_yuan_per_ton) ||
-      !Number.isFinite(previous.avg_price_yuan_per_ton) ||
-      form.avg_price_yuan_per_ton === previous.avg_price_yuan_per_ton)
-  ) {
-    form.avg_price_yuan_per_ton = sanitized.avg_price_yuan_per_ton
-  }
 }
 
 watch(
@@ -313,7 +283,6 @@ const columnLabels = {
   sown_area_kha: '播种面积(千公顷)',
   yield_10kt: '产量(万吨)',
   yield_per_ha: '单产(吨/公顷)',
-  avg_price_yuan_per_ton: '平均价格(元/吨)',
   data_source: '数据来源',
   collected_at: '采集日期',
 }
@@ -335,7 +304,7 @@ const formatNumber = (value, fractionDigits = 2) => {
 }
 
 const getColumnWidth = column => {
-  const wideColumns = ['avg_price_yuan_per_ton', 'sown_area_kha', 'yield_10kt', 'yield_per_ha']
+  const wideColumns = ['sown_area_kha', 'yield_10kt', 'yield_per_ha']
   if (wideColumns.includes(column)) return 160
   if (column === 'crop' || column === 'region') return 140
   return 120

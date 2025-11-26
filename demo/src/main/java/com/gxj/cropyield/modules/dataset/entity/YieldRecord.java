@@ -42,9 +42,6 @@ public class YieldRecord extends BaseEntity {
     @Column(name = "yield_per_hectare")
     private Double yieldPerHectare;
 
-    @Column(name = "average_price")
-    private Double averagePrice;
-
     @Column(name = "data_source", length = 256)
     private String dataSource;
 
@@ -105,14 +102,6 @@ public class YieldRecord extends BaseEntity {
 
     public void setProduction(Double production) {
         this.production = production;
-    }
-
-    public Double getAveragePrice() {
-        return averagePrice;
-    }
-
-    public void setAveragePrice(Double averagePrice) {
-        this.averagePrice = averagePrice;
     }
 
     public String getDataSource() {

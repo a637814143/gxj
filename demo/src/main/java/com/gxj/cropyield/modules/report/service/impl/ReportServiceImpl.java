@@ -10,9 +10,7 @@ import com.gxj.cropyield.modules.base.entity.Crop;
 import com.gxj.cropyield.modules.base.entity.Region;
 import com.gxj.cropyield.modules.base.repository.CropRepository;
 import com.gxj.cropyield.modules.base.repository.RegionRepository;
-import com.gxj.cropyield.modules.dataset.entity.PriceRecord;
 import com.gxj.cropyield.modules.dataset.entity.YieldRecord;
-import com.gxj.cropyield.modules.dataset.repository.PriceRecordRepository;
 import com.gxj.cropyield.modules.dataset.repository.YieldRecordRepository;
 import com.gxj.cropyield.modules.forecast.entity.ForecastResult;
 import com.gxj.cropyield.modules.forecast.repository.ForecastResultRepository;
@@ -61,7 +59,6 @@ public class ReportServiceImpl implements ReportService {
     private final RegionRepository regionRepository;
     private final CropRepository cropRepository;
     private final YieldRecordRepository yieldRecordRepository;
-    private final PriceRecordRepository priceRecordRepository;
     private final ObjectMapper objectMapper;
 
     public ReportServiceImpl(ReportRepository reportRepository,
@@ -69,14 +66,12 @@ public class ReportServiceImpl implements ReportService {
                              RegionRepository regionRepository,
                              CropRepository cropRepository,
                              YieldRecordRepository yieldRecordRepository,
-                             PriceRecordRepository priceRecordRepository,
                              ObjectMapper objectMapper) {
         this.reportRepository = reportRepository;
         this.forecastResultRepository = forecastResultRepository;
         this.regionRepository = regionRepository;
         this.cropRepository = cropRepository;
         this.yieldRecordRepository = yieldRecordRepository;
-        this.priceRecordRepository = priceRecordRepository;
         this.objectMapper = objectMapper;
     }
 
@@ -203,25 +198,6 @@ public class ReportServiceImpl implements ReportService {
                 .orElse(null);
         }
 
-        List<PriceRecord> priceRecords = List.of();
-        if (Boolean.TRUE.equals(request.includePriceAnalysis())) {
-            LocalDate priceStart = LocalDate.of(startYear, 1, 1);
-            LocalDate priceEnd = LocalDate.of(endYear, 12, 31);
-            priceRecords = priceRecordRepository.findByRegionIdAndCropIdAndRecordDateBetweenOrderByRecordDateAsc(
-                region.getId(), crop.getId(), priceStart, priceEnd
-            );
-        }
-
-        Double averagePrice = priceRecords.stream()
-            .map(PriceRecord::getPrice)
-            .filter(Objects::nonNull)
-            .mapToDouble(Double::doubleValue)
-            .average()
-            .orElse(Double.NaN);
-        if (Double.isNaN(averagePrice)) {
-            averagePrice = null;
-        }
-
         String title = StringUtils.hasText(request.title())
             ? request.title().trim()
             : String.format(Locale.CHINA, "%s%s产量分析报告", region.getName(), crop.getName());
@@ -233,7 +209,7 @@ public class ReportServiceImpl implements ReportService {
             : String.format(Locale.CHINA, "%s%s %s 农情与市场研判", region.getName(), crop.getName(), coverage);
 
         List<String> highlights = buildHighlights(yieldStats, productionStats, yieldYoY, productionYoY, bestYieldRecord.orElse(null),
-            averagePrice, forecastResult, actualYieldForForecastYear);
+            forecastResult, actualYieldForForecastYear);
         String insights = highlights.isEmpty() ? null : String.join("；", highlights);
 
         Report report = new Report();
@@ -250,15 +226,10 @@ public class ReportServiceImpl implements ReportService {
         int order = 1;
         report.addSection(buildSection("OVERVIEW", "核心指标概览", "历史产量与关键指标一览",
             buildOverviewData(region, crop, startYear, endYear, filteredRecords, yieldStats, productionStats, sownAreaStats,
-                yieldYoY, productionYoY, averagePrice, highlights), order++));
+                yieldYoY, productionYoY, highlights), order++));
 
         report.addSection(buildSection("YIELD_TREND", "历年产量趋势", "按年度展示播种面积、总产量与单产变化",
             buildYieldTrendData(filteredRecords), order++));
-
-        if (!priceRecords.isEmpty()) {
-            report.addSection(buildSection("PRICE_TREND", "市场价格走势", "结合历史价格观察市场波动",
-                buildPriceTrendData(priceRecords, averagePrice), order++));
-        }
 
         if (forecastResult != null) {
             report.addSection(buildSection("FORECAST_COMPARISON", "预测结果对比", "对比预测与实际表现，评估模型效果",
@@ -368,7 +339,6 @@ public class ReportServiceImpl implements ReportService {
                                                   DoubleSummaryStatistics sownAreaStats,
                                                   Double yieldYoY,
                                                   Double productionYoY,
-                                                  Double averagePrice,
                                                   List<String> highlights) {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("region", region.getName());
@@ -395,9 +365,6 @@ public class ReportServiceImpl implements ReportService {
         if (productionYoY != null) {
             metrics.add(metric("总产同比", round(productionYoY, 2), "%"));
         }
-        if (averagePrice != null) {
-            metrics.add(metric("平均价格", round(averagePrice, 2), "元/吨"));
-        }
         data.put("metrics", metrics);
         data.put("highlights", highlights);
         return data;
@@ -420,27 +387,10 @@ public class ReportServiceImpl implements ReportService {
                 entry.put("yieldPerHectare", record.getYieldPerHectare());
                 entry.put("production", record.getProduction());
                 entry.put("sownArea", record.getSownArea());
-                entry.put("averagePrice", record.getAveragePrice());
                 return entry;
             })
             .toList();
         data.put("series", series);
-        return data;
-    }
-
-    private Map<String, Object> buildPriceTrendData(List<PriceRecord> priceRecords, Double averagePrice) {
-        Map<String, Object> data = new LinkedHashMap<>();
-        List<Map<String, Object>> series = priceRecords.stream()
-            .map(record -> {
-                Map<String, Object> entry = new LinkedHashMap<>();
-                entry.put("date", record.getRecordDate());
-                entry.put("price", record.getPrice());
-                return entry;
-            })
-            .toList();
-        data.put("series", series);
-        data.put("averagePrice", averagePrice);
-        data.put("unit", "元/吨");
         return data;
     }
 
@@ -474,7 +424,6 @@ public class ReportServiceImpl implements ReportService {
                                          Double yieldYoY,
                                          Double productionYoY,
                                          YieldRecord bestYieldRecord,
-                                         Double averagePrice,
                                          ForecastResult forecastResult,
                                          Double actualYieldForForecastYear) {
         List<String> highlights = new ArrayList<>();
@@ -492,9 +441,6 @@ public class ReportServiceImpl implements ReportService {
         }
         if (bestYieldRecord != null && bestYieldRecord.getYieldPerHectare() != null) {
             highlights.add(String.format(Locale.CHINA, "%d 年达到最高单产 %.2f 吨/公顷", bestYieldRecord.getYear(), bestYieldRecord.getYieldPerHectare()));
-        }
-        if (averagePrice != null) {
-            highlights.add(String.format(Locale.CHINA, "同期平均价格约 %.2f 元/吨", averagePrice));
         }
         if (forecastResult != null) {
             Double predictedYield = forecastResult.getPredictedYield();

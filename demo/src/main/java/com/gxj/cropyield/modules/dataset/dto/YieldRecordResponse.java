@@ -15,8 +15,6 @@ public record YieldRecordResponse(
         Double sownArea,
         Double production,
         Double yieldPerHectare,
-        Double averagePrice,
-        Double estimatedRevenue,
         String dataSource,
         LocalDate collectedAt
 ) {

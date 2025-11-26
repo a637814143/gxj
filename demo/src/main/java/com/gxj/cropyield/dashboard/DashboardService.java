@@ -159,7 +159,6 @@ public class DashboardService {
                         double sownArea = safe(snapshot.getSownArea());
                         double production = safe(snapshot.getPredictedProduction());
                         double yield = safe(snapshot.getPredictedYield());
-                        double revenue = safe(snapshot.getEstimatedRevenue());
                         return new RecentYieldRecord(
                                 run.getId(),
                                 run.getCrop().getName(),
@@ -168,8 +167,6 @@ public class DashboardService {
                                 round(sownArea),
                                 round(production),
                                 round(yield),
-                                snapshot.getAveragePrice(),
-                                round(revenue),
                                 collectedAt
                         );
                     })
