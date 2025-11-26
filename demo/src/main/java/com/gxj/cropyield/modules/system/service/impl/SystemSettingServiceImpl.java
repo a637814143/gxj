@@ -30,7 +30,7 @@ public class SystemSettingServiceImpl implements SystemSettingService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public SystemSettingResponse getCurrentSettings() {
         SystemSetting setting = systemSettingRepository.findTopByOrderByIdAsc()
             .orElseGet(this::createDefaultSetting);
