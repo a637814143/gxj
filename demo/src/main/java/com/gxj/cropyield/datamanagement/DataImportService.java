@@ -1563,9 +1563,9 @@ public class DataImportService {
         mapping.put("regionParentName", List.of("parentregion", "parentname", "上级地区", "上级行政区", "所属地区"));
         mapping.put("regionDescription", List.of("regiondescription", "地区描述", "地区说明"));
         mapping.put("year", List.of("year", "年份", "统计年份", "年度"));
-        mapping.put("sownArea", List.of("sownarea", "播种面积", "播种总面积", "面积", "耕地面积"));
-        mapping.put("production", List.of("production", "产量", "总产量", "产出", "年度产量"));
-        mapping.put("yieldPerHectare", List.of("yield", "yieldperhectare", "单产", "产量/面积", "平均单产"));
+        mapping.put("sownArea", List.of("sownarea", "播种面积", "播种总面积", "面积", "耕地面积", "播种面积千公顷"));
+        mapping.put("production", List.of("production", "产量", "总产量", "产出", "年度产量", "产量万吨"));
+        mapping.put("yieldPerHectare", List.of("yield", "yieldperhectare", "单产", "产量/面积", "平均单产", "单产吨公顷"));
         mapping.put("dataSource", List.of("datasource", "数据来源", "来源", "采集来源"));
         mapping.put("collectedAt", List.of("collectedat", "采集日期", "收集日期", "统计日期"));
         mapping.put("recordDate", List.of("recorddate", "date", "日期", "观测日期", "记录日期"));
