@@ -730,10 +730,6 @@ public class DataImportService {
         if (Boolean.TRUE.equals(exists)) {
             return;
         }
-        if (exists == null) {
-            log.warn("无法确认 dataset_yield_record 表是否存在，跳过自动创建");
-            return;
-        }
         String ddl = """
                 CREATE TABLE IF NOT EXISTS dataset_yield_record (
                     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -756,7 +752,11 @@ public class DataImportService {
                 """;
         try {
             jdbcTemplate.execute(ddl);
-            log.warn("检测到缺失的 dataset_yield_record 表，已自动创建");
+            if (Boolean.FALSE.equals(exists)) {
+                log.warn("检测到缺失的 dataset_yield_record 表，已自动创建");
+            } else {
+                log.warn("无法确认 dataset_yield_record 表是否存在，已尝试自动创建");
+            }
         } catch (DataAccessException exception) {
             log.warn("自动创建 dataset_yield_record 表失败，将按现有表结构继续导入：{}", exception.getMessage());
         }
@@ -765,10 +765,6 @@ public class DataImportService {
     private void ensureWeatherTableExists() {
         Boolean exists = tableExists("dataset_weather_record");
         if (Boolean.TRUE.equals(exists)) {
-            return;
-        }
-        if (exists == null) {
-            log.warn("无法确认 dataset_weather_record 表是否存在，跳过自动创建");
             return;
         }
         String ddl = """
@@ -792,7 +788,11 @@ public class DataImportService {
                 """;
         try {
             jdbcTemplate.execute(ddl);
-            log.warn("检测到缺失的 dataset_weather_record 表，已自动创建");
+            if (Boolean.FALSE.equals(exists)) {
+                log.warn("检测到缺失的 dataset_weather_record 表，已自动创建");
+            } else {
+                log.warn("无法确认 dataset_weather_record 表是否存在，已尝试自动创建");
+            }
         } catch (DataAccessException exception) {
             log.warn("自动创建 dataset_weather_record 表失败，将按现有表结构继续导入：{}", exception.getMessage());
         }
