@@ -8,6 +8,8 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.NotFound;
+import org.hibernate.annotations.NotFoundAction;
 /**
  * 系统设置模块的实体类，映射系统设置领域对应的数据表结构。
  */
@@ -17,6 +19,7 @@ import jakarta.persistence.Table;
 public class SystemSetting extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @NotFound(action = NotFoundAction.IGNORE)
     @JoinColumn(name = "default_region_id")
     private Region defaultRegion;
 
