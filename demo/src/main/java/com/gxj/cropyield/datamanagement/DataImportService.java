@@ -368,6 +368,14 @@ public class DataImportService {
                 updated = result.updated();
             } catch (RuntimeException ex) {
                 String rootCause = findRootCauseMessage(ex);
+                if (isTableMissing(rootCause, "dataset_yield_record")) {
+                    log.warn("产量表不存在或不可用，尝试自动创建后重试：{}", rootCause);
+                    ensureYieldTableExists();
+                    UpsertResult retry = upsertYieldRecords(validRecords, datasetFileId, datasetFileEnabled);
+                    inserted = retry.inserted();
+                    updated = retry.updated();
+                    rootCause = null;
+                }
                 if (datasetFileEnabled) {
                     log.warn("写入含 dataset_file_id 的批次失败，尝试退回旧表结构：{}", rootCause);
                     datasetFileEnabled = false;
@@ -677,11 +685,19 @@ public class DataImportService {
         if (yieldDatasetFileReady != null) {
             return yieldDatasetFileReady;
         }
-        // 部署环境频繁出现 dataset_file 相关的表结构/权限问题，导致导入任务直接失败。
-        // 这里直接禁用 dataset_file 关联，强制走旧表结构的导入流程，确保导入不中断。
-        yieldDatasetFileReady = false;
-        log.warn("dataset_file 集成功能已临时禁用，产量导入将使用旧表结构");
-        return false;
+        try {
+            boolean datasetFileExists = Boolean.TRUE.equals(tableExists("dataset_file"));
+            boolean yieldHasColumn = checkDatasetFileSchema("dataset_yield_record");
+            yieldDatasetFileReady = datasetFileExists && yieldHasColumn;
+            if (!yieldDatasetFileReady) {
+                log.warn("dataset_file 集成未就绪（table:{} column:{}），产量导入将使用旧表结构", datasetFileExists, yieldHasColumn);
+            }
+            return yieldDatasetFileReady;
+        } catch (Exception ex) {
+            log.warn("检测 dataset_file 集成状态失败，暂时禁用：{}", ex.getMessage());
+            yieldDatasetFileReady = false;
+            return false;
+        }
     }
 
     private boolean isDatasetFileReadyForWeather() {
@@ -714,6 +730,16 @@ public class DataImportService {
         }
         String lower = rootCause.toLowerCase(Locale.ROOT);
         return lower.contains("dataset_file_id") || lower.contains("dataset file id");
+    }
+
+    private boolean isTableMissing(String rootCause, String tableName) {
+        if (rootCause == null) {
+            return false;
+        }
+        String lower = rootCause.toLowerCase(Locale.ROOT);
+        return lower.contains("table '" + tableName.toLowerCase(Locale.ROOT) + "'")
+                || lower.contains("table " + tableName.toLowerCase(Locale.ROOT) + " doesn't exist")
+                || lower.contains("doesn't exist: " + tableName.toLowerCase(Locale.ROOT));
     }
 
     private DatasetFile safeEnsureDatasetFile(DataImportJob job) {
