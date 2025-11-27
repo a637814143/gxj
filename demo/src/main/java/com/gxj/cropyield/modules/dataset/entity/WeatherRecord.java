@@ -24,6 +24,7 @@ public class WeatherRecord extends BaseEntity {
     private DatasetFile datasetFile;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @NotFound(action = NotFoundAction.IGNORE)
     @JoinColumn(name = "region_id", nullable = false)
     private Region region;
 

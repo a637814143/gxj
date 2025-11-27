@@ -31,6 +31,8 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -83,6 +85,8 @@ import java.util.stream.Collectors;
 @Service
 public class DataImportService {
 
+    private static final Logger log = LoggerFactory.getLogger(DataImportService.class);
+
     private static final int MIN_YEAR = 1978;
     private static final int PREVIEW_LIMIT = 10;
     private static final int MAX_WARNING_STORE = 50;
@@ -132,6 +136,9 @@ public class DataImportService {
     private final DataImportJobRepository jobRepository;
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+
+    private Boolean yieldDatasetFileReady;
+    private Boolean weatherDatasetFileReady;
 
     public DataImportService(CropRepository cropRepository,
                              RegionRepository regionRepository,
@@ -234,8 +241,8 @@ public class DataImportService {
         DataImportJob job = jobRepository.findById(jobId)
                 .orElseThrow(() -> new IllegalArgumentException("未找到导入任务"));
         job.setStatus(DataImportJobStatus.RUNNING);
+        job.setMessage("正在解析导入文件，将写入表 " + resolveTargetTable(job.getDatasetType()));
         job.setStartedAt(LocalDateTime.now());
-        job.setMessage("正在解析导入文件");
         jobRepository.save(job);
 
         try {
@@ -274,7 +281,10 @@ public class DataImportService {
         } catch (Exception exception) {
             job.setStatus(DataImportJobStatus.FAILED);
             job.setFinishedAt(LocalDateTime.now());
-            job.setMessage("导入失败：" + exception.getMessage());
+            String rootCause = findRootCauseMessage(exception);
+            job.setMessage("导入失败：" + rootCause);
+            log.error("Import job {} failed while processing file {}: {}", job.getTaskId(), job.getOriginalFilename(), rootCause,
+                    exception);
             jobRepository.save(job);
         }
     }
@@ -328,25 +338,87 @@ public class DataImportService {
         }
 
         DatasetFile datasetFile = null;
+        Long datasetFileId = null;
+        boolean datasetFileEnabled = isDatasetFileReadyForYield();
         int inserted = 0;
         int updated = 0;
         if (!validRecords.isEmpty()) {
-            datasetFile = ensureDatasetFile(job);
-            if (datasetFile != null) {
-                job.setDatasetFileId(datasetFile.getId());
+            if (datasetFileEnabled) {
+                try {
+                    datasetFile = ensureDatasetFile(job);
+                    if (datasetFile != null) {
+                        datasetFileId = datasetFile.getId();
+                        job.setDatasetFileId(datasetFileId);
+                    }
+                } catch (Exception ex) {
+                    log.warn("dataset_file 相关表结构或数据问题，继续导入但不记录原始文件: {}", ex.getMessage());
+                    datasetFileEnabled = false;
+                    yieldDatasetFileReady = false;
+                    datasetFile = null;
+                    datasetFileId = null;
+                }
             }
             job.setMessage("正在批量写入数据库");
             jobRepository.save(job);
-            UpsertResult result = upsertYieldRecords(validRecords, datasetFile);
-            inserted = result.inserted();
-            updated = result.updated();
+            try {
+                UpsertResult result = upsertYieldRecords(validRecords, datasetFileId, datasetFileEnabled);
+                inserted = result.inserted();
+                updated = result.updated();
+            } catch (RuntimeException ex) {
+                String rootCause = findRootCauseMessage(ex);
+                if (datasetFileEnabled) {
+                    log.warn("写入含 dataset_file_id 的批次失败，尝试退回旧表结构：{}", rootCause);
+                    datasetFileEnabled = false;
+                    yieldDatasetFileReady = false;
+                    datasetFileId = null;
+                    job.setDatasetFileId(null);
+                    try {
+                        UpsertResult fallback = upsertYieldRecords(validRecords, null, false);
+                        inserted = fallback.inserted();
+                        updated = fallback.updated();
+                    } catch (RuntimeException fallbackEx) {
+                        String fallbackCause = findRootCauseMessage(fallbackEx);
+                        if (shouldRetryWithDatasetFile(fallbackCause)) {
+                            log.warn("退回旧表结构仍失败，改为携带 dataset_file_id 重试：{}", fallbackCause);
+                            datasetFileEnabled = true;
+                            yieldDatasetFileReady = true;
+                            datasetFile = safeEnsureDatasetFile(job);
+                            datasetFileId = datasetFile != null ? datasetFile.getId() : null;
+                            if (datasetFileId == null) {
+                                throw fallbackEx;
+                            }
+                            job.setDatasetFileId(datasetFileId);
+                            UpsertResult retry = upsertYieldRecords(validRecords, datasetFileId, true);
+                            inserted = retry.inserted();
+                            updated = retry.updated();
+                        } else {
+                            throw fallbackEx;
+                        }
+                    }
+                } else if (shouldRetryWithDatasetFile(rootCause)) {
+                    log.warn("旧表结构批次写入失败，改为携带 dataset_file_id 重试：{}", rootCause);
+                    datasetFileEnabled = true;
+                    yieldDatasetFileReady = true;
+                    datasetFile = safeEnsureDatasetFile(job);
+                    datasetFileId = datasetFile != null ? datasetFile.getId() : null;
+                    if (datasetFileId == null) {
+                        throw ex;
+                    }
+                    job.setDatasetFileId(datasetFileId);
+                    UpsertResult retry = upsertYieldRecords(validRecords, datasetFileId, true);
+                    inserted = retry.inserted();
+                    updated = retry.updated();
+                } else {
+                    throw ex;
+                }
+            }
         }
 
         int processed = inserted + updated;
         int failedRows = failedCounter.get();
         int skippedRows = Math.max(job.getTotalRows() - processed - failedRows, 0);
 
-        return new ImportResult(inserted, updated, failedRows, skippedRows, warnings, errorEntities, new ArrayList<>(preview), datasetFile);
+        return new ImportResult(inserted, updated, failedRows, skippedRows, warnings, errorEntities, new ArrayList<>(preview), datasetFileEnabled ? datasetFile : null);
     }
 
     private ImportResult processWeatherRecords(DataImportJob job, List<ParsedRecord> parsedRecords) {
@@ -370,60 +442,144 @@ public class DataImportService {
         }
 
         DatasetFile datasetFile = null;
+        Long datasetFileId = null;
+        boolean datasetFileEnabled = isDatasetFileReadyForWeather();
         int inserted = 0;
         int updated = 0;
         if (!validRecords.isEmpty()) {
-            datasetFile = ensureDatasetFile(job);
-            if (datasetFile != null) {
-                job.setDatasetFileId(datasetFile.getId());
+            if (datasetFileEnabled) {
+                try {
+                    datasetFile = ensureDatasetFile(job);
+                    if (datasetFile != null) {
+                        datasetFileId = datasetFile.getId();
+                        job.setDatasetFileId(datasetFileId);
+                    }
+                } catch (Exception ex) {
+                    log.warn("dataset_file 相关表结构或数据问题，继续导入但不记录原始文件: {}", ex.getMessage());
+                    datasetFileEnabled = false;
+                    weatherDatasetFileReady = false;
+                    datasetFile = null;
+                    datasetFileId = null;
+                }
             }
             job.setMessage("正在批量写入数据库");
             jobRepository.save(job);
-            UpsertResult result = upsertWeatherRecords(validRecords, datasetFile);
-            inserted = result.inserted();
-            updated = result.updated();
+            try {
+                UpsertResult result = upsertWeatherRecords(validRecords, datasetFileId, datasetFileEnabled);
+                inserted = result.inserted();
+                updated = result.updated();
+            } catch (RuntimeException ex) {
+                String rootCause = findRootCauseMessage(ex);
+                if (datasetFileEnabled) {
+                    log.warn("写入含 dataset_file_id 的气象批次失败，尝试退回旧表结构：{}", rootCause);
+                    datasetFileEnabled = false;
+                    weatherDatasetFileReady = false;
+                    datasetFileId = null;
+                    job.setDatasetFileId(null);
+                    try {
+                        UpsertResult fallback = upsertWeatherRecords(validRecords, null, false);
+                        inserted = fallback.inserted();
+                        updated = fallback.updated();
+                    } catch (RuntimeException fallbackEx) {
+                        String fallbackCause = findRootCauseMessage(fallbackEx);
+                        if (shouldRetryWithDatasetFile(fallbackCause)) {
+                            log.warn("退回旧表结构仍失败，改为携带 dataset_file_id 重试：{}", fallbackCause);
+                            datasetFileEnabled = true;
+                            weatherDatasetFileReady = true;
+                            datasetFile = safeEnsureDatasetFile(job);
+                            datasetFileId = datasetFile != null ? datasetFile.getId() : null;
+                            if (datasetFileId == null) {
+                                throw fallbackEx;
+                            }
+                            job.setDatasetFileId(datasetFileId);
+                            UpsertResult retry = upsertWeatherRecords(validRecords, datasetFileId, true);
+                            inserted = retry.inserted();
+                            updated = retry.updated();
+                        } else {
+                            throw fallbackEx;
+                        }
+                    }
+                } else if (shouldRetryWithDatasetFile(rootCause)) {
+                    log.warn("旧表结构气象批次写入失败，改为携带 dataset_file_id 重试：{}", rootCause);
+                    datasetFileEnabled = true;
+                    weatherDatasetFileReady = true;
+                    datasetFile = safeEnsureDatasetFile(job);
+                    datasetFileId = datasetFile != null ? datasetFile.getId() : null;
+                    if (datasetFileId == null) {
+                        throw ex;
+                    }
+                    job.setDatasetFileId(datasetFileId);
+                    UpsertResult retry = upsertWeatherRecords(validRecords, datasetFileId, true);
+                    inserted = retry.inserted();
+                    updated = retry.updated();
+                } else {
+                    throw ex;
+                }
+            }
         }
 
         int processed = inserted + updated;
         int failedRows = failedCounter.get();
         int skippedRows = Math.max(job.getTotalRows() - processed - failedRows, 0);
 
-        return new ImportResult(inserted, updated, failedRows, skippedRows, warnings, errorEntities, new ArrayList<>(preview), datasetFile);
+        return new ImportResult(inserted, updated, failedRows, skippedRows, warnings, errorEntities, new ArrayList<>(preview), datasetFileEnabled ? datasetFile : null);
     }
 
-    private UpsertResult upsertYieldRecords(List<ValidRecord> records, DatasetFile datasetFile) {
+    private UpsertResult upsertYieldRecords(List<ValidRecord> records, Long datasetFileId, boolean datasetFileEnabled) {
         int batchSize = 500;
         int inserted = 0;
         int updated = 0;
         for (int i = 0; i < records.size(); i += batchSize) {
             List<ValidRecord> batch = records.subList(i, Math.min(i + batchSize, records.size()));
             Set<YieldRowKey> existing = fetchExistingYieldKeys(batch);
-            String sql = """
-                    INSERT INTO dataset_yield_record (dataset_file_id, crop_id, region_id, year, sown_area, production, yield_per_hectare, data_source, collected_at, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-                    ON DUPLICATE KEY UPDATE
-                        dataset_file_id = VALUES(dataset_file_id),
-                        sown_area = VALUES(sown_area),
-                        production = VALUES(production),
-                        yield_per_hectare = VALUES(yield_per_hectare),
-                        data_source = VALUES(data_source),
-                        collected_at = VALUES(collected_at),
-                        updated_at = NOW()
-                    """;
+            String sql;
+            if (datasetFileEnabled) {
+                sql = """
+                        INSERT INTO dataset_yield_record (dataset_file_id, crop_id, region_id, year, sown_area, production, yield_per_hectare, data_source, collected_at, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+                        ON DUPLICATE KEY UPDATE
+                            dataset_file_id = VALUES(dataset_file_id),
+                            sown_area = VALUES(sown_area),
+                            production = VALUES(production),
+                            yield_per_hectare = VALUES(yield_per_hectare),
+                            data_source = VALUES(data_source),
+                            collected_at = VALUES(collected_at),
+                            updated_at = NOW()
+                        """;
+            } else {
+                sql = """
+                        INSERT INTO dataset_yield_record (crop_id, region_id, year, sown_area, production, yield_per_hectare, data_source, collected_at, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+                        ON DUPLICATE KEY UPDATE
+                            sown_area = VALUES(sown_area),
+                            production = VALUES(production),
+                            yield_per_hectare = VALUES(yield_per_hectare),
+                            data_source = VALUES(data_source),
+                            collected_at = VALUES(collected_at),
+                            updated_at = NOW()
+                        """;
+            }
             try {
                 jdbcTemplate.batchUpdate(sql, batch, batch.size(), (preparedStatement, record) -> {
-                    preparedStatement.setLong(1, datasetFile.getId());
-                    preparedStatement.setLong(2, record.crop().getId());
-                    preparedStatement.setLong(3, record.region().getId());
-                    preparedStatement.setInt(4, record.year());
-                    setNullableDouble(preparedStatement, 5, record.sownArea());
-                    setNullableDouble(preparedStatement, 6, record.production());
-                    setNullableDouble(preparedStatement, 7, record.yieldPerHectare());
-                    preparedStatement.setString(8, record.dataSource());
+                    int index = 1;
+                    if (datasetFileEnabled) {
+                        if (datasetFileId != null) {
+                            preparedStatement.setLong(index++, datasetFileId);
+                        } else {
+                            preparedStatement.setObject(index++, null);
+                        }
+                    }
+                    preparedStatement.setLong(index++, record.crop().getId());
+                    preparedStatement.setLong(index++, record.region().getId());
+                    preparedStatement.setInt(index++, record.year());
+                    setNullableDouble(preparedStatement, index++, record.sownArea());
+                    setNullableDouble(preparedStatement, index++, record.production());
+                    setNullableDouble(preparedStatement, index++, record.yieldPerHectare());
+                    preparedStatement.setString(index++, record.dataSource());
                     if (record.collectedAt() != null) {
-                        preparedStatement.setObject(9, java.sql.Date.valueOf(record.collectedAt()));
+                        preparedStatement.setObject(index, java.sql.Date.valueOf(record.collectedAt()));
                     } else {
-                        preparedStatement.setObject(9, null);
+                        preparedStatement.setObject(index, null);
                     }
                 });
             } catch (DataAccessException exception) {
@@ -442,41 +598,60 @@ public class DataImportService {
         return new UpsertResult(inserted, updated);
     }
 
-    private UpsertResult upsertWeatherRecords(List<ValidWeatherRecord> records, DatasetFile datasetFile) {
+    private UpsertResult upsertWeatherRecords(List<ValidWeatherRecord> records, Long datasetFileId, boolean datasetFileEnabled) {
         int batchSize = 500;
         int inserted = 0;
         int updated = 0;
         for (int i = 0; i < records.size(); i += batchSize) {
             List<ValidWeatherRecord> batch = records.subList(i, Math.min(i + batchSize, records.size()));
             Set<WeatherRowKey> existing = fetchExistingWeatherKeys(batch);
-            String sql = """
-                    INSERT INTO dataset_weather_record (dataset_file_id, region_id, record_date, max_temperature, min_temperature, weather_text, wind, sunshine_hours, data_source, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-                    ON DUPLICATE KEY UPDATE
-                        dataset_file_id = VALUES(dataset_file_id),
-                        max_temperature = VALUES(max_temperature),
-                        min_temperature = VALUES(min_temperature),
-                        weather_text = VALUES(weather_text),
-                        wind = VALUES(wind),
-                        sunshine_hours = VALUES(sunshine_hours),
-                        data_source = VALUES(data_source),
-                        updated_at = NOW()
-                    """;
+            String sql;
+            if (datasetFileEnabled) {
+                sql = """
+                        INSERT INTO dataset_weather_record (dataset_file_id, region_id, record_date, max_temperature, min_temperature, weather_text, wind, sunshine_hours, data_source, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+                        ON DUPLICATE KEY UPDATE
+                            dataset_file_id = VALUES(dataset_file_id),
+                            max_temperature = VALUES(max_temperature),
+                            min_temperature = VALUES(min_temperature),
+                            weather_text = VALUES(weather_text),
+                            wind = VALUES(wind),
+                            sunshine_hours = VALUES(sunshine_hours),
+                            data_source = VALUES(data_source),
+                            updated_at = NOW()
+                        """;
+            } else {
+                sql = """
+                        INSERT INTO dataset_weather_record (region_id, record_date, max_temperature, min_temperature, weather_text, wind, sunshine_hours, data_source, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+                        ON DUPLICATE KEY UPDATE
+                            max_temperature = VALUES(max_temperature),
+                            min_temperature = VALUES(min_temperature),
+                            weather_text = VALUES(weather_text),
+                            wind = VALUES(wind),
+                            sunshine_hours = VALUES(sunshine_hours),
+                            data_source = VALUES(data_source),
+                            updated_at = NOW()
+                        """;
+            }
             try {
                 jdbcTemplate.batchUpdate(sql, batch, batch.size(), (preparedStatement, record) -> {
-                    if (datasetFile != null) {
-                        preparedStatement.setLong(1, datasetFile.getId());
-                    } else {
-                        preparedStatement.setObject(1, null);
+                    int index = 1;
+                    if (datasetFileEnabled) {
+                        if (datasetFileId != null) {
+                            preparedStatement.setLong(index++, datasetFileId);
+                        } else {
+                            preparedStatement.setObject(index++, null);
+                        }
                     }
-                    preparedStatement.setLong(2, record.region().getId());
-                    preparedStatement.setObject(3, java.sql.Date.valueOf(record.recordDate()));
-                    setNullableDouble(preparedStatement, 4, record.maxTemperature());
-                    setNullableDouble(preparedStatement, 5, record.minTemperature());
-                    preparedStatement.setString(6, record.weatherText());
-                    preparedStatement.setString(7, record.wind());
-                    setNullableDouble(preparedStatement, 8, record.sunshineHours());
-                    preparedStatement.setString(9, record.dataSource());
+                    preparedStatement.setLong(index++, record.region().getId());
+                    preparedStatement.setObject(index++, java.sql.Date.valueOf(record.recordDate()));
+                    setNullableDouble(preparedStatement, index++, record.maxTemperature());
+                    setNullableDouble(preparedStatement, index++, record.minTemperature());
+                    preparedStatement.setString(index++, record.weatherText());
+                    preparedStatement.setString(index++, record.wind());
+                    setNullableDouble(preparedStatement, index++, record.sunshineHours());
+                    preparedStatement.setString(index, record.dataSource());
                 });
             } catch (DataAccessException exception) {
                 throw new IllegalStateException("写入数据库失败", exception);
@@ -492,6 +667,58 @@ public class DataImportService {
             }
         }
         return new UpsertResult(inserted, updated);
+    }
+
+    private boolean isDatasetFileReadyForYield() {
+        if (yieldDatasetFileReady != null) {
+            return yieldDatasetFileReady;
+        }
+        // 部署环境频繁出现 dataset_file 相关的表结构/权限问题，导致导入任务直接失败。
+        // 这里直接禁用 dataset_file 关联，强制走旧表结构的导入流程，确保导入不中断。
+        yieldDatasetFileReady = false;
+        log.warn("dataset_file 集成功能已临时禁用，产量导入将使用旧表结构");
+        return false;
+    }
+
+    private boolean isDatasetFileReadyForWeather() {
+        if (weatherDatasetFileReady != null) {
+            return weatherDatasetFileReady;
+        }
+        // 同理，禁用 dataset_file 集成以避免气象导入被数据库兼容性问题阻断。
+        weatherDatasetFileReady = false;
+        log.warn("dataset_file 集成功能已临时禁用，气象导入将使用旧表结构");
+        return false;
+    }
+
+    private boolean checkDatasetFileSchema(String tableName) {
+        try {
+            Integer columnExists = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = 'dataset_file_id'",
+                    Integer.class,
+                    tableName
+            );
+            return columnExists != null && columnExists > 0;
+        } catch (DataAccessException ex) {
+            log.warn("检查 {} 的 dataset_file 关联字段失败: {}", tableName, ex.getMessage());
+            return false;
+        }
+    }
+
+    private boolean shouldRetryWithDatasetFile(String rootCause) {
+        if (rootCause == null) {
+            return false;
+        }
+        String lower = rootCause.toLowerCase(Locale.ROOT);
+        return lower.contains("dataset_file_id") || lower.contains("dataset file id");
+    }
+
+    private DatasetFile safeEnsureDatasetFile(DataImportJob job) {
+        try {
+            return ensureDatasetFile(job);
+        } catch (Exception ex) {
+            log.warn("创建或获取 dataset_file 记录失败，重试仍走旧表结构：{}", ex.getMessage());
+            return null;
+        }
     }
 
     private Set<YieldRowKey> fetchExistingYieldKeys(List<ValidRecord> batch) {
@@ -1200,6 +1427,7 @@ public class DataImportService {
                 builder.append("。失败原因Top：").append(top);
             }
         }
+        builder.append("。目标表：").append(resolveTargetTable(job.getDatasetType()));
         return builder.toString();
     }
 
@@ -1211,6 +1439,10 @@ public class DataImportService {
                 Optional.ofNullable(job.getUpdatedRows()).orElse(0),
                 Optional.ofNullable(job.getDatasetDescription()).orElse("来自导入中心")
         );
+    }
+
+    private String resolveTargetTable(DatasetType datasetType) {
+        return datasetType == DatasetType.WEATHER ? "dataset_weather_record" : "dataset_yield_record";
     }
 
     private Path persistFile(Path root, String datasetName, MultipartFile file) {
@@ -1563,9 +1795,9 @@ public class DataImportService {
         mapping.put("regionParentName", List.of("parentregion", "parentname", "上级地区", "上级行政区", "所属地区"));
         mapping.put("regionDescription", List.of("regiondescription", "地区描述", "地区说明"));
         mapping.put("year", List.of("year", "年份", "统计年份", "年度"));
-        mapping.put("sownArea", List.of("sownarea", "播种面积", "播种总面积", "面积", "耕地面积"));
-        mapping.put("production", List.of("production", "产量", "总产量", "产出", "年度产量"));
-        mapping.put("yieldPerHectare", List.of("yield", "yieldperhectare", "单产", "产量/面积", "平均单产"));
+        mapping.put("sownArea", List.of("sownarea", "播种面积", "播种总面积", "面积", "耕地面积", "播种面积千公顷"));
+        mapping.put("production", List.of("production", "产量", "总产量", "产出", "年度产量", "产量万吨"));
+        mapping.put("yieldPerHectare", List.of("yield", "yieldperhectare", "单产", "产量/面积", "平均单产", "单产吨公顷"));
         mapping.put("dataSource", List.of("datasource", "数据来源", "来源", "采集来源"));
         mapping.put("collectedAt", List.of("collectedat", "采集日期", "收集日期", "统计日期"));
         mapping.put("recordDate", List.of("recorddate", "date", "日期", "观测日期", "记录日期"));
@@ -1588,6 +1820,21 @@ public class DataImportService {
         } else {
             statement.setDouble(index, value);
         }
+    }
+
+    private String findRootCauseMessage(Throwable throwable) {
+        if (throwable == null) {
+            return "未知错误";
+        }
+        Throwable root = throwable;
+        while (root.getCause() != null && root.getCause() != root) {
+            root = root.getCause();
+        }
+        String message = root.getMessage();
+        if (message == null || message.isBlank()) {
+            return root.getClass().getSimpleName();
+        }
+        return message;
     }
 
     private record ParsedRecord(int rowNumber, Map<String, String> values, Map<String, Function<Double, Double>> converters) {

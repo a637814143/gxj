@@ -9,6 +9,7 @@ import com.gxj.cropyield.modules.system.dto.SystemSettingResponse;
 import com.gxj.cropyield.modules.system.entity.SystemSetting;
 import com.gxj.cropyield.modules.system.repository.SystemSettingRepository;
 import com.gxj.cropyield.modules.system.service.SystemSettingService;
+import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -30,7 +31,7 @@ public class SystemSettingServiceImpl implements SystemSettingService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public SystemSettingResponse getCurrentSettings() {
         SystemSetting setting = systemSettingRepository.findTopByOrderByIdAsc()
             .orElseGet(this::createDefaultSetting);
@@ -70,7 +71,7 @@ public class SystemSettingServiceImpl implements SystemSettingService {
     }
 
     private SystemSettingResponse toResponse(SystemSetting setting) {
-        Region defaultRegion = setting.getDefaultRegion();
+        Region defaultRegion = resolveDefaultRegion(setting);
         return new SystemSettingResponse(
             setting.getId(),
             defaultRegion != null ? defaultRegion.getId() : null,
@@ -85,5 +86,20 @@ public class SystemSettingServiceImpl implements SystemSettingService {
 
     private String normalizeNullable(String value) {
         return StringUtils.hasText(value) ? value.trim() : null;
+    }
+
+    private Region resolveDefaultRegion(SystemSetting setting) {
+        Region region = setting.getDefaultRegion();
+        if (region == null) {
+            return null;
+        }
+        try {
+            region.getName();
+            return region;
+        } catch (EntityNotFoundException ex) {
+            setting.setDefaultRegion(null);
+            systemSettingRepository.save(setting);
+            return null;
+        }
     }
 }
