@@ -372,9 +372,29 @@ public class DataImportService {
                     yieldDatasetFileReady = false;
                     datasetFileId = null;
                     job.setDatasetFileId(null);
-                    UpsertResult fallback = upsertYieldRecords(validRecords, null, false);
-                    inserted = fallback.inserted();
-                    updated = fallback.updated();
+                    try {
+                        UpsertResult fallback = upsertYieldRecords(validRecords, null, false);
+                        inserted = fallback.inserted();
+                        updated = fallback.updated();
+                    } catch (RuntimeException fallbackEx) {
+                        String fallbackCause = findRootCauseMessage(fallbackEx);
+                        if (shouldRetryWithDatasetFile(fallbackCause)) {
+                            log.warn("退回旧表结构仍失败，改为携带 dataset_file_id 重试：{}", fallbackCause);
+                            datasetFileEnabled = true;
+                            yieldDatasetFileReady = true;
+                            datasetFile = safeEnsureDatasetFile(job);
+                            datasetFileId = datasetFile != null ? datasetFile.getId() : null;
+                            if (datasetFileId == null) {
+                                throw fallbackEx;
+                            }
+                            job.setDatasetFileId(datasetFileId);
+                            UpsertResult retry = upsertYieldRecords(validRecords, datasetFileId, true);
+                            inserted = retry.inserted();
+                            updated = retry.updated();
+                        } else {
+                            throw fallbackEx;
+                        }
+                    }
                 } else if (shouldRetryWithDatasetFile(rootCause)) {
                     log.warn("旧表结构批次写入失败，改为携带 dataset_file_id 重试：{}", rootCause);
                     datasetFileEnabled = true;
@@ -456,9 +476,29 @@ public class DataImportService {
                     weatherDatasetFileReady = false;
                     datasetFileId = null;
                     job.setDatasetFileId(null);
-                    UpsertResult fallback = upsertWeatherRecords(validRecords, null, false);
-                    inserted = fallback.inserted();
-                    updated = fallback.updated();
+                    try {
+                        UpsertResult fallback = upsertWeatherRecords(validRecords, null, false);
+                        inserted = fallback.inserted();
+                        updated = fallback.updated();
+                    } catch (RuntimeException fallbackEx) {
+                        String fallbackCause = findRootCauseMessage(fallbackEx);
+                        if (shouldRetryWithDatasetFile(fallbackCause)) {
+                            log.warn("退回旧表结构仍失败，改为携带 dataset_file_id 重试：{}", fallbackCause);
+                            datasetFileEnabled = true;
+                            weatherDatasetFileReady = true;
+                            datasetFile = safeEnsureDatasetFile(job);
+                            datasetFileId = datasetFile != null ? datasetFile.getId() : null;
+                            if (datasetFileId == null) {
+                                throw fallbackEx;
+                            }
+                            job.setDatasetFileId(datasetFileId);
+                            UpsertResult retry = upsertWeatherRecords(validRecords, datasetFileId, true);
+                            inserted = retry.inserted();
+                            updated = retry.updated();
+                        } else {
+                            throw fallbackEx;
+                        }
+                    }
                 } else if (shouldRetryWithDatasetFile(rootCause)) {
                     log.warn("旧表结构气象批次写入失败，改为携带 dataset_file_id 重试：{}", rootCause);
                     datasetFileEnabled = true;
