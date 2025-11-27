@@ -137,6 +137,9 @@ public class DataImportService {
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
 
+    private Boolean yieldDatasetFileReady;
+    private Boolean weatherDatasetFileReady;
+
     public DataImportService(CropRepository cropRepository,
                              RegionRepository regionRepository,
                              DatasetFileRepository datasetFileRepository,
@@ -335,16 +338,28 @@ public class DataImportService {
         }
 
         DatasetFile datasetFile = null;
+        Long datasetFileId = null;
+        boolean datasetFileEnabled = isDatasetFileReadyForYield();
         int inserted = 0;
         int updated = 0;
         if (!validRecords.isEmpty()) {
-            datasetFile = ensureDatasetFile(job);
-            if (datasetFile != null) {
-                job.setDatasetFileId(datasetFile.getId());
+            if (datasetFileEnabled) {
+                try {
+                    datasetFile = ensureDatasetFile(job);
+                    if (datasetFile != null) {
+                        datasetFileId = datasetFile.getId();
+                        job.setDatasetFileId(datasetFileId);
+                    }
+                } catch (DataAccessException ex) {
+                    log.warn("dataset_file 相关表结构不可用，继续导入但不记录原始文件: {}", ex.getMessage());
+                    datasetFileEnabled = false;
+                    datasetFile = null;
+                    datasetFileId = null;
+                }
             }
             job.setMessage("正在批量写入数据库");
             jobRepository.save(job);
-            UpsertResult result = upsertYieldRecords(validRecords, datasetFile);
+            UpsertResult result = upsertYieldRecords(validRecords, datasetFileId, datasetFileEnabled);
             inserted = result.inserted();
             updated = result.updated();
         }
@@ -353,7 +368,7 @@ public class DataImportService {
         int failedRows = failedCounter.get();
         int skippedRows = Math.max(job.getTotalRows() - processed - failedRows, 0);
 
-        return new ImportResult(inserted, updated, failedRows, skippedRows, warnings, errorEntities, new ArrayList<>(preview), datasetFile);
+        return new ImportResult(inserted, updated, failedRows, skippedRows, warnings, errorEntities, new ArrayList<>(preview), datasetFileEnabled ? datasetFile : null);
     }
 
     private ImportResult processWeatherRecords(DataImportJob job, List<ParsedRecord> parsedRecords) {
@@ -377,16 +392,28 @@ public class DataImportService {
         }
 
         DatasetFile datasetFile = null;
+        Long datasetFileId = null;
+        boolean datasetFileEnabled = isDatasetFileReadyForWeather();
         int inserted = 0;
         int updated = 0;
         if (!validRecords.isEmpty()) {
-            datasetFile = ensureDatasetFile(job);
-            if (datasetFile != null) {
-                job.setDatasetFileId(datasetFile.getId());
+            if (datasetFileEnabled) {
+                try {
+                    datasetFile = ensureDatasetFile(job);
+                    if (datasetFile != null) {
+                        datasetFileId = datasetFile.getId();
+                        job.setDatasetFileId(datasetFileId);
+                    }
+                } catch (DataAccessException ex) {
+                    log.warn("dataset_file 相关表结构不可用，继续导入但不记录原始文件: {}", ex.getMessage());
+                    datasetFileEnabled = false;
+                    datasetFile = null;
+                    datasetFileId = null;
+                }
             }
             job.setMessage("正在批量写入数据库");
             jobRepository.save(job);
-            UpsertResult result = upsertWeatherRecords(validRecords, datasetFile);
+            UpsertResult result = upsertWeatherRecords(validRecords, datasetFileId, datasetFileEnabled);
             inserted = result.inserted();
             updated = result.updated();
         }
@@ -395,42 +422,64 @@ public class DataImportService {
         int failedRows = failedCounter.get();
         int skippedRows = Math.max(job.getTotalRows() - processed - failedRows, 0);
 
-        return new ImportResult(inserted, updated, failedRows, skippedRows, warnings, errorEntities, new ArrayList<>(preview), datasetFile);
+        return new ImportResult(inserted, updated, failedRows, skippedRows, warnings, errorEntities, new ArrayList<>(preview), datasetFileEnabled ? datasetFile : null);
     }
 
-    private UpsertResult upsertYieldRecords(List<ValidRecord> records, DatasetFile datasetFile) {
+    private UpsertResult upsertYieldRecords(List<ValidRecord> records, Long datasetFileId, boolean datasetFileEnabled) {
         int batchSize = 500;
         int inserted = 0;
         int updated = 0;
         for (int i = 0; i < records.size(); i += batchSize) {
             List<ValidRecord> batch = records.subList(i, Math.min(i + batchSize, records.size()));
             Set<YieldRowKey> existing = fetchExistingYieldKeys(batch);
-            String sql = """
-                    INSERT INTO dataset_yield_record (dataset_file_id, crop_id, region_id, year, sown_area, production, yield_per_hectare, data_source, collected_at, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-                    ON DUPLICATE KEY UPDATE
-                        dataset_file_id = VALUES(dataset_file_id),
-                        sown_area = VALUES(sown_area),
-                        production = VALUES(production),
-                        yield_per_hectare = VALUES(yield_per_hectare),
-                        data_source = VALUES(data_source),
-                        collected_at = VALUES(collected_at),
-                        updated_at = NOW()
-                    """;
+            String sql;
+            if (datasetFileEnabled) {
+                sql = """
+                        INSERT INTO dataset_yield_record (dataset_file_id, crop_id, region_id, year, sown_area, production, yield_per_hectare, data_source, collected_at, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+                        ON DUPLICATE KEY UPDATE
+                            dataset_file_id = VALUES(dataset_file_id),
+                            sown_area = VALUES(sown_area),
+                            production = VALUES(production),
+                            yield_per_hectare = VALUES(yield_per_hectare),
+                            data_source = VALUES(data_source),
+                            collected_at = VALUES(collected_at),
+                            updated_at = NOW()
+                        """;
+            } else {
+                sql = """
+                        INSERT INTO dataset_yield_record (crop_id, region_id, year, sown_area, production, yield_per_hectare, data_source, collected_at, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+                        ON DUPLICATE KEY UPDATE
+                            sown_area = VALUES(sown_area),
+                            production = VALUES(production),
+                            yield_per_hectare = VALUES(yield_per_hectare),
+                            data_source = VALUES(data_source),
+                            collected_at = VALUES(collected_at),
+                            updated_at = NOW()
+                        """;
+            }
             try {
                 jdbcTemplate.batchUpdate(sql, batch, batch.size(), (preparedStatement, record) -> {
-                    preparedStatement.setLong(1, datasetFile.getId());
-                    preparedStatement.setLong(2, record.crop().getId());
-                    preparedStatement.setLong(3, record.region().getId());
-                    preparedStatement.setInt(4, record.year());
-                    setNullableDouble(preparedStatement, 5, record.sownArea());
-                    setNullableDouble(preparedStatement, 6, record.production());
-                    setNullableDouble(preparedStatement, 7, record.yieldPerHectare());
-                    preparedStatement.setString(8, record.dataSource());
+                    int index = 1;
+                    if (datasetFileEnabled) {
+                        if (datasetFileId != null) {
+                            preparedStatement.setLong(index++, datasetFileId);
+                        } else {
+                            preparedStatement.setObject(index++, null);
+                        }
+                    }
+                    preparedStatement.setLong(index++, record.crop().getId());
+                    preparedStatement.setLong(index++, record.region().getId());
+                    preparedStatement.setInt(index++, record.year());
+                    setNullableDouble(preparedStatement, index++, record.sownArea());
+                    setNullableDouble(preparedStatement, index++, record.production());
+                    setNullableDouble(preparedStatement, index++, record.yieldPerHectare());
+                    preparedStatement.setString(index++, record.dataSource());
                     if (record.collectedAt() != null) {
-                        preparedStatement.setObject(9, java.sql.Date.valueOf(record.collectedAt()));
+                        preparedStatement.setObject(index, java.sql.Date.valueOf(record.collectedAt()));
                     } else {
-                        preparedStatement.setObject(9, null);
+                        preparedStatement.setObject(index, null);
                     }
                 });
             } catch (DataAccessException exception) {
@@ -449,41 +498,60 @@ public class DataImportService {
         return new UpsertResult(inserted, updated);
     }
 
-    private UpsertResult upsertWeatherRecords(List<ValidWeatherRecord> records, DatasetFile datasetFile) {
+    private UpsertResult upsertWeatherRecords(List<ValidWeatherRecord> records, Long datasetFileId, boolean datasetFileEnabled) {
         int batchSize = 500;
         int inserted = 0;
         int updated = 0;
         for (int i = 0; i < records.size(); i += batchSize) {
             List<ValidWeatherRecord> batch = records.subList(i, Math.min(i + batchSize, records.size()));
             Set<WeatherRowKey> existing = fetchExistingWeatherKeys(batch);
-            String sql = """
-                    INSERT INTO dataset_weather_record (dataset_file_id, region_id, record_date, max_temperature, min_temperature, weather_text, wind, sunshine_hours, data_source, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-                    ON DUPLICATE KEY UPDATE
-                        dataset_file_id = VALUES(dataset_file_id),
-                        max_temperature = VALUES(max_temperature),
-                        min_temperature = VALUES(min_temperature),
-                        weather_text = VALUES(weather_text),
-                        wind = VALUES(wind),
-                        sunshine_hours = VALUES(sunshine_hours),
-                        data_source = VALUES(data_source),
-                        updated_at = NOW()
-                    """;
+            String sql;
+            if (datasetFileEnabled) {
+                sql = """
+                        INSERT INTO dataset_weather_record (dataset_file_id, region_id, record_date, max_temperature, min_temperature, weather_text, wind, sunshine_hours, data_source, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+                        ON DUPLICATE KEY UPDATE
+                            dataset_file_id = VALUES(dataset_file_id),
+                            max_temperature = VALUES(max_temperature),
+                            min_temperature = VALUES(min_temperature),
+                            weather_text = VALUES(weather_text),
+                            wind = VALUES(wind),
+                            sunshine_hours = VALUES(sunshine_hours),
+                            data_source = VALUES(data_source),
+                            updated_at = NOW()
+                        """;
+            } else {
+                sql = """
+                        INSERT INTO dataset_weather_record (region_id, record_date, max_temperature, min_temperature, weather_text, wind, sunshine_hours, data_source, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+                        ON DUPLICATE KEY UPDATE
+                            max_temperature = VALUES(max_temperature),
+                            min_temperature = VALUES(min_temperature),
+                            weather_text = VALUES(weather_text),
+                            wind = VALUES(wind),
+                            sunshine_hours = VALUES(sunshine_hours),
+                            data_source = VALUES(data_source),
+                            updated_at = NOW()
+                        """;
+            }
             try {
                 jdbcTemplate.batchUpdate(sql, batch, batch.size(), (preparedStatement, record) -> {
-                    if (datasetFile != null) {
-                        preparedStatement.setLong(1, datasetFile.getId());
-                    } else {
-                        preparedStatement.setObject(1, null);
+                    int index = 1;
+                    if (datasetFileEnabled) {
+                        if (datasetFileId != null) {
+                            preparedStatement.setLong(index++, datasetFileId);
+                        } else {
+                            preparedStatement.setObject(index++, null);
+                        }
                     }
-                    preparedStatement.setLong(2, record.region().getId());
-                    preparedStatement.setObject(3, java.sql.Date.valueOf(record.recordDate()));
-                    setNullableDouble(preparedStatement, 4, record.maxTemperature());
-                    setNullableDouble(preparedStatement, 5, record.minTemperature());
-                    preparedStatement.setString(6, record.weatherText());
-                    preparedStatement.setString(7, record.wind());
-                    setNullableDouble(preparedStatement, 8, record.sunshineHours());
-                    preparedStatement.setString(9, record.dataSource());
+                    preparedStatement.setLong(index++, record.region().getId());
+                    preparedStatement.setObject(index++, java.sql.Date.valueOf(record.recordDate()));
+                    setNullableDouble(preparedStatement, index++, record.maxTemperature());
+                    setNullableDouble(preparedStatement, index++, record.minTemperature());
+                    preparedStatement.setString(index++, record.weatherText());
+                    preparedStatement.setString(index++, record.wind());
+                    setNullableDouble(preparedStatement, index++, record.sunshineHours());
+                    preparedStatement.setString(index, record.dataSource());
                 });
             } catch (DataAccessException exception) {
                 throw new IllegalStateException("写入数据库失败", exception);
@@ -499,6 +567,43 @@ public class DataImportService {
             }
         }
         return new UpsertResult(inserted, updated);
+    }
+
+    private boolean isDatasetFileReadyForYield() {
+        if (yieldDatasetFileReady != null) {
+            return yieldDatasetFileReady;
+        }
+        yieldDatasetFileReady = checkDatasetFileSchema("dataset_yield_record");
+        return yieldDatasetFileReady;
+    }
+
+    private boolean isDatasetFileReadyForWeather() {
+        if (weatherDatasetFileReady != null) {
+            return weatherDatasetFileReady;
+        }
+        weatherDatasetFileReady = checkDatasetFileSchema("dataset_weather_record");
+        return weatherDatasetFileReady;
+    }
+
+    private boolean checkDatasetFileSchema(String tableName) {
+        try {
+            Integer datasetFileExists = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'dataset_file'",
+                    Integer.class
+            );
+            if (datasetFileExists == null || datasetFileExists == 0) {
+                return false;
+            }
+            Integer columnExists = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = 'dataset_file_id'",
+                    Integer.class,
+                    tableName
+            );
+            return columnExists != null && columnExists > 0;
+        } catch (DataAccessException ex) {
+            log.warn("检查 {} 的 dataset_file 关联字段失败: {}", tableName, ex.getMessage());
+            return false;
+        }
     }
 
     private Set<YieldRowKey> fetchExistingYieldKeys(List<ValidRecord> batch) {
