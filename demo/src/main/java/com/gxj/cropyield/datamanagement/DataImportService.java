@@ -238,8 +238,8 @@ public class DataImportService {
         DataImportJob job = jobRepository.findById(jobId)
                 .orElseThrow(() -> new IllegalArgumentException("未找到导入任务"));
         job.setStatus(DataImportJobStatus.RUNNING);
+        job.setMessage("正在解析导入文件，将写入表 " + resolveTargetTable(job.getDatasetType()));
         job.setStartedAt(LocalDateTime.now());
-        job.setMessage("正在解析导入文件");
         jobRepository.save(job);
 
         try {
@@ -1207,6 +1207,7 @@ public class DataImportService {
                 builder.append("。失败原因Top：").append(top);
             }
         }
+        builder.append("。目标表：").append(resolveTargetTable(job.getDatasetType()));
         return builder.toString();
     }
 
@@ -1218,6 +1219,10 @@ public class DataImportService {
                 Optional.ofNullable(job.getUpdatedRows()).orElse(0),
                 Optional.ofNullable(job.getDatasetDescription()).orElse("来自导入中心")
         );
+    }
+
+    private String resolveTargetTable(DatasetType datasetType) {
+        return datasetType == DatasetType.WEATHER ? "dataset_weather_record" : "dataset_yield_record";
     }
 
     private Path persistFile(Path root, String datasetName, MultipartFile file) {
