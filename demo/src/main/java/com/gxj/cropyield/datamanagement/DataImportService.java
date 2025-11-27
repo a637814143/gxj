@@ -317,6 +317,8 @@ public class DataImportService {
     }
 
     private ImportResult processYieldRecords(DataImportJob job, List<ParsedRecord> parsedRecords) {
+        ensureYieldTableExists();
+
         List<String> warnings = new ArrayList<>();
         List<DataImportJobError> errorEntities = new ArrayList<>();
         List<ValidRecord> validRecords = new ArrayList<>();
@@ -422,6 +424,8 @@ public class DataImportService {
     }
 
     private ImportResult processWeatherRecords(DataImportJob job, List<ParsedRecord> parsedRecords) {
+        ensureWeatherTableExists();
+
         List<String> warnings = new ArrayList<>();
         List<DataImportJobError> errorEntities = new ArrayList<>();
         List<ValidWeatherRecord> validRecords = new ArrayList<>();
@@ -718,6 +722,83 @@ public class DataImportService {
         } catch (Exception ex) {
             log.warn("创建或获取 dataset_file 记录失败，重试仍走旧表结构：{}", ex.getMessage());
             return null;
+        }
+    }
+
+    private void ensureYieldTableExists() {
+        if (tableExists("dataset_yield_record")) {
+            return;
+        }
+        String ddl = """
+                CREATE TABLE IF NOT EXISTS dataset_yield_record (
+                    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                    dataset_file_id BIGINT UNSIGNED NULL,
+                    crop_id BIGINT UNSIGNED NOT NULL,
+                    region_id BIGINT UNSIGNED NOT NULL,
+                    year INT NOT NULL,
+                    sown_area DOUBLE,
+                    production DOUBLE,
+                    yield_per_hectare DOUBLE,
+                    data_source VARCHAR(256),
+                    collected_at DATE,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_yield_crop_region_year (crop_id, region_id, year),
+                    KEY idx_yield_dataset_file (dataset_file_id),
+                    KEY idx_yield_crop (crop_id),
+                    KEY idx_yield_region (region_id)
+                ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '作物年均单产记录';
+                """;
+        try {
+            jdbcTemplate.execute(ddl);
+            log.warn("检测到缺失的 dataset_yield_record 表，已自动创建");
+        } catch (DataAccessException exception) {
+            throw new IllegalStateException("无法创建或访问 dataset_yield_record 表", exception);
+        }
+    }
+
+    private void ensureWeatherTableExists() {
+        if (tableExists("dataset_weather_record")) {
+            return;
+        }
+        String ddl = """
+                CREATE TABLE IF NOT EXISTS dataset_weather_record (
+                    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                    dataset_file_id BIGINT UNSIGNED NULL,
+                    region_id BIGINT UNSIGNED NOT NULL,
+                    record_date DATE NOT NULL,
+                    max_temperature DOUBLE,
+                    min_temperature DOUBLE,
+                    weather_text VARCHAR(128),
+                    wind VARCHAR(128),
+                    sunshine_hours DOUBLE,
+                    data_source VARCHAR(256),
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_weather_region_date (region_id, record_date),
+                    KEY idx_weather_dataset_file (dataset_file_id),
+                    KEY idx_weather_region (region_id)
+                ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '地区逐日气象记录';
+                """;
+        try {
+            jdbcTemplate.execute(ddl);
+            log.warn("检测到缺失的 dataset_weather_record 表，已自动创建");
+        } catch (DataAccessException exception) {
+            throw new IllegalStateException("无法创建或访问 dataset_weather_record 表", exception);
+        }
+    }
+
+    private boolean tableExists(String tableName) {
+        try {
+            Integer count = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?",
+                    Integer.class,
+                    tableName
+            );
+            return count != null && count > 0;
+        } catch (DataAccessException ex) {
+            log.warn("查询表 {} 是否存在失败：{}", tableName, ex.getMessage());
+            return false;
         }
     }
 
