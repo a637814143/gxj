@@ -1269,12 +1269,22 @@ public class DataImportService {
     }
 
     private Double parseNumeric(String value) {
-        if (value == null || value.isBlank()) {
+        String trimmed = trimToNull(value);
+        if (trimmed == null) {
             return null;
         }
+        String normalized = trimmed.replace('，', ',');
         try {
-            return Double.parseDouble(value.replaceAll(",", ""));
-        } catch (NumberFormatException exception) {
+            return Double.parseDouble(normalized.replaceAll(",", ""));
+        } catch (NumberFormatException ignored) {
+            Matcher matcher = NUMBER_PATTERN.matcher(normalized);
+            if (matcher.find()) {
+                try {
+                    return Double.parseDouble(matcher.group().replaceAll(",", ""));
+                } catch (NumberFormatException ignoredToo) {
+                    return null;
+                }
+            }
             return null;
         }
     }
