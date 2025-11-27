@@ -726,7 +726,12 @@ public class DataImportService {
     }
 
     private void ensureYieldTableExists() {
-        if (tableExists("dataset_yield_record")) {
+        Boolean exists = tableExists("dataset_yield_record");
+        if (Boolean.TRUE.equals(exists)) {
+            return;
+        }
+        if (exists == null) {
+            log.warn("无法确认 dataset_yield_record 表是否存在，跳过自动创建");
             return;
         }
         String ddl = """
@@ -753,12 +758,17 @@ public class DataImportService {
             jdbcTemplate.execute(ddl);
             log.warn("检测到缺失的 dataset_yield_record 表，已自动创建");
         } catch (DataAccessException exception) {
-            throw new IllegalStateException("无法创建或访问 dataset_yield_record 表", exception);
+            log.warn("自动创建 dataset_yield_record 表失败，将按现有表结构继续导入：{}", exception.getMessage());
         }
     }
 
     private void ensureWeatherTableExists() {
-        if (tableExists("dataset_weather_record")) {
+        Boolean exists = tableExists("dataset_weather_record");
+        if (Boolean.TRUE.equals(exists)) {
+            return;
+        }
+        if (exists == null) {
+            log.warn("无法确认 dataset_weather_record 表是否存在，跳过自动创建");
             return;
         }
         String ddl = """
@@ -784,11 +794,11 @@ public class DataImportService {
             jdbcTemplate.execute(ddl);
             log.warn("检测到缺失的 dataset_weather_record 表，已自动创建");
         } catch (DataAccessException exception) {
-            throw new IllegalStateException("无法创建或访问 dataset_weather_record 表", exception);
+            log.warn("自动创建 dataset_weather_record 表失败，将按现有表结构继续导入：{}", exception.getMessage());
         }
     }
 
-    private boolean tableExists(String tableName) {
+    private Boolean tableExists(String tableName) {
         try {
             Integer count = jdbcTemplate.queryForObject(
                     "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?",
@@ -798,7 +808,7 @@ public class DataImportService {
             return count != null && count > 0;
         } catch (DataAccessException ex) {
             log.warn("查询表 {} 是否存在失败：{}", tableName, ex.getMessage());
-            return false;
+            return null;
         }
     }
 
