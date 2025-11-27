@@ -360,9 +360,24 @@ public class DataImportService {
             }
             job.setMessage("正在批量写入数据库");
             jobRepository.save(job);
-            UpsertResult result = upsertYieldRecords(validRecords, datasetFileId, datasetFileEnabled);
-            inserted = result.inserted();
-            updated = result.updated();
+            try {
+                UpsertResult result = upsertYieldRecords(validRecords, datasetFileId, datasetFileEnabled);
+                inserted = result.inserted();
+                updated = result.updated();
+            } catch (RuntimeException ex) {
+                if (!datasetFileEnabled) {
+                    throw ex;
+                }
+                String rootCause = findRootCauseMessage(ex);
+                log.warn("写入含 dataset_file_id 的批次失败，尝试退回旧表结构：{}", rootCause);
+                datasetFileEnabled = false;
+                yieldDatasetFileReady = false;
+                datasetFileId = null;
+                job.setDatasetFileId(null);
+                UpsertResult fallback = upsertYieldRecords(validRecords, null, false);
+                inserted = fallback.inserted();
+                updated = fallback.updated();
+            }
         }
 
         int processed = inserted + updated;
@@ -415,9 +430,24 @@ public class DataImportService {
             }
             job.setMessage("正在批量写入数据库");
             jobRepository.save(job);
-            UpsertResult result = upsertWeatherRecords(validRecords, datasetFileId, datasetFileEnabled);
-            inserted = result.inserted();
-            updated = result.updated();
+            try {
+                UpsertResult result = upsertWeatherRecords(validRecords, datasetFileId, datasetFileEnabled);
+                inserted = result.inserted();
+                updated = result.updated();
+            } catch (RuntimeException ex) {
+                if (!datasetFileEnabled) {
+                    throw ex;
+                }
+                String rootCause = findRootCauseMessage(ex);
+                log.warn("写入含 dataset_file_id 的气象批次失败，尝试退回旧表结构：{}", rootCause);
+                datasetFileEnabled = false;
+                weatherDatasetFileReady = false;
+                datasetFileId = null;
+                job.setDatasetFileId(null);
+                UpsertResult fallback = upsertWeatherRecords(validRecords, null, false);
+                inserted = fallback.inserted();
+                updated = fallback.updated();
+            }
         }
 
         int processed = inserted + updated;
