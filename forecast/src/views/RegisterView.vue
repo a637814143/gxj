@@ -21,6 +21,7 @@
           </el-form-item>
           <el-form-item label="密码" :error="errors.password">
             <el-input
+              ref="passwordInputRef"
               v-model="form.password"
               placeholder="请输入密码"
               type="password"
@@ -58,6 +59,7 @@
         <div class="form-grid">
           <el-form-item label="确认密码" :error="errors.confirmPassword">
             <el-input
+              ref="confirmPasswordInputRef"
               v-model="form.confirmPassword"
               placeholder="请再次输入密码"
               type="password"
@@ -160,7 +162,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Lock, UserFilled, Message, Picture } from '@element-plus/icons-vue'
@@ -205,6 +207,37 @@ const codeExpiresAt = ref(0)
 const captchaId = ref('')
 const captchaImage = ref('')
 let countdownTimer = null
+
+const passwordInputRef = ref(null)
+const confirmPasswordInputRef = ref(null)
+const clipboardTargets = new Set()
+
+const handlePasswordClipboard = event => {
+  if (event && typeof event.preventDefault === 'function') {
+    event.preventDefault()
+  }
+  ElMessage.warning('密码不支持复制或粘贴')
+}
+
+const attachClipboardGuards = inputComponent => {
+  const inputEl = inputComponent?.input
+  if (!inputEl || clipboardTargets.has(inputEl)) {
+    return
+  }
+  inputEl.addEventListener('paste', handlePasswordClipboard)
+  inputEl.addEventListener('copy', handlePasswordClipboard)
+  inputEl.addEventListener('cut', handlePasswordClipboard)
+  clipboardTargets.add(inputEl)
+}
+
+const detachClipboardGuards = () => {
+  clipboardTargets.forEach(target => {
+    target.removeEventListener('paste', handlePasswordClipboard)
+    target.removeEventListener('copy', handlePasswordClipboard)
+    target.removeEventListener('cut', handlePasswordClipboard)
+  })
+  clipboardTargets.clear()
+}
 
 const passwordStrength = computed(() => getPasswordStrength(form.password))
 
@@ -419,10 +452,19 @@ const goToLogin = () => {
 
 onMounted(() => {
   refreshCaptcha()
+  nextTick(() => {
+    if (passwordInputRef.value) {
+      attachClipboardGuards(passwordInputRef.value)
+    }
+    if (confirmPasswordInputRef.value) {
+      attachClipboardGuards(confirmPasswordInputRef.value)
+    }
+  })
 })
 
 onBeforeUnmount(() => {
   clearCountdown()
+  detachClipboardGuards()
 })
 </script>
 
