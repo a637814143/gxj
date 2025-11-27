@@ -673,16 +673,21 @@ public class DataImportService {
         if (yieldDatasetFileReady != null) {
             return yieldDatasetFileReady;
         }
-        yieldDatasetFileReady = checkDatasetFileSchema("dataset_yield_record");
-        return yieldDatasetFileReady;
+        // 部署环境频繁出现 dataset_file 相关的表结构/权限问题，导致导入任务直接失败。
+        // 这里直接禁用 dataset_file 关联，强制走旧表结构的导入流程，确保导入不中断。
+        yieldDatasetFileReady = false;
+        log.warn("dataset_file 集成功能已临时禁用，产量导入将使用旧表结构");
+        return false;
     }
 
     private boolean isDatasetFileReadyForWeather() {
         if (weatherDatasetFileReady != null) {
             return weatherDatasetFileReady;
         }
-        weatherDatasetFileReady = checkDatasetFileSchema("dataset_weather_record");
-        return weatherDatasetFileReady;
+        // 同理，禁用 dataset_file 集成以避免气象导入被数据库兼容性问题阻断。
+        weatherDatasetFileReady = false;
+        log.warn("dataset_file 集成功能已临时禁用，气象导入将使用旧表结构");
+        return false;
     }
 
     private boolean checkDatasetFileSchema(String tableName) {
