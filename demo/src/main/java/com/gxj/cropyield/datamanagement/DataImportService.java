@@ -365,18 +365,32 @@ public class DataImportService {
                 inserted = result.inserted();
                 updated = result.updated();
             } catch (RuntimeException ex) {
-                if (!datasetFileEnabled) {
+                String rootCause = findRootCauseMessage(ex);
+                if (datasetFileEnabled) {
+                    log.warn("写入含 dataset_file_id 的批次失败，尝试退回旧表结构：{}", rootCause);
+                    datasetFileEnabled = false;
+                    yieldDatasetFileReady = false;
+                    datasetFileId = null;
+                    job.setDatasetFileId(null);
+                    UpsertResult fallback = upsertYieldRecords(validRecords, null, false);
+                    inserted = fallback.inserted();
+                    updated = fallback.updated();
+                } else if (shouldRetryWithDatasetFile(rootCause)) {
+                    log.warn("旧表结构批次写入失败，改为携带 dataset_file_id 重试：{}", rootCause);
+                    datasetFileEnabled = true;
+                    yieldDatasetFileReady = true;
+                    datasetFile = safeEnsureDatasetFile(job);
+                    datasetFileId = datasetFile != null ? datasetFile.getId() : null;
+                    if (datasetFileId == null) {
+                        throw ex;
+                    }
+                    job.setDatasetFileId(datasetFileId);
+                    UpsertResult retry = upsertYieldRecords(validRecords, datasetFileId, true);
+                    inserted = retry.inserted();
+                    updated = retry.updated();
+                } else {
                     throw ex;
                 }
-                String rootCause = findRootCauseMessage(ex);
-                log.warn("写入含 dataset_file_id 的批次失败，尝试退回旧表结构：{}", rootCause);
-                datasetFileEnabled = false;
-                yieldDatasetFileReady = false;
-                datasetFileId = null;
-                job.setDatasetFileId(null);
-                UpsertResult fallback = upsertYieldRecords(validRecords, null, false);
-                inserted = fallback.inserted();
-                updated = fallback.updated();
             }
         }
 
@@ -435,18 +449,32 @@ public class DataImportService {
                 inserted = result.inserted();
                 updated = result.updated();
             } catch (RuntimeException ex) {
-                if (!datasetFileEnabled) {
+                String rootCause = findRootCauseMessage(ex);
+                if (datasetFileEnabled) {
+                    log.warn("写入含 dataset_file_id 的气象批次失败，尝试退回旧表结构：{}", rootCause);
+                    datasetFileEnabled = false;
+                    weatherDatasetFileReady = false;
+                    datasetFileId = null;
+                    job.setDatasetFileId(null);
+                    UpsertResult fallback = upsertWeatherRecords(validRecords, null, false);
+                    inserted = fallback.inserted();
+                    updated = fallback.updated();
+                } else if (shouldRetryWithDatasetFile(rootCause)) {
+                    log.warn("旧表结构气象批次写入失败，改为携带 dataset_file_id 重试：{}", rootCause);
+                    datasetFileEnabled = true;
+                    weatherDatasetFileReady = true;
+                    datasetFile = safeEnsureDatasetFile(job);
+                    datasetFileId = datasetFile != null ? datasetFile.getId() : null;
+                    if (datasetFileId == null) {
+                        throw ex;
+                    }
+                    job.setDatasetFileId(datasetFileId);
+                    UpsertResult retry = upsertWeatherRecords(validRecords, datasetFileId, true);
+                    inserted = retry.inserted();
+                    updated = retry.updated();
+                } else {
                     throw ex;
                 }
-                String rootCause = findRootCauseMessage(ex);
-                log.warn("写入含 dataset_file_id 的气象批次失败，尝试退回旧表结构：{}", rootCause);
-                datasetFileEnabled = false;
-                weatherDatasetFileReady = false;
-                datasetFileId = null;
-                job.setDatasetFileId(null);
-                UpsertResult fallback = upsertWeatherRecords(validRecords, null, false);
-                inserted = fallback.inserted();
-                updated = fallback.updated();
             }
         }
 
@@ -619,13 +647,6 @@ public class DataImportService {
 
     private boolean checkDatasetFileSchema(String tableName) {
         try {
-            Integer datasetFileExists = jdbcTemplate.queryForObject(
-                    "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'dataset_file'",
-                    Integer.class
-            );
-            if (datasetFileExists == null || datasetFileExists == 0) {
-                return false;
-            }
             Integer columnExists = jdbcTemplate.queryForObject(
                     "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = 'dataset_file_id'",
                     Integer.class,
@@ -635,6 +656,23 @@ public class DataImportService {
         } catch (DataAccessException ex) {
             log.warn("检查 {} 的 dataset_file 关联字段失败: {}", tableName, ex.getMessage());
             return false;
+        }
+    }
+
+    private boolean shouldRetryWithDatasetFile(String rootCause) {
+        if (rootCause == null) {
+            return false;
+        }
+        String lower = rootCause.toLowerCase(Locale.ROOT);
+        return lower.contains("dataset_file_id") || lower.contains("dataset file id");
+    }
+
+    private DatasetFile safeEnsureDatasetFile(DataImportJob job) {
+        try {
+            return ensureDatasetFile(job);
+        } catch (Exception ex) {
+            log.warn("创建或获取 dataset_file 记录失败，重试仍走旧表结构：{}", ex.getMessage());
+            return null;
         }
     }
 
