@@ -31,6 +31,8 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -82,6 +84,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class DataImportService {
+
+    private static final Logger log = LoggerFactory.getLogger(DataImportService.class);
 
     private static final int MIN_YEAR = 1978;
     private static final int PREVIEW_LIMIT = 10;
@@ -274,7 +278,10 @@ public class DataImportService {
         } catch (Exception exception) {
             job.setStatus(DataImportJobStatus.FAILED);
             job.setFinishedAt(LocalDateTime.now());
-            job.setMessage("导入失败：" + exception.getMessage());
+            String rootCause = findRootCauseMessage(exception);
+            job.setMessage("导入失败：" + rootCause);
+            log.error("Import job {} failed while processing file {}: {}", job.getTaskId(), job.getOriginalFilename(), rootCause,
+                    exception);
             jobRepository.save(job);
         }
     }
@@ -1588,6 +1595,21 @@ public class DataImportService {
         } else {
             statement.setDouble(index, value);
         }
+    }
+
+    private String findRootCauseMessage(Throwable throwable) {
+        if (throwable == null) {
+            return "未知错误";
+        }
+        Throwable root = throwable;
+        while (root.getCause() != null && root.getCause() != root) {
+            root = root.getCause();
+        }
+        String message = root.getMessage();
+        if (message == null || message.isBlank()) {
+            return root.getClass().getSimpleName();
+        }
+        return message;
     }
 
     private record ParsedRecord(int rowNumber, Map<String, String> values, Map<String, Function<Double, Double>> converters) {
