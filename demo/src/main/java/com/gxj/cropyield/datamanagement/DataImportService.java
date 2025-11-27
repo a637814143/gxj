@@ -350,9 +350,10 @@ public class DataImportService {
                         datasetFileId = datasetFile.getId();
                         job.setDatasetFileId(datasetFileId);
                     }
-                } catch (DataAccessException ex) {
-                    log.warn("dataset_file 相关表结构不可用，继续导入但不记录原始文件: {}", ex.getMessage());
+                } catch (Exception ex) {
+                    log.warn("dataset_file 相关表结构或数据问题，继续导入但不记录原始文件: {}", ex.getMessage());
                     datasetFileEnabled = false;
+                    yieldDatasetFileReady = false;
                     datasetFile = null;
                     datasetFileId = null;
                 }
@@ -404,9 +405,10 @@ public class DataImportService {
                         datasetFileId = datasetFile.getId();
                         job.setDatasetFileId(datasetFileId);
                     }
-                } catch (DataAccessException ex) {
-                    log.warn("dataset_file 相关表结构不可用，继续导入但不记录原始文件: {}", ex.getMessage());
+                } catch (Exception ex) {
+                    log.warn("dataset_file 相关表结构或数据问题，继续导入但不记录原始文件: {}", ex.getMessage());
                     datasetFileEnabled = false;
+                    weatherDatasetFileReady = false;
                     datasetFile = null;
                     datasetFileId = null;
                 }
