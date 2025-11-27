@@ -72,15 +72,16 @@
             <div class="region-toggle">
               <div class="region-toggle-title">
                 区域列表
-                <span class="region-toggle-sub">点击按钮展开或收起区域管理</span>
+                <span class="region-toggle-sub">点击「隐藏/显示」按钮按需展开区域管理</span>
               </div>
               <el-button
                 type="primary"
-                link
-                :icon="showRegionManager ? ArrowUp : ArrowDown"
+                plain
+                size="small"
+                :icon="showRegionManager ? Hide : View"
                 @click="showRegionManager = !showRegionManager"
               >
-                {{ showRegionManager ? '收起区域列表' : '管理区域列表' }}
+                {{ showRegionManager ? '隐藏区域列表' : '显示区域列表' }}
               </el-button>
             </div>
             <transition name="fade">
@@ -146,7 +147,7 @@
 </template>
 
 <script setup>
-import { ArrowDown, ArrowUp } from '@element-plus/icons-vue'
+import { Hide, View } from '@element-plus/icons-vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import apiClient from '../services/http'
