@@ -23,8 +23,6 @@ public record ReportGenerationRequest(
     @Max(value = 2100, message = "结束年份范围异常")
     Integer endYear,
 
-    Boolean includePriceAnalysis,
-
     Boolean includeForecastComparison,
 
     Long forecastResultId,
