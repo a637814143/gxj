@@ -70,6 +70,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -285,25 +286,43 @@ public class DataImportService {
     }
 
     private void ensureDatabaseAvailable(DatasetType datasetType) {
-        try {
-            jdbcTemplate.execute("SELECT 1");
-        } catch (DataAccessException exception) {
-            throw new IllegalStateException("数据库连接失败，请检查数据库服务与配置", exception);
-        }
+        verifyDatabaseConnectivity();
 
-        List<String> requiredTables = new ArrayList<>();
-        requiredTables.add("data_import_job");
-        requiredTables.add("dataset_file");
+        List<TableRequirement> requirements = new ArrayList<>();
+        requirements.add(new TableRequirement(
+                "data_import_job",
+                List.of("id", "task_id", "dataset_type", "dataset_file_id", "status", "storage_path")
+        ));
+        requirements.add(new TableRequirement(
+                "data_import_job_error",
+                List.of("id", "job_id", "line_number", "error_code", "message", "raw_value")
+        ));
+        requirements.add(new TableRequirement(
+                "dataset_file",
+                List.of("id", "name", "type", "storage_path")
+        ));
+        requirements.add(new TableRequirement(
+                "crop",
+                List.of("id", "name")
+        ));
+        requirements.add(new TableRequirement(
+                "region",
+                List.of("id", "name")
+        ));
         if (datasetType == DatasetType.WEATHER) {
-            requiredTables.add("dataset_weather_record");
+            requirements.add(new TableRequirement(
+                    "dataset_weather_record",
+                    List.of("id", "dataset_file_id", "region_id", "record_date", "max_temperature", "min_temperature")
+            ));
         } else {
-            requiredTables.add("dataset_yield_record");
+            requirements.add(new TableRequirement(
+                    "dataset_yield_record",
+                    List.of("id", "dataset_file_id", "crop_id", "region_id", "year", "production")
+            ));
         }
 
-        for (String table : requiredTables) {
-            if (!tableExists(table)) {
-                throw new IllegalStateException("数据库缺少表 " + table + "，请先初始化基础表结构");
-            }
+        for (TableRequirement requirement : requirements) {
+            assertTableStructure(requirement);
         }
     }
 
@@ -318,6 +337,46 @@ public class DataImportService {
         } catch (DataAccessException exception) {
             throw new IllegalStateException("检测数据库表失败：" + extractRootCauseMessage(exception), exception);
         }
+    }
+
+    private void assertTableStructure(TableRequirement requirement) {
+        if (!tableExists(requirement.name())) {
+            throw new IllegalStateException("数据库缺少表 " + requirement.name() + "，请先初始化基础表结构");
+        }
+        List<String> missingColumns = missingColumns(requirement.name(), requirement.requiredColumns());
+        if (!missingColumns.isEmpty()) {
+            throw new IllegalStateException("数据库表 " + requirement.name() + " 缺少字段：" + String.join(", ", missingColumns) + "，请检查数据库迁移或手动补全");
+        }
+    }
+
+    private void verifyDatabaseConnectivity() {
+        try {
+            jdbcTemplate.execute("SELECT 1");
+        } catch (DataAccessException exception) {
+            throw new IllegalStateException("数据库连接失败，请检查数据库服务与配置", exception);
+        }
+    }
+
+    private List<String> missingColumns(String tableName, List<String> requiredColumns) {
+        try {
+            List<String> existingColumns = jdbcTemplate.query(
+                    "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?",
+                    (resultSet, rowNum) -> resultSet.getString("COLUMN_NAME"),
+                    tableName
+            );
+            Set<String> existing = existingColumns.stream()
+                    .filter(Objects::nonNull)
+                    .map(String::toLowerCase)
+                    .collect(Collectors.toSet());
+            return requiredColumns.stream()
+                    .filter(column -> !existing.contains(column.toLowerCase()))
+                    .toList();
+        } catch (DataAccessException exception) {
+            throw new IllegalStateException("检测数据库字段失败：" + extractRootCauseMessage(exception), exception);
+        }
+    }
+
+    private record TableRequirement(String name, List<String> requiredColumns) {
     }
 
     private DatasetFile ensureDatasetFile(DataImportJob job) {
