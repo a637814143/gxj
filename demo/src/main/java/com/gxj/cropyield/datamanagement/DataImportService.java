@@ -41,6 +41,8 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -83,6 +85,7 @@ import java.util.stream.Collectors;
 @Service
 public class DataImportService {
 
+    private static final Logger LOG = LoggerFactory.getLogger(DataImportService.class);
     private static final int MIN_YEAR = 1978;
     private static final int PREVIEW_LIMIT = 10;
     private static final int MAX_WARNING_STORE = 50;
@@ -239,6 +242,7 @@ public class DataImportService {
         jobRepository.save(job);
 
         try {
+            ensureDatabaseAvailable();
             Path filePath = Paths.get(job.getStoragePath());
             if (!Files.exists(filePath)) {
                 throw new IllegalStateException("导入文件不存在或已被移除");
@@ -272,10 +276,19 @@ public class DataImportService {
                 updateDatasetFileMetadata(result.datasetFile(), job);
             }
         } catch (Exception exception) {
+            LOG.error("导入任务 {} 处理失败", job.getTaskId(), exception);
             job.setStatus(DataImportJobStatus.FAILED);
             job.setFinishedAt(LocalDateTime.now());
-            job.setMessage("导入失败：" + exception.getMessage());
+            job.setMessage("导入失败：" + extractRootCauseMessage(exception));
             jobRepository.save(job);
+        }
+    }
+
+    private void ensureDatabaseAvailable() {
+        try {
+            jdbcTemplate.execute("SELECT 1");
+        } catch (DataAccessException exception) {
+            throw new IllegalStateException("数据库连接失败，请检查数据库服务与配置", exception);
         }
     }
 
@@ -427,7 +440,7 @@ public class DataImportService {
                     }
                 });
             } catch (DataAccessException exception) {
-                throw new IllegalStateException("写入数据库失败", exception);
+                throw new IllegalStateException("写入数据库失败：" + extractRootCauseMessage(exception), exception);
             }
 
             for (ValidRecord record : batch) {
@@ -479,7 +492,7 @@ public class DataImportService {
                     preparedStatement.setString(9, record.dataSource());
                 });
             } catch (DataAccessException exception) {
-                throw new IllegalStateException("写入数据库失败", exception);
+                throw new IllegalStateException("写入数据库失败：" + extractRootCauseMessage(exception), exception);
             }
 
             for (ValidWeatherRecord record : batch) {
@@ -1454,6 +1467,21 @@ public class DataImportService {
             return null;
         }
         return Math.round(value * 100.0) / 100.0;
+    }
+
+    private String extractRootCauseMessage(Throwable throwable) {
+        Throwable root = throwable;
+        while (root.getCause() != null && root.getCause() != root) {
+            root = root.getCause();
+        }
+        String message = root.getMessage();
+        if (message == null || message.isBlank()) {
+            message = root.getClass().getSimpleName();
+        }
+        if (message.length() > 240) {
+            return message.substring(0, 240);
+        }
+        return message;
     }
 
     private boolean isBlank(String value) {
