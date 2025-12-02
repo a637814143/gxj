@@ -1,5 +1,5 @@
 <template>
-  <div class="notice-card" :class="statusClass">
+  <div class="notice-card" :class="[statusClass, { compact }]">
     <div class="notice-header">
       <div class="notice-badge">平台通知</div>
       <div class="notice-status">
@@ -11,7 +11,7 @@
     <div class="notice-body" v-if="!loading && notice && notice.visible">
       <h3 class="notice-title">{{ notice.title || '系统通知' }}</h3>
       <p class="notice-summary">{{ notice.summary || '暂无摘要，管理员可在系统设置中维护公告内容。' }}</p>
-      <div class="notice-meta">
+      <div class="notice-meta" :class="{ compact }">
         <div class="meta-item">
           <span class="meta-label">受众</span>
           <span class="meta-value">{{ notice.audience || '全体用户' }}</span>
@@ -52,6 +52,10 @@ const props = defineProps({
     default: null
   },
   loading: {
+    type: Boolean,
+    default: false
+  },
+  compact: {
     type: Boolean,
     default: false
   }
@@ -123,6 +127,13 @@ const parseDate = value => {
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
+.notice-card.compact {
+  padding: 14px 16px;
+  min-width: 260px;
+  background: linear-gradient(140deg, rgba(246, 249, 255, 0.85) 0%, rgba(255, 255, 255, 0.92) 100%);
+  box-shadow: 0 10px 24px rgba(61, 92, 255, 0.12);
+}
+
 .notice-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 20px 50px rgba(61, 92, 255, 0.18);
@@ -185,10 +196,18 @@ const parseDate = value => {
   gap: 10px;
 }
 
+.notice-card.compact .notice-body {
+  gap: 8px;
+}
+
 .notice-title {
   margin: 0;
   font-size: 18px;
   color: #0f1f3d;
+}
+
+.notice-card.compact .notice-title {
+  font-size: 16px;
 }
 
 .notice-summary {
@@ -198,6 +217,11 @@ const parseDate = value => {
   font-size: 14px;
 }
 
+.notice-card.compact .notice-summary {
+  font-size: 13px;
+  color: #334155;
+}
+
 .notice-meta {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -205,6 +229,11 @@ const parseDate = value => {
   padding: 10px;
   border-radius: 12px;
   background: rgba(74, 106, 255, 0.06);
+}
+
+.notice-meta.compact {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  padding: 8px 10px;
 }
 
 .meta-item {
