@@ -13,6 +13,13 @@ public record SystemSettingResponse(
     boolean clusterEnabled,
     int pendingChangeCount,
     String securityStrategy,
+    boolean publicVisible,
+    String publicTitle,
+    String publicSummary,
+    String publicAudience,
+    String publicLevel,
+    java.time.LocalDateTime publicStartAt,
+    java.time.LocalDateTime publicEndAt,
     LocalDateTime updatedAt
 ) {
 }

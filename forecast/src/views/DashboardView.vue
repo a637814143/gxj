@@ -34,6 +34,7 @@
             <li v-for="notice in reminders" :key="notice">{{ notice }}</li>
           </ul>
         </div>
+        <PublicNoticeCard class="notice-widget" :notice="publicNotice" :loading="noticeLoading" />
       </div>
     </section>
 
@@ -177,6 +178,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import apiClient from '../services/http'
 import { deleteForecastRun } from '@/services/forecast'
 import { useAuthStore } from '@/stores/auth'
+import PublicNoticeCard from '@/components/PublicNoticeCard.vue'
 
 const authStore = useAuthStore()
 const isUserTheme = computed(() => {
@@ -192,6 +194,8 @@ const summary = ref(null)
 const summaryLoading = ref(false)
 const deletingRunId = ref(null)
 const exporting = reactive({ excel: false, pdf: false })
+const publicNotice = ref(null)
+const noticeLoading = ref(false)
 
 const TABLE_PAGE_SIZE = 5
 const tablePagination = reactive({ page: 1, size: TABLE_PAGE_SIZE })
@@ -376,6 +380,18 @@ const fetchDashboardSummary = async () => {
     ElMessage.error(error?.response?.data?.message || '加载仪表盘数据失败')
   } finally {
     summaryLoading.value = false
+  }
+}
+
+const fetchPublicNotice = async () => {
+  noticeLoading.value = true
+  try {
+    const { data } = await apiClient.get('/api/system/public-settings')
+    publicNotice.value = data?.data ?? data ?? null
+  } catch (error) {
+    publicNotice.value = null
+  } finally {
+    noticeLoading.value = false
   }
 }
 
@@ -694,6 +710,7 @@ const handleExportPdf = () => {
 
 onMounted(() => {
   fetchDashboardSummary()
+  fetchPublicNotice()
 })
 
 watch(
@@ -919,6 +936,10 @@ const tableCellStyle = () => ({
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 16px;
+}
+
+.notice-widget {
+  grid-column: 1 / -1;
 }
 
 .extra-card {
