@@ -242,7 +242,7 @@ public class DataImportService {
         jobRepository.save(job);
 
         try {
-            ensureDatabaseAvailable();
+            ensureDatabaseAvailable(job.getDatasetType());
             Path filePath = Paths.get(job.getStoragePath());
             if (!Files.exists(filePath)) {
                 throw new IllegalStateException("导入文件不存在或已被移除");
@@ -284,11 +284,39 @@ public class DataImportService {
         }
     }
 
-    private void ensureDatabaseAvailable() {
+    private void ensureDatabaseAvailable(DatasetType datasetType) {
         try {
             jdbcTemplate.execute("SELECT 1");
         } catch (DataAccessException exception) {
             throw new IllegalStateException("数据库连接失败，请检查数据库服务与配置", exception);
+        }
+
+        List<String> requiredTables = new ArrayList<>();
+        requiredTables.add("data_import_job");
+        requiredTables.add("dataset_file");
+        if (datasetType == DatasetType.WEATHER) {
+            requiredTables.add("dataset_weather_record");
+        } else {
+            requiredTables.add("dataset_yield_record");
+        }
+
+        for (String table : requiredTables) {
+            if (!tableExists(table)) {
+                throw new IllegalStateException("数据库缺少表 " + table + "，请先初始化基础表结构");
+            }
+        }
+    }
+
+    private boolean tableExists(String tableName) {
+        try {
+            Integer count = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?",
+                    Integer.class,
+                    tableName
+            );
+            return count != null && count > 0;
+        } catch (DataAccessException exception) {
+            throw new IllegalStateException("检测数据库表失败：" + extractRootCauseMessage(exception), exception);
         }
     }
 
