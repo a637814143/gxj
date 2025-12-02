@@ -2,6 +2,7 @@ package com.gxj.cropyield.modules.base.controller;
 
 import com.gxj.cropyield.common.response.ApiResponse;
 import com.gxj.cropyield.modules.base.dto.RegionRequest;
+import com.gxj.cropyield.modules.base.dto.RegionVisibilityRequest;
 import com.gxj.cropyield.modules.base.entity.Region;
 import com.gxj.cropyield.modules.base.service.RegionService;
 import jakarta.validation.Valid;
@@ -42,5 +43,10 @@ public class RegionController {
     public ApiResponse<Void> deleteRegion(@PathVariable Long id) {
         regionService.delete(id);
         return ApiResponse.success();
+    }
+
+    @PatchMapping("/{id}/visibility")
+    public ApiResponse<Region> updateVisibility(@PathVariable Long id, @Valid @RequestBody RegionVisibilityRequest request) {
+        return ApiResponse.success(regionService.updateVisibility(id, request.hidden()));
     }
 }

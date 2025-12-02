@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS base_region (
     parent_code VARCHAR(64),
     parent_name VARCHAR(128),
     description VARCHAR(256),
+    hidden TINYINT(1) NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_base_region_code (code),

@@ -23,6 +23,8 @@ public record RegionRequest(
     String parentName,
 
     @Size(max = 256, message = "描述长度不能超过256位")
-    String description
+    String description,
+
+    Boolean hidden
 ) {
 }

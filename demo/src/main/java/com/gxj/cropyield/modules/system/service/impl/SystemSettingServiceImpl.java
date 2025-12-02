@@ -52,6 +52,9 @@ public class SystemSettingServiceImpl implements SystemSettingService {
         if (request.defaultRegionId() != null) {
             Region region = regionRepository.findById(request.defaultRegionId())
                 .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "默认区域不存在"));
+            if (region.isHidden()) {
+                throw new BusinessException(ResultCode.BAD_REQUEST, "默认区域不能选择已隐藏的地区");
+            }
             setting.setDefaultRegion(region);
         } else {
             setting.setDefaultRegion(null);

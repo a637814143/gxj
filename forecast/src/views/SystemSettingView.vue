@@ -60,7 +60,7 @@
         <el-form-item label="默认区域">
           <el-select v-model="settings.defaultRegion" placeholder="请选择" :disabled="loading || regionLoading">
             <el-option
-              v-for="region in regions"
+              v-for="region in visibleRegions"
               :key="region.id"
               :label="region.name"
               :value="region.id"
@@ -82,7 +82,14 @@
                   <span v-else>{{ row.name }}</span>
                 </template>
               </el-table-column>
-              <el-table-column label="操作" width="200">
+              <el-table-column label="状态" width="120">
+                <template #default="{ row }">
+                  <el-tag size="small" :type="row.hidden ? 'info' : 'success'">
+                    {{ row.hidden ? '已隐藏' : '展示中' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="280">
                 <template #default="{ row }">
                   <div class="table-actions">
                     <template v-if="editingRegionId === row.id">
@@ -91,6 +98,15 @@
                     </template>
                     <template v-else>
                       <el-button size="small" type="primary" text :disabled="regionLoading" @click="startEdit(row)">编辑</el-button>
+                      <el-button
+                        size="small"
+                        :type="row.hidden ? 'success' : 'warning'"
+                        text
+                        :disabled="regionLoading"
+                        @click="toggleRegionVisibility(row)"
+                      >
+                        {{ row.hidden ? '取消隐藏' : '隐藏' }}
+                      </el-button>
                       <el-button size="small" type="danger" text :disabled="regionLoading" @click="removeRegion(row)">删除</el-button>
                     </template>
                   </div>
@@ -170,8 +186,10 @@ const newRegionName = ref('')
 const editingRegionId = ref(null)
 const editRegionName = ref('')
 
+const visibleRegions = computed(() => regions.value.filter(region => !region.hidden))
+
 const defaultRegionName = computed(() => {
-  const target = regions.value.find(region => region.id === settings.defaultRegion)
+  const target = visibleRegions.value.find(region => region.id === settings.defaultRegion)
   return target?.name ?? '未设置'
 })
 
@@ -257,7 +275,8 @@ const applyRegionList = list => {
           level: item.level,
           parentCode: item.parentCode,
           parentName: item.parentName,
-          description: item.description
+          description: item.description,
+          hidden: Boolean(item.hidden)
         }))
     : []
 
@@ -277,16 +296,18 @@ const applySettings = payload => {
 }
 
 const ensureDefaultRegionValidity = () => {
-  if (!regions.value.length) {
+  const available = visibleRegions.value
+  if (!available.length) {
+    settings.defaultRegion = null
     return
   }
   if (settings.defaultRegion == null) {
-    settings.defaultRegion = regions.value[0].id
+    settings.defaultRegion = available[0].id
     return
   }
-  const exists = regions.value.some(region => region.id === settings.defaultRegion)
+  const exists = available.some(region => region.id === settings.defaultRegion)
   if (!exists) {
-    settings.defaultRegion = regions.value[0].id
+    settings.defaultRegion = available[0].id
   }
 }
 
@@ -343,8 +364,8 @@ const addRegion = async () => {
   try {
     await apiClient.post('/api/base/regions', { name, level: 'PREFECTURE' })
     await fetchRegions()
-    if (!settings.defaultRegion && regions.value.length) {
-      settings.defaultRegion = regions.value[0].id
+    if (!settings.defaultRegion && visibleRegions.value.length) {
+      settings.defaultRegion = visibleRegions.value[0].id
     }
     newRegionName.value = ''
     ElMessage.success('区域已新增')
@@ -384,7 +405,8 @@ const confirmEdit = async region => {
       level: region.level,
       parentCode: region.parentCode,
       parentName: region.parentName,
-      description: region.description
+      description: region.description,
+      hidden: region.hidden
     })
     await fetchRegions()
     cancelEdit()
@@ -397,6 +419,11 @@ const confirmEdit = async region => {
 }
 
 const removeRegion = async region => {
+  const remainingVisible = visibleRegions.value.filter(item => item.id !== region.id && !item.hidden)
+  if (!region.hidden && remainingVisible.length === 0) {
+    ElMessage.warning('至少保留一个可用区域配置')
+    return
+  }
   if (regions.value.length === 1) {
     ElMessage.warning('至少保留一个区域配置')
     return
@@ -421,6 +448,28 @@ const removeRegion = async region => {
     ElMessage.success('区域已删除')
   } catch (error) {
     ElMessage.error(error?.response?.data?.message || '删除区域失败')
+  } finally {
+    regionLoading.value = false
+  }
+}
+
+const toggleRegionVisibility = async region => {
+  const targetHidden = !region.hidden
+  const otherVisible = visibleRegions.value.filter(item => item.id !== region.id)
+  if (targetHidden && otherVisible.length === 0) {
+    ElMessage.warning('至少保留一个可用区域配置')
+    return
+  }
+  if (targetHidden && settings.defaultRegion === region.id) {
+    settings.defaultRegion = null
+  }
+  regionLoading.value = true
+  try {
+    await apiClient.patch(`/api/base/regions/${region.id}/visibility`, { hidden: targetHidden })
+    await fetchRegions()
+    ElMessage.success(targetHidden ? '区域已隐藏' : '已取消隐藏')
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.message || (targetHidden ? '隐藏区域失败' : '取消隐藏失败'))
   } finally {
     regionLoading.value = false
   }

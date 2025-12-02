@@ -18,4 +18,6 @@ public interface RegionService {
     Region update(Long id, RegionRequest request);
 
     void delete(Long id);
+
+    Region updateVisibility(Long id, boolean hidden);
 }

@@ -100,6 +100,8 @@ public class RegionServiceImpl implements RegionService {
         region.setParentCode(normalizeNullable(request.parentCode()));
         region.setParentName(normalizeNullable(request.parentName()));
         region.setDescription(normalizeNullable(request.description()));
+        boolean hidden = request.hidden() != null ? request.hidden() : region.isHidden();
+        region.setHidden(hidden);
     }
 
     private void ensureNameUnique(String name, Long currentId) {
@@ -170,5 +172,15 @@ public class RegionServiceImpl implements RegionService {
 
     private String normalizeNullable(String value) {
         return StringUtils.hasText(value) ? value.trim() : null;
+    }
+
+    @Override
+    @Transactional
+    public Region updateVisibility(Long id, boolean hidden) {
+        Region region = regionRepository.findById(id)
+            .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "区域不存在"));
+
+        region.setHidden(hidden);
+        return regionRepository.save(region);
     }
 }
