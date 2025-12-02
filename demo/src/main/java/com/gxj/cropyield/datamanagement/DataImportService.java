@@ -41,6 +41,8 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -68,6 +70,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -83,6 +86,7 @@ import java.util.stream.Collectors;
 @Service
 public class DataImportService {
 
+    private static final Logger LOG = LoggerFactory.getLogger(DataImportService.class);
     private static final int MIN_YEAR = 1978;
     private static final int PREVIEW_LIMIT = 10;
     private static final int MAX_WARNING_STORE = 50;
@@ -239,6 +243,7 @@ public class DataImportService {
         jobRepository.save(job);
 
         try {
+            ensureDatabaseAvailable(job.getDatasetType());
             Path filePath = Paths.get(job.getStoragePath());
             if (!Files.exists(filePath)) {
                 throw new IllegalStateException("导入文件不存在或已被移除");
@@ -272,11 +277,106 @@ public class DataImportService {
                 updateDatasetFileMetadata(result.datasetFile(), job);
             }
         } catch (Exception exception) {
+            LOG.error("导入任务 {} 处理失败", job.getTaskId(), exception);
             job.setStatus(DataImportJobStatus.FAILED);
             job.setFinishedAt(LocalDateTime.now());
-            job.setMessage("导入失败：" + exception.getMessage());
+            job.setMessage("导入失败：" + extractRootCauseMessage(exception));
             jobRepository.save(job);
         }
+    }
+
+    private void ensureDatabaseAvailable(DatasetType datasetType) {
+        verifyDatabaseConnectivity();
+
+        List<TableRequirement> requirements = new ArrayList<>();
+        requirements.add(new TableRequirement(
+                "data_import_job",
+                List.of("id", "task_id", "dataset_type", "dataset_file_id", "status", "storage_path")
+        ));
+        requirements.add(new TableRequirement(
+                "data_import_job_error",
+                List.of("id", "job_id", "line_number", "error_code", "message", "raw_value")
+        ));
+        requirements.add(new TableRequirement(
+                "dataset_file",
+                List.of("id", "name", "type", "storage_path")
+        ));
+        requirements.add(new TableRequirement(
+                "base_crop",
+                List.of("id", "name")
+        ));
+        requirements.add(new TableRequirement(
+                "base_region",
+                List.of("id", "name")
+        ));
+        if (datasetType == DatasetType.WEATHER) {
+            requirements.add(new TableRequirement(
+                    "dataset_weather_record",
+                    List.of("id", "dataset_file_id", "region_id", "record_date", "max_temperature", "min_temperature")
+            ));
+        } else {
+            requirements.add(new TableRequirement(
+                    "dataset_yield_record",
+                    List.of("id", "dataset_file_id", "crop_id", "region_id", "year", "production")
+            ));
+        }
+
+        for (TableRequirement requirement : requirements) {
+            assertTableStructure(requirement);
+        }
+    }
+
+    private boolean tableExists(String tableName) {
+        try {
+            Integer count = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?",
+                    Integer.class,
+                    tableName
+            );
+            return count != null && count > 0;
+        } catch (DataAccessException exception) {
+            throw new IllegalStateException("检测数据库表失败：" + extractRootCauseMessage(exception), exception);
+        }
+    }
+
+    private void assertTableStructure(TableRequirement requirement) {
+        if (!tableExists(requirement.name())) {
+            throw new IllegalStateException("数据库缺少表 " + requirement.name() + "，请先初始化基础表结构");
+        }
+        List<String> missingColumns = missingColumns(requirement.name(), requirement.requiredColumns());
+        if (!missingColumns.isEmpty()) {
+            throw new IllegalStateException("数据库表 " + requirement.name() + " 缺少字段：" + String.join(", ", missingColumns) + "，请检查数据库迁移或手动补全");
+        }
+    }
+
+    private void verifyDatabaseConnectivity() {
+        try {
+            jdbcTemplate.execute("SELECT 1");
+        } catch (DataAccessException exception) {
+            throw new IllegalStateException("数据库连接失败，请检查数据库服务与配置", exception);
+        }
+    }
+
+    private List<String> missingColumns(String tableName, List<String> requiredColumns) {
+        try {
+            List<String> existingColumns = jdbcTemplate.query(
+                    "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?",
+                    (resultSet, rowNum) -> resultSet.getString("COLUMN_NAME"),
+                    tableName
+            );
+            Set<String> existing = existingColumns.stream()
+                    .filter(Objects::nonNull)
+                    .map(String::toLowerCase)
+                    .collect(Collectors.toSet());
+            return requiredColumns.stream()
+                    .filter(column -> !existing.contains(column.toLowerCase()))
+                    .toList();
+        } catch (DataAccessException exception) {
+            throw new IllegalStateException("检测数据库字段失败：" + extractRootCauseMessage(exception), exception);
+        }
+    }
+
+    private record TableRequirement(String name, List<String> requiredColumns) {
     }
 
     private DatasetFile ensureDatasetFile(DataImportJob job) {
@@ -427,7 +527,7 @@ public class DataImportService {
                     }
                 });
             } catch (DataAccessException exception) {
-                throw new IllegalStateException("写入数据库失败", exception);
+                throw new IllegalStateException("写入数据库失败：" + extractRootCauseMessage(exception), exception);
             }
 
             for (ValidRecord record : batch) {
@@ -479,7 +579,7 @@ public class DataImportService {
                     preparedStatement.setString(9, record.dataSource());
                 });
             } catch (DataAccessException exception) {
-                throw new IllegalStateException("写入数据库失败", exception);
+                throw new IllegalStateException("写入数据库失败：" + extractRootCauseMessage(exception), exception);
             }
 
             for (ValidWeatherRecord record : batch) {
@@ -1269,12 +1369,22 @@ public class DataImportService {
     }
 
     private Double parseNumeric(String value) {
-        if (value == null || value.isBlank()) {
+        String trimmed = trimToNull(value);
+        if (trimmed == null) {
             return null;
         }
+        String normalized = trimmed.replace('，', ',');
         try {
-            return Double.parseDouble(value.replaceAll(",", ""));
-        } catch (NumberFormatException exception) {
+            return Double.parseDouble(normalized.replaceAll(",", ""));
+        } catch (NumberFormatException ignored) {
+            Matcher matcher = NUMBER_PATTERN.matcher(normalized);
+            if (matcher.find()) {
+                try {
+                    return Double.parseDouble(matcher.group().replaceAll(",", ""));
+                } catch (NumberFormatException ignoredToo) {
+                    return null;
+                }
+            }
             return null;
         }
     }
@@ -1446,6 +1556,21 @@ public class DataImportService {
         return Math.round(value * 100.0) / 100.0;
     }
 
+    private String extractRootCauseMessage(Throwable throwable) {
+        Throwable root = throwable;
+        while (root.getCause() != null && root.getCause() != root) {
+            root = root.getCause();
+        }
+        String message = root.getMessage();
+        if (message == null || message.isBlank()) {
+            message = root.getClass().getSimpleName();
+        }
+        if (message.length() > 240) {
+            return message.substring(0, 240);
+        }
+        return message;
+    }
+
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
     }
@@ -1563,9 +1688,9 @@ public class DataImportService {
         mapping.put("regionParentName", List.of("parentregion", "parentname", "上级地区", "上级行政区", "所属地区"));
         mapping.put("regionDescription", List.of("regiondescription", "地区描述", "地区说明"));
         mapping.put("year", List.of("year", "年份", "统计年份", "年度"));
-        mapping.put("sownArea", List.of("sownarea", "播种面积", "播种总面积", "面积", "耕地面积"));
-        mapping.put("production", List.of("production", "产量", "总产量", "产出", "年度产量"));
-        mapping.put("yieldPerHectare", List.of("yield", "yieldperhectare", "单产", "产量/面积", "平均单产"));
+        mapping.put("sownArea", List.of("sownarea", "播种面积", "播种总面积", "面积", "耕地面积", "播种面积(千公顷)", "播种面积千公顷"));
+        mapping.put("production", List.of("production", "产量", "总产量", "产出", "年度产量", "产量(万吨)", "产量万吨"));
+        mapping.put("yieldPerHectare", List.of("yield", "yieldperhectare", "单产", "产量/面积", "平均单产", "单产(吨/公顷)", "单产吨公顷"));
         mapping.put("dataSource", List.of("datasource", "数据来源", "来源", "采集来源"));
         mapping.put("collectedAt", List.of("collectedat", "采集日期", "收集日期", "统计日期"));
         mapping.put("recordDate", List.of("recorddate", "date", "日期", "观测日期", "记录日期"));
