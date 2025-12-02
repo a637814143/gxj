@@ -69,52 +69,34 @@
         </el-form-item>
         <el-form-item label="区域管理">
           <div class="region-manage">
-            <div class="region-toggle">
-              <div class="region-toggle-title">
-                区域列表
-                <span class="region-toggle-sub">点击按钮展开或收起区域管理</span>
-              </div>
-              <el-button
-                type="primary"
-                link
-                :icon="showRegionManager ? ArrowUp : ArrowDown"
-                @click="showRegionManager = !showRegionManager"
-              >
-                {{ showRegionManager ? '收起区域列表' : '管理区域列表' }}
-              </el-button>
+            <div class="region-add">
+              <el-input v-model="newRegionName" placeholder="输入区域名称" :disabled="loading || regionLoading" />
+              <el-button type="primary" :loading="regionLoading" :disabled="loading" @click="addRegion">新增区域</el-button>
             </div>
-            <transition name="fade">
-              <div v-show="showRegionManager" class="region-manage-content">
-                <div class="region-add">
-                  <el-input v-model="newRegionName" placeholder="输入区域名称" :disabled="loading || regionLoading" />
-                  <el-button type="primary" :loading="regionLoading" :disabled="loading" @click="addRegion">新增区域</el-button>
-                </div>
-                <el-table :data="regions" border size="small" class="region-table" :loading="regionLoading">
-                  <el-table-column prop="name" label="区域名称">
-                    <template #default="{ row }">
-                      <div v-if="editingRegionId === row.id" class="region-edit-row">
-                        <el-input v-model="editRegionName" class="edit-input" :disabled="regionLoading" />
-                      </div>
-                      <span v-else>{{ row.name }}</span>
+            <el-table :data="regions" border size="small" class="region-table" :loading="regionLoading">
+              <el-table-column prop="name" label="区域名称">
+                <template #default="{ row }">
+                  <div v-if="editingRegionId === row.id" class="region-edit-row">
+                    <el-input v-model="editRegionName" class="edit-input" :disabled="regionLoading" />
+                  </div>
+                  <span v-else>{{ row.name }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="200">
+                <template #default="{ row }">
+                  <div class="table-actions">
+                    <template v-if="editingRegionId === row.id">
+                      <el-button size="small" type="primary" :loading="regionLoading" @click="confirmEdit(row)">保存</el-button>
+                      <el-button size="small" :disabled="regionLoading" @click="cancelEdit">取消</el-button>
                     </template>
-                  </el-table-column>
-                  <el-table-column label="操作" width="200">
-                    <template #default="{ row }">
-                      <div class="table-actions">
-                        <template v-if="editingRegionId === row.id">
-                          <el-button size="small" type="primary" :loading="regionLoading" @click="confirmEdit(row)">保存</el-button>
-                          <el-button size="small" :disabled="regionLoading" @click="cancelEdit">取消</el-button>
-                        </template>
-                        <template v-else>
-                          <el-button size="small" type="primary" text :disabled="regionLoading" @click="startEdit(row)">编辑</el-button>
-                          <el-button size="small" type="danger" text :disabled="regionLoading" @click="removeRegion(row)">删除</el-button>
-                        </template>
-                      </div>
+                    <template v-else>
+                      <el-button size="small" type="primary" text :disabled="regionLoading" @click="startEdit(row)">编辑</el-button>
+                      <el-button size="small" type="danger" text :disabled="regionLoading" @click="removeRegion(row)">删除</el-button>
                     </template>
-                  </el-table-column>
-                </el-table>
-              </div>
-            </transition>
+                  </div>
+                </template>
+              </el-table-column>
+            </el-table>
           </div>
         </el-form-item>
         <el-form-item label="通知邮箱" prop="notifyEmail">
@@ -146,7 +128,6 @@
 </template>
 
 <script setup>
-import { ArrowDown, ArrowUp } from '@element-plus/icons-vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import apiClient from '../services/http'
@@ -185,7 +166,6 @@ const rules = {
   ]
 }
 
-const showRegionManager = ref(false)
 const newRegionName = ref('')
 const editingRegionId = ref(null)
 const editRegionName = ref('')
@@ -565,33 +545,6 @@ const save = async () => {
   width: 100%;
 }
 
-.region-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.region-toggle-title {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  font-weight: 600;
-  color: #1f2c47;
-}
-
-.region-toggle-sub {
-  font-size: 12px;
-  color: #6e7fa1;
-  font-weight: 400;
-}
-
-.region-manage-content {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
 .region-add {
   display: flex;
   gap: 12px;
@@ -618,16 +571,6 @@ const save = async () => {
 
 .region-edit-row .edit-input {
   width: 100%;
-}
-
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
 }
 
 .hero-stat-label {
