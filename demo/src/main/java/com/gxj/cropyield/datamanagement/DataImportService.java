@@ -302,11 +302,11 @@ public class DataImportService {
                 List.of("id", "name", "type", "storage_path")
         ));
         requirements.add(new TableRequirement(
-                "crop",
+                "base_crop",
                 List.of("id", "name")
         ));
         requirements.add(new TableRequirement(
-                "region",
+                "base_region",
                 List.of("id", "name")
         ));
         if (datasetType == DatasetType.WEATHER) {
