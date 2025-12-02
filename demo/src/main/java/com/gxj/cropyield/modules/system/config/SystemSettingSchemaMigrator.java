@@ -34,6 +34,13 @@ public class SystemSettingSchemaMigrator implements ApplicationRunner {
         ensureColumn("cluster_enabled", "TINYINT(1) NOT NULL DEFAULT 1 AFTER notify_email");
         ensureColumn("pending_change_count", "INT NOT NULL DEFAULT 0 AFTER cluster_enabled");
         ensureColumn("security_strategy", "VARCHAR(64) NULL AFTER pending_change_count");
+        ensureColumn("public_visible", "TINYINT(1) NOT NULL DEFAULT 0 AFTER security_strategy");
+        ensureColumn("public_title", "VARCHAR(128) NULL AFTER public_visible");
+        ensureColumn("public_summary", "VARCHAR(512) NULL AFTER public_title");
+        ensureColumn("public_audience", "VARCHAR(64) NULL AFTER public_summary");
+        ensureColumn("public_level", "VARCHAR(32) NULL AFTER public_audience");
+        ensureColumn("public_start_at", "DATETIME NULL AFTER public_level");
+        ensureColumn("public_end_at", "DATETIME NULL AFTER public_start_at");
         ensureForeignKey();
     }
 
@@ -53,6 +60,13 @@ public class SystemSettingSchemaMigrator implements ApplicationRunner {
             + " cluster_enabled TINYINT(1) NOT NULL DEFAULT 1,"
             + " pending_change_count INT NOT NULL DEFAULT 0,"
             + " security_strategy VARCHAR(64),"
+            + " public_visible TINYINT(1) NOT NULL DEFAULT 0,"
+            + " public_title VARCHAR(128),"
+            + " public_summary VARCHAR(512),"
+            + " public_audience VARCHAR(64),"
+            + " public_level VARCHAR(32),"
+            + " public_start_at DATETIME NULL,"
+            + " public_end_at DATETIME NULL,"
             + " created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,"
             + " updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
             + ") ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '系统配置项'";

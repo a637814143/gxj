@@ -192,7 +192,6 @@ const summary = ref(null)
 const summaryLoading = ref(false)
 const deletingRunId = ref(null)
 const exporting = reactive({ excel: false, pdf: false })
-
 const TABLE_PAGE_SIZE = 5
 const tablePagination = reactive({ page: 1, size: TABLE_PAGE_SIZE })
 
