@@ -10,6 +10,7 @@ import com.gxj.cropyield.modules.system.entity.SystemSetting;
 import com.gxj.cropyield.modules.system.repository.SystemSettingRepository;
 import com.gxj.cropyield.modules.system.service.SystemSettingService;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 /**
@@ -30,11 +31,11 @@ public class SystemSettingServiceImpl implements SystemSettingService {
     }
 
     @Override
-    @Transactional
+    @Transactional(readOnly = true)
     public SystemSettingResponse getCurrentSettings() {
-        SystemSetting setting = systemSettingRepository.findTopByOrderByIdAsc()
-            .orElseGet(this::createDefaultSetting);
-        return toResponse(setting);
+        return systemSettingRepository.findTopByOrderByIdAsc()
+            .map(this::toResponse)
+            .orElseGet(() -> toResponse(createDefaultSettingInNewTransaction()));
     }
 
     @Override
@@ -67,6 +68,11 @@ public class SystemSettingServiceImpl implements SystemSettingService {
     private SystemSetting createDefaultSetting() {
         SystemSetting setting = new SystemSetting();
         return systemSettingRepository.save(setting);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    protected SystemSetting createDefaultSettingInNewTransaction() {
+        return createDefaultSetting();
     }
 
     private SystemSettingResponse toResponse(SystemSetting setting) {
