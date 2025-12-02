@@ -9,8 +9,10 @@ import com.gxj.cropyield.modules.system.dto.SystemSettingResponse;
 import com.gxj.cropyield.modules.system.entity.SystemSetting;
 import com.gxj.cropyield.modules.system.repository.SystemSettingRepository;
 import com.gxj.cropyield.modules.system.service.SystemSettingService;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 /**
@@ -23,11 +25,14 @@ public class SystemSettingServiceImpl implements SystemSettingService {
 
     private final SystemSettingRepository systemSettingRepository;
     private final RegionRepository regionRepository;
+    private final TransactionTemplate requiresNewTemplate;
 
     public SystemSettingServiceImpl(SystemSettingRepository systemSettingRepository,
-                                    RegionRepository regionRepository) {
+                                    RegionRepository regionRepository,
+                                    PlatformTransactionManager transactionManager) {
         this.systemSettingRepository = systemSettingRepository;
         this.regionRepository = regionRepository;
+        this.requiresNewTemplate = createRequiresNewTemplate(transactionManager);
     }
 
     @Override
@@ -70,9 +75,8 @@ public class SystemSettingServiceImpl implements SystemSettingService {
         return systemSettingRepository.save(setting);
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     protected SystemSetting createDefaultSettingInNewTransaction() {
-        return createDefaultSetting();
+        return requiresNewTemplate.execute(status -> createDefaultSetting());
     }
 
     private SystemSettingResponse toResponse(SystemSetting setting) {
@@ -91,5 +95,12 @@ public class SystemSettingServiceImpl implements SystemSettingService {
 
     private String normalizeNullable(String value) {
         return StringUtils.hasText(value) ? value.trim() : null;
+    }
+
+    private TransactionTemplate createRequiresNewTemplate(PlatformTransactionManager transactionManager) {
+        TransactionTemplate template = new TransactionTemplate(transactionManager);
+        template.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        template.setReadOnly(false);
+        return template;
     }
 }
