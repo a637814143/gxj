@@ -70,16 +70,36 @@
         <el-form-item label="区域管理">
           <div class="region-manage">
             <div class="region-add">
-              <el-input v-model="newRegionName" placeholder="输入区域名称" :disabled="loading || regionLoading" />
+              <el-input
+                v-model="newRegionName"
+                placeholder="输入区域名称"
+                :disabled="loading || regionLoading"
+                :type="hideRegions ? 'password' : 'text'"
+              />
               <el-button type="primary" :loading="regionLoading" :disabled="loading" @click="addRegion">新增区域</el-button>
             </div>
             <el-table :data="regions" border size="small" class="region-table" :loading="regionLoading">
               <el-table-column prop="name" label="区域名称">
+                <template #header>
+                  <div class="region-name-header">
+                    <span>区域名称</span>
+                    <el-button size="small" type="primary" text @click="toggleRegionVisibility">
+                      {{ hideRegions ? '显示区域信息' : '隐藏区域信息' }}
+                    </el-button>
+                  </div>
+                </template>
                 <template #default="{ row }">
                   <div v-if="editingRegionId === row.id" class="region-edit-row">
-                    <el-input v-model="editRegionName" class="edit-input" :disabled="regionLoading" />
+                    <el-input
+                      v-model="editRegionName"
+                      class="edit-input"
+                      :disabled="regionLoading"
+                      :type="hideRegions ? 'password' : 'text'"
+                    />
                   </div>
-                  <span v-else>{{ row.name }}</span>
+                  <span v-else class="region-name-text" :class="{ 'region-name-hidden': hideRegions }">
+                    {{ hideRegions ? '******' : row.name }}
+                  </span>
                 </template>
               </el-table-column>
               <el-table-column label="操作" width="200">
@@ -169,6 +189,7 @@ const rules = {
 const newRegionName = ref('')
 const editingRegionId = ref(null)
 const editRegionName = ref('')
+const hideRegions = ref(false)
 
 const defaultRegionName = computed(() => {
   const target = regions.value.find(region => region.id === settings.defaultRegion)
@@ -219,6 +240,10 @@ const reminders = computed(() => {
   notices.push(`默认区域已设置为「${defaultRegionName.value}」，可通过下方区域管理动态调整`)
   return notices
 })
+
+const toggleRegionVisibility = () => {
+  hideRegions.value = !hideRegions.value
+}
 
 function formatTrend(value) {
   if (value > 0) return `较昨日 +${value}`
@@ -549,6 +574,23 @@ const save = async () => {
   display: flex;
   gap: 12px;
   align-items: center;
+}
+
+.region-name-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.region-name-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.region-name-hidden {
+  letter-spacing: 2px;
+  color: #8c97ae;
 }
 
 .region-add :deep(.el-input) {
