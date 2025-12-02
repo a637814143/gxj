@@ -25,8 +25,24 @@ public class DatasetSchemaMigrator implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
+        ensureDatasetFileTable();
         ensureDatasetFileColumn("dataset_yield_record", "idx_yield_dataset_file", "fk_yield_dataset_file");
+        ensureDatasetFileColumn("dataset_weather_record", "idx_weather_dataset_file", "fk_weather_dataset_file");
         ensureImportJobColumn();
+    }
+
+    private void ensureDatasetFileTable() {
+        String ddl = "CREATE TABLE IF NOT EXISTS dataset_file (" +
+                " id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY," +
+                " name VARCHAR(128) NOT NULL," +
+                " type VARCHAR(32) NOT NULL," +
+                " storage_path VARCHAR(256) NOT NULL," +
+                " description VARCHAR(256)," +
+                " created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+                " updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP," +
+                " UNIQUE KEY uq_dataset_file_name (name)" +
+                ") ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '原始数据文件登记'";
+        executeDdl("dataset_file", "create dataset_file table", ddl);
     }
 
     private void ensureDatasetFileColumn(String tableName, String indexName, String constraintName) {
