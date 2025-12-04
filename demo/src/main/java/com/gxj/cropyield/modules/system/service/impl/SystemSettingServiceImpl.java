@@ -10,7 +10,11 @@ import com.gxj.cropyield.modules.system.entity.SystemSetting;
 import com.gxj.cropyield.modules.system.repository.SystemSettingRepository;
 import com.gxj.cropyield.modules.system.service.SystemSettingService;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 /**
  * 系统设置模块的业务实现类，负责落实系统设置领域的业务处理逻辑。
@@ -22,19 +26,22 @@ public class SystemSettingServiceImpl implements SystemSettingService {
 
     private final SystemSettingRepository systemSettingRepository;
     private final RegionRepository regionRepository;
+    private final TransactionTemplate transactionTemplate;
 
     public SystemSettingServiceImpl(SystemSettingRepository systemSettingRepository,
-                                    RegionRepository regionRepository) {
+                                    RegionRepository regionRepository,
+                                    PlatformTransactionManager transactionManager) {
         this.systemSettingRepository = systemSettingRepository;
         this.regionRepository = regionRepository;
+        this.transactionTemplate = createRequiresNewTemplate(transactionManager);
     }
 
     @Override
     @Transactional(readOnly = true)
     public SystemSettingResponse getCurrentSettings() {
-        SystemSetting setting = systemSettingRepository.findTopByOrderByIdAsc()
-            .orElseGet(this::createDefaultSetting);
-        return toResponse(setting);
+        return systemSettingRepository.findTopByOrderByIdAsc()
+            .map(this::toResponse)
+            .orElseGet(() -> toResponse(createDefaultSettingInNewTransaction()));
     }
 
     @Override
@@ -64,9 +71,25 @@ public class SystemSettingServiceImpl implements SystemSettingService {
         return toResponse(saved);
     }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    protected SystemSetting createDefaultSettingInNewTransaction() {
+        return createDefaultSettingWithTemplate();
+    }
+
     private SystemSetting createDefaultSetting() {
         SystemSetting setting = new SystemSetting();
         return systemSettingRepository.save(setting);
+    }
+
+    private SystemSetting createDefaultSettingWithTemplate() {
+        return transactionTemplate.execute(status -> createDefaultSetting());
+    }
+
+    private TransactionTemplate createRequiresNewTemplate(PlatformTransactionManager transactionManager) {
+        TransactionTemplate template = new TransactionTemplate(transactionManager);
+        template.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        template.setReadOnly(false);
+        return template;
     }
 
     private SystemSettingResponse toResponse(SystemSetting setting) {
