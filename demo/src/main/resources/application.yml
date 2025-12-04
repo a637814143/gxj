@@ -27,20 +27,22 @@ spring:
             enable: false
   sql:
     init:
+      # 启动时始终运行 schema 以补齐缺失表结构；schema.sql 采用幂等语句不会覆盖已有数据
       mode: always
       schema-locations: classpath:schema.sql
-      data-locations: classpath:data.sql
       encoding: UTF-8
       continue-on-error: true
   jpa:
     database-platform: org.hibernate.dialect.MySQLDialect
     hibernate:
-      ddl-auto: none
+      # 使用 schema.sql 管理表结构，避免 Hibernate 自动迁移导致类型不一致
+      ddl-auto: validate
     show-sql: true
     properties:
       hibernate:
         format_sql: true
-    defer-datasource-initialization: true
+    # 让 schema.sql 在 JPA 验证之前运行，确保兼容性的 ALTER 语句先执行
+    defer-datasource-initialization: false
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: Asia/Shanghai
