@@ -700,6 +700,20 @@ CREATE TABLE IF NOT EXISTS consultation_message (
     CONSTRAINT fk_message_sender FOREIGN KEY (sender_id) REFERENCES sys_user (id) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '在线咨询消息';
 
+CREATE TABLE IF NOT EXISTS consultation_attachment (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    message_id BIGINT UNSIGNED NOT NULL,
+    file_name VARCHAR(256) NOT NULL,
+    original_name VARCHAR(256),
+    content_type VARCHAR(128),
+    file_size BIGINT,
+    storage_path VARCHAR(512) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_attachment_message (message_id),
+    CONSTRAINT fk_attachment_message FOREIGN KEY (message_id) REFERENCES consultation_message (id) ON DELETE CASCADE
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '在线咨询消息附件';
+
 -- Backfill recall columns for existing installations without relying on
 -- MySQL 8 "IF NOT EXISTS" support so MySQL 5.7 deployments succeed.
 SET @missing_recalled := (
