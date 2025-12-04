@@ -32,9 +32,9 @@ export const useAnnouncementStore = defineStore('announcement', {
         const { data } = await apiClient.get('/api/system/settings')
         const payload = data?.data ?? data ?? {}
         this.announcement = {
-          title: payload.announcementTitle || '平台通知',
-          message: payload.announcementMessage || '暂无通知内容',
-          status: (payload.announcementStatus || 'INACTIVE').toUpperCase(),
+          title: payload.announcementTitle || payload.announcement_title || '平台通知',
+          message: payload.announcementMessage || payload.announcement_message || '暂无通知内容',
+          status: (payload.announcementStatus || payload.announcement_status || 'INACTIVE').toUpperCase(),
           updatedAt: payload.updatedAt ?? payload.updated_at ?? null
         }
         this.lastLoaded = now

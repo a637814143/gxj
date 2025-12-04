@@ -356,9 +356,9 @@ const applySettings = payload => {
   settings.clusterEnabled = Boolean(payload?.clusterEnabled)
   settings.pendingChangeCount = Number(payload?.pendingChangeCount ?? 0)
   settings.securityStrategy = payload?.securityStrategy ?? ''
-  settings.announcementTitle = payload?.announcementTitle ?? ''
-  settings.announcementMessage = payload?.announcementMessage ?? ''
-  settings.announcementStatus = (payload?.announcementStatus || 'INACTIVE').toUpperCase()
+  settings.announcementTitle = payload?.announcementTitle ?? payload?.announcement_title ?? ''
+  settings.announcementMessage = payload?.announcementMessage ?? payload?.announcement_message ?? ''
+  settings.announcementStatus = (payload?.announcementStatus || payload?.announcement_status || 'INACTIVE').toUpperCase()
   const updatedAtValue = payload?.updatedAt ?? payload?.updated_at ?? null
   settings.updatedAt = updatedAtValue ?? settings.updatedAt ?? null
   ensureDefaultRegionValidity()
