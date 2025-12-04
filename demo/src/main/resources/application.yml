@@ -41,7 +41,8 @@ spring:
     properties:
       hibernate:
         format_sql: true
-    defer-datasource-initialization: true
+    # 让 schema.sql 在 JPA 验证之前运行，确保兼容性的 ALTER 语句先执行
+    defer-datasource-initialization: false
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: Asia/Shanghai
