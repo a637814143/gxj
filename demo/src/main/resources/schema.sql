@@ -41,6 +41,24 @@ CREATE TABLE IF NOT EXISTS base_crop (
     UNIQUE KEY uq_base_crop_code (code)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '基础作物信息';
 
+-- 如果历史实例中 base_crop 表缺少 harvest_season 列，则启动时补齐，避免 Hibernate 校验失败
+SET @ddl := (
+    SELECT IF(
+        EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = @current_schema
+              AND table_name = 'base_crop'
+              AND column_name = 'harvest_season'
+        ),
+        'SELECT 1',
+        "ALTER TABLE base_crop ADD COLUMN harvest_season VARCHAR(32) NOT NULL DEFAULT 'ANNUAL' AFTER category"
+    )
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
 CREATE TABLE IF NOT EXISTS dataset_file (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(128) NOT NULL,
