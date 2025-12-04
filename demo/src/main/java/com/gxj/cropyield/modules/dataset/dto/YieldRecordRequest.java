@@ -25,8 +25,6 @@ public record YieldRecordRequest(
 
     Double yieldPerHectare,
 
-    Double averagePrice,
-
     String dataSource,
 
     LocalDate collectedAt

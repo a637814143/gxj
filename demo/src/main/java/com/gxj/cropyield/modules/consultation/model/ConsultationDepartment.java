@@ -10,7 +10,6 @@ import java.util.stream.Collectors;
  */
 public enum ConsultationDepartment {
     PLANT_PROTECTION("PLANT_PROTECTION", "植保与防灾中心", "提供病虫害诊断、防控策略与农技指导"),
-    SOIL_SERVICE("SOIL_SERVICE", "土壤肥料服务站", "为土壤改良、施肥配方和测土配肥提供建议"),
     MARKET_SERVICE("MARKET_SERVICE", "农产品市场科", "关注价格趋势、销售渠道与产销对接"),
     SMART_AGRI("SMART_AGRI", "智慧农机中心", "提供农机设备维护、智能农机应用支持");
 

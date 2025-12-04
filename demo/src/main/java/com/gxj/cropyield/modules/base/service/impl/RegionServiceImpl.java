@@ -6,7 +6,6 @@ import com.gxj.cropyield.modules.base.dto.RegionRequest;
 import com.gxj.cropyield.modules.base.entity.Region;
 import com.gxj.cropyield.modules.base.repository.RegionRepository;
 import com.gxj.cropyield.modules.base.service.RegionService;
-import com.gxj.cropyield.modules.dataset.repository.PriceRecordRepository;
 import com.gxj.cropyield.modules.dataset.repository.YieldRecordRepository;
 import com.gxj.cropyield.modules.forecast.repository.ForecastRunRepository;
 import com.gxj.cropyield.modules.forecast.repository.ForecastTaskRepository;
@@ -30,7 +29,6 @@ public class RegionServiceImpl implements RegionService {
 
     private final RegionRepository regionRepository;
     private final YieldRecordRepository yieldRecordRepository;
-    private final PriceRecordRepository priceRecordRepository;
     private final ForecastTaskRepository forecastTaskRepository;
     private final ForecastRunRepository forecastRunRepository;
 
@@ -38,12 +36,10 @@ public class RegionServiceImpl implements RegionService {
 
     public RegionServiceImpl(RegionRepository regionRepository,
                              YieldRecordRepository yieldRecordRepository,
-                             PriceRecordRepository priceRecordRepository,
                              ForecastTaskRepository forecastTaskRepository,
                              ForecastRunRepository forecastRunRepository) {
         this.regionRepository = regionRepository;
         this.yieldRecordRepository = yieldRecordRepository;
-        this.priceRecordRepository = priceRecordRepository;
         this.forecastTaskRepository = forecastTaskRepository;
         this.forecastRunRepository = forecastRunRepository;
     }
@@ -77,7 +73,6 @@ public class RegionServiceImpl implements RegionService {
             .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "区域不存在"));
 
         boolean inUse = yieldRecordRepository.existsByRegionId(id)
-            || priceRecordRepository.existsByRegionId(id)
             || forecastTaskRepository.existsByRegionId(id)
             || forecastRunRepository.existsByRegionId(id);
         if (inUse) {

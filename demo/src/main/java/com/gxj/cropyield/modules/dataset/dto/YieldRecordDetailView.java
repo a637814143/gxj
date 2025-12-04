@@ -14,7 +14,6 @@ public record YieldRecordDetailView(
         Double sownArea,
         Double production,
         Double yieldPerHectare,
-        Double averagePrice,
         String dataSource,
         LocalDate collectedAt,
         LocalDateTime createdAt,
