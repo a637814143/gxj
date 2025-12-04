@@ -72,8 +72,8 @@ CREATE TABLE IF NOT EXISTS data_import_job (
     message VARCHAR(512),
     started_at DATETIME,
     finished_at DATETIME,
-    warnings_payload TEXT,
-    preview_payload TEXT,
+    warnings_payload TINYTEXT,
+    preview_payload TINYTEXT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_import_task (task_id),
@@ -81,6 +81,43 @@ CREATE TABLE IF NOT EXISTS data_import_job (
     KEY idx_import_dataset_file (dataset_file_id),
     CONSTRAINT fk_import_dataset_file FOREIGN KEY (dataset_file_id) REFERENCES dataset_file (id) ON DELETE SET NULL
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '数据导入任务记录';
+
+-- 如果历史实例中 data_import_job 的 LOB 列类型被创建为 TEXT，则在启动时调整为 TINYTEXT 以匹配实体定义
+SET @ddl := (
+    SELECT IF(
+        EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = @current_schema
+              AND table_name = 'data_import_job'
+              AND column_name = 'warnings_payload'
+              AND data_type <> 'tinytext'
+        ),
+        'ALTER TABLE data_import_job MODIFY warnings_payload TINYTEXT NULL',
+        'SELECT 1'
+    )
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @ddl := (
+    SELECT IF(
+        EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = @current_schema
+              AND table_name = 'data_import_job'
+              AND column_name = 'preview_payload'
+              AND data_type <> 'tinytext'
+        ),
+        'ALTER TABLE data_import_job MODIFY preview_payload TINYTEXT NULL',
+        'SELECT 1'
+    )
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 CREATE TABLE IF NOT EXISTS data_import_job_error (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
