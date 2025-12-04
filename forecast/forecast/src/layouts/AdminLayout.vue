@@ -18,11 +18,21 @@
       <el-header class="header">
         <div class="header-title">{{ currentTitle }}</div>
         <div class="header-actions">
+          <div class="header-widgets">
+            <WeatherWidget class="header-weather" />
+            <AnnouncementCard
+              class="header-notice"
+              :announcement="announcementStore.announcement"
+              :status-label="announcementStore.statusLabel"
+            />
+          </div>
           <div class="user-info">
             <div class="user-name">{{ displayName }}</div>
             <div class="user-role">{{ displayRoles }}</div>
           </div>
-          <el-button type="primary" link @click="handleLogout">退出登录</el-button>
+          <el-button type="primary" link :loading="authStore.isLoggingOut" @click="handleLogout">
+            退出登录
+          </el-button>
         </div>
       </el-header>
       <el-main class="main">
@@ -33,21 +43,30 @@
 </template>
 
 <script setup>
-import { computed, watch } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useAuthorization } from '../composables/useAuthorization'
+import WeatherWidget from '../components/weather/WeatherWidget.vue'
+import AnnouncementCard from '../components/AnnouncementCard.vue'
+import { useAnnouncementStore } from '../stores/announcement'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const { canAccessRoute } = useAuthorization()
+const announcementStore = useAnnouncementStore()
+
+onMounted(() => {
+  announcementStore.fetch()
+})
 
 const rawMenuItems = [
   { label: '仪表盘', name: 'dashboard', path: '/dashboard' },
   { label: '数据中心', name: 'data', path: '/data' },
   { label: '数据可视化', name: 'visualization', path: '/visualization' },
   { label: '预测中心', name: 'forecast', path: '/forecast' },
+  { label: '预测可视化', name: 'forecastVisualization', path: '/forecast-visualization' },
   { label: '天气监测', name: 'weather', path: '/weather' },
   { label: '气象分析', name: 'weatherAnalytics', path: '/weather-analytics' },
   { label: '报告中心', name: 'report', path: '/report' },
@@ -65,6 +84,7 @@ const titles = {
   data: '数据资源管理',
   visualization: '数据可视化洞察',
   forecast: '预测建模与任务',
+  forecastVisualization: '预测数据可视化',
   report: '报告输出与分享',
   weather: '实时天气监测',
   weatherAnalytics: '气象数据分析',
@@ -86,9 +106,18 @@ const displayRoles = computed(() => {
   return roles.join(' / ')
 })
 
-const handleLogout = () => {
-  authStore.logout()
-  router.push({ name: 'login', query: { redirect: route.fullPath } }).catch(() => {})
+const handleLogout = async () => {
+  if (authStore.isLoggingOut) {
+    return
+  }
+  authStore.beginLogout()
+  try {
+    await router.push({ name: 'login', query: { redirect: route.fullPath } })
+  } catch (error) {
+    console.warn('导航至登录页失败', error)
+  } finally {
+    authStore.logout()
+  }
 }
 
 watch(
@@ -164,6 +193,16 @@ watch(
   display: flex;
   align-items: center;
   gap: 16px;
+}
+
+.header-widgets {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-notice {
+  width: 260px;
 }
 
 .user-info {

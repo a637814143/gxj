@@ -72,35 +72,83 @@
             <div class="region-add">
               <el-input v-model="newRegionName" placeholder="输入区域名称" :disabled="loading || regionLoading" />
               <el-button type="primary" :loading="regionLoading" :disabled="loading" @click="addRegion">新增区域</el-button>
+              <el-button
+                class="collapse-toggle"
+                link
+                type="primary"
+                :disabled="regionLoading"
+                @click="regionCollapsed = !regionCollapsed"
+              >
+                {{ regionCollapsed ? '展开区域列表' : '收起区域列表' }}
+              </el-button>
             </div>
-            <el-table :data="regions" border size="small" class="region-table" :loading="regionLoading">
-              <el-table-column prop="name" label="区域名称">
-                <template #default="{ row }">
-                  <div v-if="editingRegionId === row.id" class="region-edit-row">
-                    <el-input v-model="editRegionName" class="edit-input" :disabled="regionLoading" />
-                  </div>
-                  <span v-else>{{ row.name }}</span>
-                </template>
-              </el-table-column>
-              <el-table-column label="操作" width="200">
-                <template #default="{ row }">
-                  <div class="table-actions">
-                    <template v-if="editingRegionId === row.id">
-                      <el-button size="small" type="primary" :loading="regionLoading" @click="confirmEdit(row)">保存</el-button>
-                      <el-button size="small" :disabled="regionLoading" @click="cancelEdit">取消</el-button>
-                    </template>
-                    <template v-else>
-                      <el-button size="small" type="primary" text :disabled="regionLoading" @click="startEdit(row)">编辑</el-button>
-                      <el-button size="small" type="danger" text :disabled="regionLoading" @click="removeRegion(row)">删除</el-button>
-                    </template>
-                  </div>
-                </template>
-              </el-table-column>
-            </el-table>
+            <transition name="fade-collapse">
+              <el-table
+                v-show="!regionCollapsed"
+                :data="regions"
+                border
+                size="small"
+                class="region-table"
+                :loading="regionLoading"
+              >
+                <el-table-column prop="name" label="区域名称">
+                  <template #default="{ row }">
+                    <div v-if="editingRegionId === row.id" class="region-edit-row">
+                      <el-input v-model="editRegionName" class="edit-input" :disabled="regionLoading" />
+                    </div>
+                    <span v-else>{{ row.name }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="操作" width="200">
+                  <template #default="{ row }">
+                    <div class="table-actions">
+                      <template v-if="editingRegionId === row.id">
+                        <el-button size="small" type="primary" :loading="regionLoading" @click="confirmEdit(row)">保存</el-button>
+                        <el-button size="small" :disabled="regionLoading" @click="cancelEdit">取消</el-button>
+                      </template>
+                      <template v-else>
+                        <el-button size="small" type="primary" text :disabled="regionLoading" @click="startEdit(row)">编辑</el-button>
+                        <el-button size="small" type="danger" text :disabled="regionLoading" @click="removeRegion(row)">删除</el-button>
+                      </template>
+                    </div>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </transition>
           </div>
         </el-form-item>
         <el-form-item label="通知邮箱" prop="notifyEmail">
           <el-input v-model="settings.notifyEmail" placeholder="请输入" :disabled="loading" />
+        </el-form-item>
+        <el-form-item label="平台通知标题" prop="announcementTitle">
+          <el-input
+            v-model="settings.announcementTitle"
+            placeholder="请输入公告标题"
+            maxlength="128"
+            show-word-limit
+            :disabled="loading"
+          />
+        </el-form-item>
+        <el-form-item label="平台通知内容" prop="announcementMessage">
+          <el-input
+            v-model="settings.announcementMessage"
+            type="textarea"
+            :autosize="{ minRows: 2, maxRows: 4 }"
+            placeholder="请输入公告内容"
+            maxlength="512"
+            show-word-limit
+            :disabled="loading"
+          />
+        </el-form-item>
+        <el-form-item label="通知状态">
+          <el-select v-model="settings.announcementStatus" placeholder="请选择" :disabled="loading">
+            <el-option
+              v-for="option in announcementStatusOptions"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="待审批变更">
           <el-input-number
@@ -137,6 +185,13 @@ const loading = ref(false)
 const regionLoading = ref(false)
 const saving = ref(false)
 const formRef = ref()
+const regionCollapsed = ref(false)
+
+const announcementStatusOptions = [
+  { label: '生效中', value: 'ACTIVE' },
+  { label: '未启用', value: 'INACTIVE' },
+  { label: '计划发布', value: 'SCHEDULED' }
+]
 
 const settings = reactive({
   defaultRegion: null,
@@ -144,6 +199,9 @@ const settings = reactive({
   clusterEnabled: true,
   pendingChangeCount: 0,
   securityStrategy: '',
+  announcementTitle: '',
+  announcementMessage: '',
+  announcementStatus: 'INACTIVE',
   updatedAt: null
 })
 
@@ -163,6 +221,12 @@ const rules = {
       },
       trigger: ['blur', 'change']
     }
+  ],
+  announcementTitle: [
+    { max: 128, message: '通知标题长度不能超过 128 位', trigger: ['blur', 'change'] }
+  ],
+  announcementMessage: [
+    { max: 512, message: '通知内容长度不能超过 512 位', trigger: ['blur', 'change'] }
   ]
 }
 
@@ -173,6 +237,16 @@ const editRegionName = ref('')
 const defaultRegionName = computed(() => {
   const target = regions.value.find(region => region.id === settings.defaultRegion)
   return target?.name ?? '未设置'
+})
+
+const announcementStatusLabel = computed(() => {
+  const status = (settings.announcementStatus || '').toUpperCase()
+  const map = {
+    ACTIVE: '生效中',
+    INACTIVE: '未启用',
+    SCHEDULED: '计划发布'
+  }
+  return map[status] || '未启用'
 })
 
 const highlightStats = computed(() => [
@@ -190,6 +264,11 @@ const highlightStats = computed(() => [
     label: '计算资源',
     value: settings.clusterEnabled ? '集群已启用' : '单机模式',
     sub: settings.clusterEnabled ? '预测任务将自动扩容运行资源' : '建议高峰期开启集群模式'
+  },
+  {
+    label: '平台通知',
+    value: settings.announcementTitle || '未设置',
+    sub: `状态：${announcementStatusLabel.value}`
   }
 ])
 
@@ -198,7 +277,8 @@ const quickOverview = computed(() => {
   return [
     { label: '待审批变更', value: `${pending} 项`, trend: pending > 0 ? 1 : 0 },
     { label: '上次更新', value: formatLastUpdated(settings.updatedAt), trend: 0 },
-    { label: '安全策略', value: settings.securityStrategy || '未配置', trend: 0 }
+    { label: '安全策略', value: settings.securityStrategy || '未配置', trend: 0 },
+    { label: '通知状态', value: announcementStatusLabel.value, trend: settings.announcementStatus === 'ACTIVE' ? 1 : 0 }
   ]
 })
 
@@ -217,6 +297,11 @@ const reminders = computed(() => {
   }
 
   notices.push(`默认区域已设置为「${defaultRegionName.value}」，可通过下方区域管理动态调整`)
+  if (settings.announcementTitle || settings.announcementMessage) {
+    notices.push(`平台通知「${settings.announcementTitle || '未命名'}」已${announcementStatusLabel.value}`)
+  } else {
+    notices.push('平台通知尚未配置，可在下方设置标题与内容后启用')
+  }
   return notices
 })
 
@@ -271,6 +356,9 @@ const applySettings = payload => {
   settings.clusterEnabled = Boolean(payload?.clusterEnabled)
   settings.pendingChangeCount = Number(payload?.pendingChangeCount ?? 0)
   settings.securityStrategy = payload?.securityStrategy ?? ''
+  settings.announcementTitle = payload?.announcementTitle ?? ''
+  settings.announcementMessage = payload?.announcementMessage ?? ''
+  settings.announcementStatus = (payload?.announcementStatus || 'INACTIVE').toUpperCase()
   const updatedAtValue = payload?.updatedAt ?? payload?.updated_at ?? null
   settings.updatedAt = updatedAtValue ?? settings.updatedAt ?? null
   ensureDefaultRegionValidity()
@@ -442,7 +530,10 @@ const save = async () => {
       notifyEmail: settings.notifyEmail.trim() ? settings.notifyEmail.trim() : null,
       clusterEnabled: settings.clusterEnabled,
       pendingChangeCount: settings.pendingChangeCount,
-      securityStrategy: settings.securityStrategy.trim() ? settings.securityStrategy.trim() : null
+      securityStrategy: settings.securityStrategy.trim() ? settings.securityStrategy.trim() : null,
+      announcementTitle: settings.announcementTitle.trim() ? settings.announcementTitle.trim() : null,
+      announcementMessage: settings.announcementMessage.trim() ? settings.announcementMessage.trim() : null,
+      announcementStatus: settings.announcementStatus || 'INACTIVE'
     }
     const { data } = await apiClient.put('/api/system/settings', payload)
     const applied = data?.data ?? data ?? {}
@@ -551,12 +642,28 @@ const save = async () => {
   align-items: center;
 }
 
+.collapse-toggle {
+  margin-left: auto;
+  font-weight: 600;
+}
+
 .region-add :deep(.el-input) {
   flex: 1;
 }
 
 .region-table {
   width: 100%;
+}
+
+.fade-collapse-enter-active,
+.fade-collapse-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.fade-collapse-enter-from,
+.fade-collapse-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
 }
 
 .table-actions {

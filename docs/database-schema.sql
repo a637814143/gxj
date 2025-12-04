@@ -47,6 +47,21 @@ CREATE TABLE base_crop (
     UNIQUE KEY uq_base_crop_code (code)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '基础作物信息';
 
+CREATE TABLE system_setting (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    default_region_id BIGINT UNSIGNED,
+    notify_email VARCHAR(128),
+    cluster_enabled TINYINT(1) NOT NULL DEFAULT 1,
+    pending_change_count INT NOT NULL DEFAULT 0,
+    security_strategy VARCHAR(64),
+    announcement_title VARCHAR(128),
+    announcement_message VARCHAR(512),
+    announcement_status VARCHAR(32) NOT NULL DEFAULT 'INACTIVE',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_system_setting_region FOREIGN KEY (default_region_id) REFERENCES base_region (id) ON DELETE SET NULL
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '系统配置项';
+
 CREATE TABLE dataset_file (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(128) NOT NULL,

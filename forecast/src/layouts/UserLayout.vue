@@ -31,7 +31,14 @@
             <p v-if="userSubtitle" class="header-subtitle">{{ userSubtitle }}</p>
           </div>
           <div class="header-actions">
-            <WeatherWidget class="header-weather" />
+            <div class="header-widgets">
+              <WeatherWidget class="header-weather" />
+              <AnnouncementCard
+                class="header-notice"
+                :announcement="announcementStore.announcement"
+                :status-label="announcementStore.statusLabel"
+              />
+            </div>
             <div class="user-info">
               <div class="user-name">{{ displayName }}</div>
               <div class="user-role">{{ displayRoles }}</div>
@@ -63,16 +70,23 @@
 </template>
 
 <script setup>
-import { computed, watch } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useAuthorization } from '../composables/useAuthorization'
 import WeatherWidget from '../components/weather/WeatherWidget.vue'
+import AnnouncementCard from '../components/AnnouncementCard.vue'
+import { useAnnouncementStore } from '../stores/announcement'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const { canAccessRoute, hasRole } = useAuthorization()
+const announcementStore = useAnnouncementStore()
+
+onMounted(() => {
+  announcementStore.fetch()
+})
 
 const rawMenuItems = [
   { label: '仪表盘', name: 'dashboard', path: '/dashboard' },
@@ -395,6 +409,16 @@ watch(
   display: flex;
   align-items: center;
   gap: 16px;
+}
+
+.header-widgets {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-notice {
+  width: 260px;
 }
 
 .header-weather {

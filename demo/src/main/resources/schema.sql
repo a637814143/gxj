@@ -24,6 +24,9 @@ CREATE TABLE IF NOT EXISTS system_setting (
     cluster_enabled TINYINT(1) NOT NULL DEFAULT 1,
     pending_change_count INT NOT NULL DEFAULT 0,
     security_strategy VARCHAR(64),
+    announcement_title VARCHAR(128),
+    announcement_message VARCHAR(512),
+    announcement_status VARCHAR(32) NOT NULL DEFAULT 'INACTIVE',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_system_setting_region FOREIGN KEY (default_region_id) REFERENCES base_region (id) ON DELETE SET NULL

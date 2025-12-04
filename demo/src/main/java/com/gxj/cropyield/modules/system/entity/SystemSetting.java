@@ -32,6 +32,15 @@ public class SystemSetting extends BaseEntity {
     @Column(name = "security_strategy", length = 64)
     private String securityStrategy;
 
+    @Column(name = "announcement_title", length = 128)
+    private String announcementTitle;
+
+    @Column(name = "announcement_message", length = 512)
+    private String announcementMessage;
+
+    @Column(name = "announcement_status", length = 32)
+    private String announcementStatus = "INACTIVE";
+
     public Region getDefaultRegion() {
         return defaultRegion;
     }
@@ -70,5 +79,29 @@ public class SystemSetting extends BaseEntity {
 
     public void setSecurityStrategy(String securityStrategy) {
         this.securityStrategy = securityStrategy;
+    }
+
+    public String getAnnouncementTitle() {
+        return announcementTitle;
+    }
+
+    public void setAnnouncementTitle(String announcementTitle) {
+        this.announcementTitle = announcementTitle;
+    }
+
+    public String getAnnouncementMessage() {
+        return announcementMessage;
+    }
+
+    public void setAnnouncementMessage(String announcementMessage) {
+        this.announcementMessage = announcementMessage;
+    }
+
+    public String getAnnouncementStatus() {
+        return announcementStatus;
+    }
+
+    public void setAnnouncementStatus(String announcementStatus) {
+        this.announcementStatus = announcementStatus;
     }
 }

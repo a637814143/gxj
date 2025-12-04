@@ -13,6 +13,9 @@ public record SystemSettingResponse(
     boolean clusterEnabled,
     int pendingChangeCount,
     String securityStrategy,
+    String announcementTitle,
+    String announcementMessage,
+    String announcementStatus,
     LocalDateTime updatedAt
 ) {
 }

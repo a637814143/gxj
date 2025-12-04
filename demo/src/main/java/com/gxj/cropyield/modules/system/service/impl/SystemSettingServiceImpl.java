@@ -66,6 +66,9 @@ public class SystemSettingServiceImpl implements SystemSettingService {
             setting.setPendingChangeCount(request.pendingChangeCount());
         }
         setting.setSecurityStrategy(normalizeNullable(request.securityStrategy()));
+        setting.setAnnouncementTitle(normalizeNullable(request.announcementTitle()));
+        setting.setAnnouncementMessage(normalizeNullable(request.announcementMessage()));
+        setting.setAnnouncementStatus(normalizeAnnouncementStatus(request.announcementStatus()));
 
         SystemSetting saved = systemSettingRepository.saveAndFlush(setting);
         return toResponse(saved);
@@ -102,11 +105,25 @@ public class SystemSettingServiceImpl implements SystemSettingService {
             setting.isClusterEnabled(),
             setting.getPendingChangeCount(),
             setting.getSecurityStrategy(),
+            setting.getAnnouncementTitle(),
+            setting.getAnnouncementMessage(),
+            setting.getAnnouncementStatus(),
             setting.getUpdatedAt()
         );
     }
 
     private String normalizeNullable(String value) {
         return StringUtils.hasText(value) ? value.trim() : null;
+    }
+
+    private String normalizeAnnouncementStatus(String status) {
+        if (!StringUtils.hasText(status)) {
+            return "INACTIVE";
+        }
+        String normalized = status.trim().toUpperCase();
+        return switch (normalized) {
+            case "ACTIVE", "INACTIVE", "SCHEDULED" -> normalized;
+            default -> "INACTIVE";
+        };
     }
 }
