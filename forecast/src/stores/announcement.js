@@ -19,7 +19,7 @@ export const useAnnouncementStore = defineStore('announcement', {
     statusLabel: state => STATUS_LABELS[(state.announcement?.status || '').toUpperCase()] || '未启用'
   },
   actions: {
-    async fetch(force = false) {
+    async fetch(force = true) {
       if (this.loading) return
       const now = Date.now()
       if (!force && this.announcement && now - this.lastLoaded < 5 * 60 * 1000) {
