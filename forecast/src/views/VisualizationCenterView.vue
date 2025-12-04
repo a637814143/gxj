@@ -850,14 +850,16 @@ const normalizePrefectureName = name => {
   return ''
 }
 
-  const normalizedRecords = computed(() =>
-    (Array.isArray(yieldRecords.value) ? yieldRecords.value : []).map(record => ({
-      ...record,
-      year: record?.year != null ? Number(record.year) : null,
-      production: record?.production != null ? Number(record.production) : null,
-      sownArea: record?.sownArea != null ? Number(record.sownArea) : null
-    }))
-  )
+const normalizedRecords = computed(() =>
+  (Array.isArray(yieldRecords.value) ? yieldRecords.value : []).map(record => ({
+    ...record,
+    year: record?.year != null ? Number(record.year) : null,
+    production: record?.production != null ? Number(record.production) : null,
+    sownArea: record?.sownArea != null ? Number(record.sownArea) : null,
+    averagePrice: record?.averagePrice != null ? Number(record.averagePrice) : null,
+    estimatedRevenue: record?.estimatedRevenue != null ? Number(record.estimatedRevenue) : null
+  }))
+)
 
 const resolveCategoryLabel = category => {
   if (category == null) {

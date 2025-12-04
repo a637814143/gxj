@@ -8,8 +8,6 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import org.hibernate.annotations.NotFound;
-import org.hibernate.annotations.NotFoundAction;
 
 /**
  * 气象数据记录实体，对应 dataset_weather_record 表。
@@ -20,7 +18,6 @@ public class WeatherRecord extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "dataset_file_id")
-    @NotFound(action = NotFoundAction.IGNORE)
     private DatasetFile datasetFile;
 
     @ManyToOne(fetch = FetchType.LAZY)

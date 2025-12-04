@@ -9,6 +9,7 @@ DROP TABLE IF EXISTS forecast_result;
 DROP TABLE IF EXISTS forecast_run;
 DROP TABLE IF EXISTS forecast_task;
 DROP TABLE IF EXISTS forecast_model;
+DROP TABLE IF EXISTS dataset_price_record;
 DROP TABLE IF EXISTS dataset_yield_record;
 DROP TABLE IF EXISTS dataset_file;
 DROP TABLE IF EXISTS base_crop;
@@ -106,6 +107,7 @@ CREATE TABLE dataset_yield_record (
     sown_area DOUBLE,
     production DOUBLE,
     yield_per_hectare DOUBLE,
+    average_price DOUBLE,
     data_source VARCHAR(256),
     collected_at DATE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -116,6 +118,21 @@ CREATE TABLE dataset_yield_record (
     CONSTRAINT fk_yield_crop FOREIGN KEY (crop_id) REFERENCES base_crop (id) ON DELETE CASCADE,
     CONSTRAINT fk_yield_region FOREIGN KEY (region_id) REFERENCES base_region (id) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '作物年均单产记录';
+
+CREATE TABLE dataset_price_record (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    crop_id BIGINT UNSIGNED NOT NULL,
+    region_id BIGINT UNSIGNED NOT NULL,
+    record_date DATE NOT NULL,
+    price DOUBLE NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_price_crop_region_date (crop_id, region_id, record_date),
+    KEY idx_price_crop (crop_id),
+    KEY idx_price_region (region_id),
+    CONSTRAINT fk_price_crop FOREIGN KEY (crop_id) REFERENCES base_crop (id) ON DELETE CASCADE,
+    CONSTRAINT fk_price_region FOREIGN KEY (region_id) REFERENCES base_region (id) ON DELETE CASCADE
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '作物价格时间序列';
 
 CREATE TABLE forecast_model (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

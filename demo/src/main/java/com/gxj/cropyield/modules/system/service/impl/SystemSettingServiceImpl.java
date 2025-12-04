@@ -9,7 +9,6 @@ import com.gxj.cropyield.modules.system.dto.SystemSettingResponse;
 import com.gxj.cropyield.modules.system.entity.SystemSetting;
 import com.gxj.cropyield.modules.system.repository.SystemSettingRepository;
 import com.gxj.cropyield.modules.system.service.SystemSettingService;
-import com.gxj.cropyield.modules.system.dto.PublicNoticeResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -61,16 +60,6 @@ public class SystemSettingServiceImpl implements SystemSettingService {
         }
         setting.setSecurityStrategy(normalizeNullable(request.securityStrategy()));
 
-        if (request.publicVisible() != null) {
-            setting.setPublicVisible(request.publicVisible());
-        }
-        setting.setPublicTitle(normalizeNullable(request.publicTitle()));
-        setting.setPublicSummary(normalizeNullable(request.publicSummary()));
-        setting.setPublicAudience(normalizeNullable(request.publicAudience()));
-        setting.setPublicLevel(normalizeNullable(request.publicLevel()));
-        setting.setPublicStartAt(request.publicStartAt());
-        setting.setPublicEndAt(request.publicEndAt());
-
         SystemSetting saved = systemSettingRepository.saveAndFlush(setting);
         return toResponse(saved);
     }
@@ -90,30 +79,6 @@ public class SystemSettingServiceImpl implements SystemSettingService {
             setting.isClusterEnabled(),
             setting.getPendingChangeCount(),
             setting.getSecurityStrategy(),
-            setting.isPublicVisible(),
-            setting.getPublicTitle(),
-            setting.getPublicSummary(),
-            setting.getPublicAudience(),
-            setting.getPublicLevel(),
-            setting.getPublicStartAt(),
-            setting.getPublicEndAt(),
-            setting.getUpdatedAt()
-        );
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public PublicNoticeResponse getPublicNotice() {
-        SystemSetting setting = systemSettingRepository.findTopByOrderByIdAsc()
-            .orElseGet(this::createDefaultSetting);
-        return new PublicNoticeResponse(
-            setting.isPublicVisible(),
-            setting.getPublicTitle(),
-            setting.getPublicSummary(),
-            setting.getPublicAudience(),
-            setting.getPublicLevel(),
-            setting.getPublicStartAt(),
-            setting.getPublicEndAt(),
             setting.getUpdatedAt()
         );
     }

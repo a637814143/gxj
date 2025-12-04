@@ -13,6 +13,8 @@ public record RecentYieldRecord(
         double sownArea,
         double production,
         double yieldPerHectare,
+        Double averagePrice,
+        double estimatedRevenue,
         LocalDate collectedAt
 ) {
 }

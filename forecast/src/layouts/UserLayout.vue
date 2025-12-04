@@ -31,12 +31,6 @@
             <p v-if="userSubtitle" class="header-subtitle">{{ userSubtitle }}</p>
           </div>
           <div class="header-actions">
-            <PublicNoticeCard
-              class="header-notice"
-              :notice="publicNotice"
-              :loading="noticeLoading"
-              compact
-            />
             <WeatherWidget class="header-weather" />
             <div class="user-info">
               <div class="user-name">{{ displayName }}</div>
@@ -69,13 +63,11 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useAuthorization } from '../composables/useAuthorization'
 import WeatherWidget from '../components/weather/WeatherWidget.vue'
-import PublicNoticeCard from '../components/PublicNoticeCard.vue'
-import apiClient from '../services/http'
 
 const route = useRoute()
 const router = useRouter()
@@ -152,21 +144,6 @@ const displayRoles = computed(() => {
   return roles.join(' / ')
 })
 
-const publicNotice = ref(null)
-const noticeLoading = ref(false)
-
-const fetchPublicNotice = async () => {
-  noticeLoading.value = true
-  try {
-    const { data } = await apiClient.get('/api/system/public-settings')
-    publicNotice.value = data?.data ?? data ?? null
-  } catch (error) {
-    publicNotice.value = null
-  } finally {
-    noticeLoading.value = false
-  }
-}
-
 const userSubtitle = computed(() => {
   if (!displayName.value || displayName.value === '未登录') {
     return ''
@@ -217,10 +194,6 @@ const handleLogout = async () => {
     authStore.logout()
   }
 }
-
-onMounted(() => {
-  fetchPublicNotice()
-})
 
 watch(
   () => [route.name, menuItems.value],
@@ -420,20 +393,12 @@ watch(
 .header-actions {
   margin-left: auto;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 16px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
 }
 
 .header-weather {
   flex: 0 0 auto;
-}
-
-.header-notice {
-  flex: 1 1 320px;
-  max-width: 440px;
-  min-width: 260px;
 }
 
 .user-info {

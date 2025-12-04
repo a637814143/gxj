@@ -26,6 +26,7 @@ public class DatasetSchemaMigrator implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         ensureDatasetFileColumn("dataset_yield_record", "idx_yield_dataset_file", "fk_yield_dataset_file");
+        ensureDatasetFileColumn("dataset_price_record", "idx_price_dataset_file", "fk_price_dataset_file");
         ensureImportJobColumn();
     }
 

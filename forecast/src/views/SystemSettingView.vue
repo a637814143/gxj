@@ -70,36 +70,16 @@
         <el-form-item label="区域管理">
           <div class="region-manage">
             <div class="region-add">
-              <el-input
-                v-model="newRegionName"
-                placeholder="输入区域名称"
-                :disabled="loading || regionLoading"
-                :type="hideRegions ? 'password' : 'text'"
-              />
+              <el-input v-model="newRegionName" placeholder="输入区域名称" :disabled="loading || regionLoading" />
               <el-button type="primary" :loading="regionLoading" :disabled="loading" @click="addRegion">新增区域</el-button>
             </div>
             <el-table :data="regions" border size="small" class="region-table" :loading="regionLoading">
               <el-table-column prop="name" label="区域名称">
-                <template #header>
-                  <div class="region-name-header">
-                    <span>区域名称</span>
-                    <el-button size="small" type="primary" text @click="toggleRegionVisibility">
-                      {{ hideRegions ? '显示区域信息' : '隐藏区域信息' }}
-                    </el-button>
-                  </div>
-                </template>
                 <template #default="{ row }">
                   <div v-if="editingRegionId === row.id" class="region-edit-row">
-                    <el-input
-                      v-model="editRegionName"
-                      class="edit-input"
-                      :disabled="regionLoading"
-                      :type="hideRegions ? 'password' : 'text'"
-                    />
+                    <el-input v-model="editRegionName" class="edit-input" :disabled="regionLoading" />
                   </div>
-                  <span v-else class="region-name-text" :class="{ 'region-name-hidden': hideRegions }">
-                    {{ hideRegions ? '******' : row.name }}
-                  </span>
+                  <span v-else>{{ row.name }}</span>
                 </template>
               </el-table-column>
               <el-table-column label="操作" width="200">
@@ -142,59 +122,6 @@
         <el-form-item label="模型计算集群">
           <el-switch v-model="settings.clusterEnabled" />
         </el-form-item>
-
-        <el-divider content-position="left">对外通知卡片</el-divider>
-        <el-form-item label="开启对外公告">
-          <div class="public-visible">
-            <el-switch v-model="settings.publicVisible" />
-            <div class="hint-text">开启后将在用户/部门端仪表盘以卡片形式展示通知信息。</div>
-          </div>
-        </el-form-item>
-        <el-form-item label="公告标题">
-          <el-input v-model="settings.publicTitle" placeholder="示例：系统维护公告" maxlength="128" show-word-limit />
-        </el-form-item>
-        <el-form-item label="公告摘要">
-          <el-input
-            v-model="settings.publicSummary"
-            type="textarea"
-            :autosize="{ minRows: 2, maxRows: 4 }"
-            placeholder="简要描述公告内容，将在仪表盘卡片中展示"
-            maxlength="512"
-            show-word-limit
-          />
-        </el-form-item>
-        <el-row :gutter="16">
-          <el-col :xs="24" :sm="12">
-            <el-form-item label="受众描述">
-              <el-input v-model="settings.publicAudience" placeholder="例如 全体用户 / 农业部门" maxlength="64" show-word-limit />
-            </el-form-item>
-          </el-col>
-          <el-col :xs="24" :sm="12">
-            <el-form-item label="公告级别">
-              <el-input v-model="settings.publicLevel" placeholder="例如 重要 / 提醒" maxlength="32" show-word-limit />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-form-item label="生效时间">
-          <div class="public-range">
-            <el-date-picker
-              v-model="settings.publicStartAt"
-              type="datetime"
-              value-format="YYYY-MM-DD[T]HH:mm:ss"
-              placeholder="开始时间（可选）"
-              style="width: 100%"
-            />
-            <span class="range-split">至</span>
-            <el-date-picker
-              v-model="settings.publicEndAt"
-              type="datetime"
-              value-format="YYYY-MM-DD[T]HH:mm:ss"
-              placeholder="结束时间（可选）"
-              style="width: 100%"
-            />
-          </div>
-          <div class="hint-text">未填写开始或结束时间时视为长期有效，前端会自动标记状态。</div>
-        </el-form-item>
       </el-form>
     </el-card>
   </div>
@@ -217,13 +144,6 @@ const settings = reactive({
   clusterEnabled: true,
   pendingChangeCount: 0,
   securityStrategy: '',
-  publicVisible: false,
-  publicTitle: '',
-  publicSummary: '',
-  publicAudience: '',
-  publicLevel: '',
-  publicStartAt: null,
-  publicEndAt: null,
   updatedAt: null
 })
 
@@ -249,7 +169,6 @@ const rules = {
 const newRegionName = ref('')
 const editingRegionId = ref(null)
 const editRegionName = ref('')
-const hideRegions = ref(false)
 
 const defaultRegionName = computed(() => {
   const target = regions.value.find(region => region.id === settings.defaultRegion)
@@ -297,19 +216,9 @@ const reminders = computed(() => {
     notices.push('当前集群关闭，建议在高峰任务前开启以保障性能')
   }
 
-  if (settings.publicVisible) {
-    notices.push(`公告已对外展示：${settings.publicTitle || '系统公告'}`)
-  } else {
-    notices.push('对外公告未开启，用户端不会展示通知卡片')
-  }
-
   notices.push(`默认区域已设置为「${defaultRegionName.value}」，可通过下方区域管理动态调整`)
   return notices
 })
-
-const toggleRegionVisibility = () => {
-  hideRegions.value = !hideRegions.value
-}
 
 function formatTrend(value) {
   if (value > 0) return `较昨日 +${value}`
@@ -362,13 +271,6 @@ const applySettings = payload => {
   settings.clusterEnabled = Boolean(payload?.clusterEnabled)
   settings.pendingChangeCount = Number(payload?.pendingChangeCount ?? 0)
   settings.securityStrategy = payload?.securityStrategy ?? ''
-  settings.publicVisible = Boolean(payload?.publicVisible)
-  settings.publicTitle = payload?.publicTitle ?? ''
-  settings.publicSummary = payload?.publicSummary ?? ''
-  settings.publicAudience = payload?.publicAudience ?? ''
-  settings.publicLevel = payload?.publicLevel ?? ''
-  settings.publicStartAt = payload?.publicStartAt ?? payload?.public_start_at ?? null
-  settings.publicEndAt = payload?.publicEndAt ?? payload?.public_end_at ?? null
   const updatedAtValue = payload?.updatedAt ?? payload?.updated_at ?? null
   settings.updatedAt = updatedAtValue ?? settings.updatedAt ?? null
   ensureDefaultRegionValidity()
@@ -540,14 +442,7 @@ const save = async () => {
       notifyEmail: settings.notifyEmail.trim() ? settings.notifyEmail.trim() : null,
       clusterEnabled: settings.clusterEnabled,
       pendingChangeCount: settings.pendingChangeCount,
-      securityStrategy: settings.securityStrategy.trim() ? settings.securityStrategy.trim() : null,
-      publicVisible: settings.publicVisible,
-      publicTitle: settings.publicTitle.trim() ? settings.publicTitle.trim() : null,
-      publicSummary: settings.publicSummary.trim() ? settings.publicSummary.trim() : null,
-      publicAudience: settings.publicAudience.trim() ? settings.publicAudience.trim() : null,
-      publicLevel: settings.publicLevel.trim() ? settings.publicLevel.trim() : null,
-      publicStartAt: settings.publicStartAt || null,
-      publicEndAt: settings.publicEndAt || null
+      securityStrategy: settings.securityStrategy.trim() ? settings.securityStrategy.trim() : null
     }
     const { data } = await apiClient.put('/api/system/settings', payload)
     const applied = data?.data ?? data ?? {}
@@ -654,23 +549,6 @@ const save = async () => {
   display: flex;
   gap: 12px;
   align-items: center;
-}
-
-.region-name-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.region-name-text {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.region-name-hidden {
-  letter-spacing: 2px;
-  color: #8c97ae;
 }
 
 .region-add :deep(.el-input) {
@@ -840,30 +718,6 @@ const save = async () => {
 
 .setting-form {
   margin-top: 12px;
-}
-
-.public-visible {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.public-range {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  gap: 10px;
-  align-items: center;
-}
-
-.range-split {
-  color: #9aa4b5;
-  font-size: 13px;
-}
-
-.hint-text {
-  margin-top: 6px;
-  color: #7b8aa5;
-  font-size: 12px;
 }
 
 @media (max-width: 992px) {

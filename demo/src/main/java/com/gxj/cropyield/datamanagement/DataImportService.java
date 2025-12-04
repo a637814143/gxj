@@ -399,13 +399,14 @@ public class DataImportService {
             List<ValidRecord> batch = records.subList(i, Math.min(i + batchSize, records.size()));
             Set<YieldRowKey> existing = fetchExistingYieldKeys(batch);
             String sql = """
-                    INSERT INTO dataset_yield_record (dataset_file_id, crop_id, region_id, year, sown_area, production, yield_per_hectare, data_source, collected_at, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+                    INSERT INTO dataset_yield_record (dataset_file_id, crop_id, region_id, year, sown_area, production, yield_per_hectare, average_price, data_source, collected_at, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
                     ON DUPLICATE KEY UPDATE
                         dataset_file_id = VALUES(dataset_file_id),
                         sown_area = VALUES(sown_area),
                         production = VALUES(production),
                         yield_per_hectare = VALUES(yield_per_hectare),
+                        average_price = VALUES(average_price),
                         data_source = VALUES(data_source),
                         collected_at = VALUES(collected_at),
                         updated_at = NOW()
@@ -419,11 +420,12 @@ public class DataImportService {
                     setNullableDouble(preparedStatement, 5, record.sownArea());
                     setNullableDouble(preparedStatement, 6, record.production());
                     setNullableDouble(preparedStatement, 7, record.yieldPerHectare());
-                    preparedStatement.setString(8, record.dataSource());
+                    setNullableDouble(preparedStatement, 8, record.averagePrice());
+                    preparedStatement.setString(9, record.dataSource());
                     if (record.collectedAt() != null) {
-                        preparedStatement.setObject(9, java.sql.Date.valueOf(record.collectedAt()));
+                        preparedStatement.setObject(10, java.sql.Date.valueOf(record.collectedAt()));
                     } else {
-                        preparedStatement.setObject(9, null);
+                        preparedStatement.setObject(10, null);
                     }
                 });
             } catch (DataAccessException exception) {
@@ -577,6 +579,7 @@ public class DataImportService {
         Double production = parseNumeric(values.get("production"));
         Double sownArea = parseNumeric(values.get("sownArea"));
         Double yieldPerHectare = parseNumeric(values.get("yieldPerHectare"));
+        Double averagePrice = parseNumeric(values.get("averagePrice"));
 
         if (production == null) {
             recordError(errors, record.rowNumber(), "PRODUCTION", "产量缺失或格式错误", values.get("production"));
@@ -605,6 +608,14 @@ public class DataImportService {
             warnings.add(String.format(Locale.CHINA, "第%d行：单产值 %.2f 疑似异常", record.rowNumber(), yieldPerHectare));
         }
 
+        if (averagePrice != null) {
+            averagePrice = applyConverter(converters.get("averagePrice"), averagePrice);
+            if (averagePrice < 0) {
+                warnings.add("第" + record.rowNumber() + "行：平均价格出现负值，已置空");
+                averagePrice = null;
+            }
+        }
+
         LocalDate collectedAt = parseDate(values.get("collectedAt"));
 
         Crop crop = resolveCrop(cropName, values.get("cropCategory"), values.get("cropDescription"), cropCache, warnings, record.rowNumber());
@@ -612,7 +623,7 @@ public class DataImportService {
 
         String dataSource = trimToNull(values.get("dataSource"));
 
-        ValidRecord validRecord = new ValidRecord(record.rowNumber(), crop, region, year, round(sownArea), round(production), round(yieldPerHectare), dataSource, collectedAt);
+        ValidRecord validRecord = new ValidRecord(record.rowNumber(), crop, region, year, round(sownArea), round(production), round(yieldPerHectare), round(averagePrice), dataSource, collectedAt);
         return Optional.of(validRecord);
     }
 
@@ -776,6 +787,10 @@ public class DataImportService {
     }
 
     private YieldRecordResponse toYieldPreview(ValidRecord record) {
+        Double revenue = null;
+        if (record.production() != null && record.averagePrice() != null) {
+            revenue = record.production() * record.averagePrice() * 0.1;
+        }
         return new YieldRecordResponse(
                 null,
                 record.crop().getName(),
@@ -786,6 +801,8 @@ public class DataImportService {
                 record.sownArea(),
                 record.production(),
                 record.yieldPerHectare(),
+                record.averagePrice(),
+                revenue,
                 record.dataSource(),
                 record.collectedAt()
         );
@@ -1057,6 +1074,11 @@ public class DataImportService {
             }
             if (header.contains("斤/亩")) {
                 return value -> value == null ? null : value * 7.5d / 1000d;
+            }
+        }
+        if ("averagePrice".equals(canonicalName)) {
+            if (header.contains("元/吨") || lower.contains("cny/ton")) {
+                return value -> value == null ? null : value / 1000d;
             }
         }
         return Function.identity();
@@ -1566,6 +1588,7 @@ public class DataImportService {
         mapping.put("sownArea", List.of("sownarea", "播种面积", "播种总面积", "面积", "耕地面积"));
         mapping.put("production", List.of("production", "产量", "总产量", "产出", "年度产量"));
         mapping.put("yieldPerHectare", List.of("yield", "yieldperhectare", "单产", "产量/面积", "平均单产"));
+        mapping.put("averagePrice", List.of("averageprice", "平均价格", "均价", "价格"));
         mapping.put("dataSource", List.of("datasource", "数据来源", "来源", "采集来源"));
         mapping.put("collectedAt", List.of("collectedat", "采集日期", "收集日期", "统计日期"));
         mapping.put("recordDate", List.of("recorddate", "date", "日期", "观测日期", "记录日期"));
@@ -1612,6 +1635,7 @@ public class DataImportService {
                                Double sownArea,
                                Double production,
                                Double yieldPerHectare,
+                               Double averagePrice,
                                String dataSource,
                                LocalDate collectedAt) {
     }

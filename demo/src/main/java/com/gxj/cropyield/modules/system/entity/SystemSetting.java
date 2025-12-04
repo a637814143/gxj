@@ -32,27 +32,6 @@ public class SystemSetting extends BaseEntity {
     @Column(name = "security_strategy", length = 64)
     private String securityStrategy;
 
-    @Column(name = "public_visible", nullable = false)
-    private boolean publicVisible = false;
-
-    @Column(name = "public_title", length = 128)
-    private String publicTitle;
-
-    @Column(name = "public_summary", length = 512)
-    private String publicSummary;
-
-    @Column(name = "public_audience", length = 64)
-    private String publicAudience;
-
-    @Column(name = "public_level", length = 32)
-    private String publicLevel;
-
-    @Column(name = "public_start_at")
-    private java.time.LocalDateTime publicStartAt;
-
-    @Column(name = "public_end_at")
-    private java.time.LocalDateTime publicEndAt;
-
     public Region getDefaultRegion() {
         return defaultRegion;
     }
@@ -91,61 +70,5 @@ public class SystemSetting extends BaseEntity {
 
     public void setSecurityStrategy(String securityStrategy) {
         this.securityStrategy = securityStrategy;
-    }
-
-    public boolean isPublicVisible() {
-        return publicVisible;
-    }
-
-    public void setPublicVisible(boolean publicVisible) {
-        this.publicVisible = publicVisible;
-    }
-
-    public String getPublicTitle() {
-        return publicTitle;
-    }
-
-    public void setPublicTitle(String publicTitle) {
-        this.publicTitle = publicTitle;
-    }
-
-    public String getPublicSummary() {
-        return publicSummary;
-    }
-
-    public void setPublicSummary(String publicSummary) {
-        this.publicSummary = publicSummary;
-    }
-
-    public String getPublicAudience() {
-        return publicAudience;
-    }
-
-    public void setPublicAudience(String publicAudience) {
-        this.publicAudience = publicAudience;
-    }
-
-    public String getPublicLevel() {
-        return publicLevel;
-    }
-
-    public void setPublicLevel(String publicLevel) {
-        this.publicLevel = publicLevel;
-    }
-
-    public java.time.LocalDateTime getPublicStartAt() {
-        return publicStartAt;
-    }
-
-    public void setPublicStartAt(java.time.LocalDateTime publicStartAt) {
-        this.publicStartAt = publicStartAt;
-    }
-
-    public java.time.LocalDateTime getPublicEndAt() {
-        return publicEndAt;
-    }
-
-    public void setPublicEndAt(java.time.LocalDateTime publicEndAt) {
-        this.publicEndAt = publicEndAt;
     }
 }

@@ -155,47 +155,6 @@
       </div>
     </el-card>
 
-    <el-card v-if="showScenarioPanel" class="panel-card scenario-card" shadow="hover">
-      <template #header>
-        <div class="card-header">
-          <div>
-            <div class="card-title">多情景预测对比</div>
-            <div class="card-subtitle">结合预测结果推演不同气候情景下的产量变化</div>
-          </div>
-          <el-tag type="warning" effect="light">气候范围：0 - 0.2℃（微幅增温情景）</el-tag>
-        </div>
-      </template>
-      <div class="scenario-content">
-        <div class="scenario-chart">
-          <BaseChart v-if="hasScenarioData" :option="scenarioChartOption" :height="340" />
-          <el-empty v-else description="暂无情景数据，请先生成预测" />
-        </div>
-        <div v-if="scenarioInsightCards.length" class="scenario-insights">
-          <div
-            v-for="card in scenarioInsightCards"
-            :key="card.key"
-            class="scenario-insight-card"
-            :style="{
-              '--scenario-accent': card.color,
-              '--scenario-accent-soft': `${card.color}1a`,
-              '--scenario-accent-border': `${card.color}33`
-            }"
-          >
-            <div class="scenario-insight-header">
-              <span class="scenario-insight-dot" :style="{ background: card.color }"></span>
-              <span class="scenario-insight-label">{{ card.label }}</span>
-            </div>
-            <div class="scenario-insight-temp">{{ card.temperature }}</div>
-            <div class="scenario-insight-value">{{ formatNumber(card.value) }} 吨</div>
-            <div class="scenario-insight-change" :class="{ negative: card.change < 0, positive: card.change > 0 }">
-              {{ formatScenarioChange(card.change) }}
-            </div>
-            <div class="scenario-insight-desc">{{ card.description }}</div>
-          </div>
-        </div>
-      </div>
-    </el-card>
-
     <el-card v-if="metadata || metrics" class="panel-card" shadow="hover">
       <template #header>
         <div class="card-header">
@@ -301,6 +260,12 @@
         </el-table-column>
         <el-table-column label="参考播种面积 (公顷)" min-width="190">
           <template #default="{ row }">{{ formatHistoryNumber(row.sownArea) }}</template>
+        </el-table-column>
+        <el-table-column label="参考均价 (元/公斤)" min-width="190">
+          <template #default="{ row }">{{ formatHistoryNumber(row.averagePrice) }}</template>
+        </el-table-column>
+        <el-table-column label="预计收益 (万元)" min-width="170">
+          <template #default="{ row }">{{ formatHistoryNumber(row.estimatedRevenue) }}</template>
         </el-table-column>
         <el-table-column label="生成时间" min-width="200">
           <template #default="{ row }">{{ formatHistoryDateTime(row.generatedAt) }}</template>
@@ -417,36 +382,6 @@ const metricUnit = computed(() => metadata.value?.valueUnit || '吨 / 公顷')
 const historyLegendLabel = computed(() => `历史${metricLabel.value}`)
 const forecastLegendLabel = computed(() => `预测${metricLabel.value}`)
 
-const DEFAULT_SCENARIO_CONFIGS = [
-  {
-    key: 'baseline',
-    label: '基准',
-    temperature: '当前气候（0℃ 基准）',
-    delta: 0,
-    color: '#2563eb',
-    description: '保持当前气候条件，沿用历史增长趋势的预测基线。',
-    isBaseline: true
-  },
-  {
-    key: 'warming01',
-    label: '微升+0.1℃',
-    temperature: '+0.1℃ 轻微增温情景',
-    delta: -0.015,
-    color: '#f97316',
-    description: '在 0.1℃ 的增温假设下，模型推测轻微减产，可关注灌溉与遮阴调控。'
-  },
-  {
-    key: 'warming02',
-    label: '微升+0.2℃',
-    temperature: '+0.2℃ 微幅增温情景',
-    delta: -0.028,
-    color: '#dc2626',
-    description: '当气温提升至 0.2℃ 时，需及早部署抗热品种与生产保障方案。'
-  }
-]
-
-const SCENARIO_COLOR_PALETTE = ['#2563eb', '#f97316', '#dc2626', '#0f766e', '#9333ea', '#facc15']
-
 function formatTrend(value) {
   if (value > 0) return `较昨日 +${value}`
   if (value < 0) return `较昨日 ${value}`
@@ -516,8 +451,13 @@ const chartOption = computed(() => {
   const xAxis = combinedPeriods.value
   const historyMap = Object.fromEntries(historySeries.value.map(item => [item.period, item.value]))
   const forecastMap = Object.fromEntries(forecastSeries.value.map(item => [item.period, item.value]))
+  const lowerMap = Object.fromEntries(forecastSeries.value.map(item => [item.period, item.lowerBound ?? null]))
+  const upperMap = Object.fromEntries(forecastSeries.value.map(item => [item.period, item.upperBound ?? null]))
+
   const historyData = xAxis.map(period => historyMap[period] ?? null)
   const forecastData = xAxis.map(period => forecastMap[period] ?? null)
+  const lowerBand = xAxis.map(period => lowerMap[period] ?? null)
+  const upperBand = xAxis.map(period => upperMap[period] ?? null)
 
   return {
     grid: { top: 48, left: 60, right: 28, bottom: 40 },
@@ -525,7 +465,7 @@ const chartOption = computed(() => {
       trigger: 'axis'
     },
     legend: {
-      data: [historyLegendLabel.value, forecastLegendLabel.value],
+      data: [historyLegendLabel.value, forecastLegendLabel.value, '预测区间'],
       top: 10
     },
     xAxis: {
@@ -559,258 +499,31 @@ const chartOption = computed(() => {
           type: 'dashed',
           color: '#67C23A'
         }
+      },
+      {
+        name: '预测区间',
+        type: 'line',
+        data: upperBand,
+        lineStyle: { opacity: 0 },
+        stack: 'confidence-band',
+        areaStyle: {
+          color: 'rgba(103, 194, 58, 0.18)'
+        },
+        emphasis: { focus: 'series' }
+      },
+      {
+        name: '预测区间',
+        type: 'line',
+        data: lowerBand,
+        lineStyle: { opacity: 0 },
+        stack: 'confidence-band',
+        areaStyle: {
+          color: 'rgba(103, 194, 58, 0.18)'
+        },
+        emphasis: { focus: 'series' }
       }
     ]
   }
-})
-
-const parseNumeric = value => {
-  const numeric = Number(value)
-  return Number.isFinite(numeric) ? numeric : null
-}
-
-const forecastPoints = computed(() =>
-  forecastSeries.value.map(point => ({
-    label: point?.period ?? point?.label ?? '',
-    value: parseNumeric(point?.value)
-  }))
-)
-
-const resolvedScenarioConfigs = computed(() => {
-  const scenarios = Array.isArray(metadata.value?.scenarioComparisons)
-    ? metadata.value.scenarioComparisons
-    : []
-
-  if (scenarios.length) {
-    return scenarios.map((scenario, index) => {
-      const color = scenario.color || SCENARIO_COLOR_PALETTE[index % SCENARIO_COLOR_PALETTE.length]
-      const normalizeSeries = Array.isArray(scenario.series)
-        ? scenario.series.map(point => ({
-            label: point?.label ?? point?.period ?? point?.name ?? '',
-            value: parseNumeric(point?.value)
-          }))
-        : []
-      return {
-        key: scenario.key ?? scenario.code ?? `scenario-${index}`,
-        label: scenario.label ?? scenario.name ?? `情景${index + 1}`,
-        temperature: scenario.temperature ?? scenario.temperatureLabel ?? '',
-        color,
-        description: scenario.description ?? '',
-        isBaseline:
-          typeof scenario.isBaseline === 'boolean'
-            ? scenario.isBaseline
-            : /基准|baseline/i.test(String(scenario.label ?? '')),
-        delta: typeof scenario.delta === 'number' ? scenario.delta : null,
-        change: typeof scenario.change === 'number' ? scenario.change : null,
-        series: normalizeSeries,
-      }
-    })
-  }
-
-  return DEFAULT_SCENARIO_CONFIGS.map((config, index) => ({
-    ...config,
-    color: config.color || SCENARIO_COLOR_PALETTE[index % SCENARIO_COLOR_PALETTE.length],
-    series: [],
-    change: null
-  }))
-})
-
-const applyScenarioDelta = (value, delta) => {
-  if (value === null || value === undefined) {
-    return null
-  }
-  const numeric = Number(value)
-  if (Number.isNaN(numeric)) {
-    return null
-  }
-  const scaled = numeric * (1 + (delta ?? 0))
-  return Math.round(scaled * 100) / 100
-}
-
-const scenarioSeries = computed(() => {
-  const points = forecastPoints.value
-  return resolvedScenarioConfigs.value.map((config, index) => {
-    let series = Array.isArray(config.series) ? config.series.filter(point => point && typeof point === 'object') : []
-    if (!series.length && points.length) {
-      if (config.delta !== null && config.delta !== undefined) {
-        series = points.map(point => ({
-          label: point?.label ?? '',
-          value: applyScenarioDelta(point?.value, config.delta)
-        }))
-      } else if (config.isBaseline || index === 0) {
-        series = points.map(point => ({
-          label: point?.label ?? '',
-          value: point?.value ?? null
-        }))
-      }
-    }
-    return {
-      ...config,
-      series
-    }
-  })
-})
-
-const scenarioConfigMap = computed(
-  () => new Map(scenarioSeries.value.map(config => [config.label, config]))
-)
-
-const hasScenarioData = computed(() =>
-  scenarioSeries.value.some(config => Array.isArray(config.series) && config.series.length)
-)
-
-const showScenarioPanel = computed(() => hasResult.value && hasScenarioData.value)
-
-const formatScenarioTooltip = params => {
-  if (!Array.isArray(params) || !params.length) {
-    return ''
-  }
-  const axisLabel = params[0]?.axisValueLabel ?? ''
-  const lines = [`<div style="font-weight:600;margin-bottom:6px;">${axisLabel}</div>`]
-  params.forEach(item => {
-    const config = scenarioConfigMap.value.get(item.seriesName)
-    const temperature = config?.temperature ? `（${config.temperature}）` : ''
-    lines.push(
-      `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">` +
-        `<span>${item.marker}${item.seriesName}${temperature}</span>` +
-        `<span style='font-weight:600;'>${formatNumber(item.data)} 吨</span>` +
-      `</div>`
-    )
-  })
-  return lines.join('')
-}
-
-const scenarioChartOption = computed(() => {
-  const scenarios = scenarioSeries.value.filter(config => config.series.length)
-  if (!scenarios.length) {
-    return {
-      color: [],
-      series: [],
-      tooltip: { trigger: 'axis' },
-      legend: { data: [] },
-      grid: { top: 48, left: 40, right: 24, bottom: 32 },
-      xAxis: { type: 'category', data: [] },
-      yAxis: { type: 'value' }
-    }
-  }
-
-  const baseline = scenarios.find(config => config.isBaseline) ?? scenarios[0]
-  const categories = Array.from(
-    new Set(
-      baseline.series
-        .map(point => point.label)
-        .filter(label => label !== undefined && label !== null)
-    )
-  )
-
-  const series = scenarios.map(config => {
-    const dataMap = new Map(
-      config.series
-        .filter(point => point && point.label !== undefined && point.label !== null)
-        .map(point => [point.label, point.value])
-    )
-    const data = categories.map(label => {
-      const value = dataMap.get(label)
-      if (value === null || value === undefined || Number.isNaN(Number(value))) {
-        return null
-      }
-      return Math.round(Number(value) * 100) / 100
-    })
-
-    return {
-      name: config.label,
-      type: 'line',
-      smooth: true,
-      showSymbol: true,
-      symbolSize: 8,
-      lineStyle: {
-        width: 3
-      },
-      areaStyle: config.isBaseline ? { opacity: 0.1 } : undefined,
-      emphasis: { focus: 'series' },
-      data
-    }
-  })
-
-  return {
-    color: scenarios.map(config => config.color),
-    tooltip: {
-      trigger: 'axis',
-      backgroundColor: 'rgba(15, 23, 42, 0.92)',
-      borderWidth: 0,
-      padding: 12,
-      textStyle: { color: '#f8fafc' },
-      formatter: formatScenarioTooltip
-    },
-    legend: {
-      data: scenarios.map(config => config.label),
-      top: 18,
-      textStyle: { color: '#475569', fontSize: 13 }
-    },
-    grid: { top: 78, left: 64, right: 28, bottom: 40 },
-    xAxis: {
-      type: 'category',
-      boundaryGap: false,
-      data: categories,
-      axisTick: { alignWithLabel: true },
-      axisLine: { lineStyle: { color: '#d0d7ff' } },
-      axisLabel: { color: '#4b5563' }
-    },
-    yAxis: {
-      type: 'value',
-      axisLine: { show: false },
-      axisLabel: {
-        color: '#4b5563',
-        formatter: value => formatNumber(value)
-      },
-      splitLine: { lineStyle: { type: 'dashed', color: '#e2e8f0' } }
-    },
-    series
-  }
-})
-
-const scenarioInsightCards = computed(() => {
-  const scenarios = scenarioSeries.value.filter(config => config.series.length)
-  if (!scenarios.length) {
-    return []
-  }
-  const baseline = scenarios.find(config => config.isBaseline) ?? scenarios[0]
-  const baselineSeries = baseline.series
-  const baselineLast = baselineSeries.length
-    ? baselineSeries[baselineSeries.length - 1]?.value ?? null
-    : null
-
-  return scenarios
-    .map(config => {
-      const series = config.series
-      const lastPoint = series.length ? series[series.length - 1] : null
-      const lastValue = lastPoint?.value ?? null
-      let change = 0
-      if (config.change !== null && config.change !== undefined) {
-        change = config.change
-      } else if (
-        !config.isBaseline &&
-        baselineLast !== null &&
-        baselineLast !== undefined &&
-        baselineLast !== 0 &&
-        lastValue !== null &&
-        lastValue !== undefined
-      ) {
-        change = (Number(lastValue) - Number(baselineLast)) / Number(baselineLast)
-      }
-      const temperature = config.temperature || (config.isBaseline ? '当前气候' : '')
-
-      return {
-        key: config.key,
-        label: config.label,
-        temperature,
-        value: lastValue,
-        change,
-        description: config.description,
-        color: config.color
-      }
-    })
-    .filter(card => card.value !== null && card.value !== undefined)
 })
 
 const generatedAtLabel = computed(() => {
@@ -1071,16 +784,6 @@ const formatMetric = value => {
   return Number(value).toFixed(2)
 }
 
-const formatNumber = (value, fractionDigits = 2) => {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) {
-    return '--'
-  }
-  return Number(value).toLocaleString('zh-CN', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: fractionDigits
-  })
-}
-
 const copyForecastResultId = async id => {
   if (!id) {
     ElMessage.warning('暂无可复制的结果 ID')
@@ -1135,20 +838,6 @@ const formatHistoryDateTime = value => {
     return '-'
   }
   return date.toLocaleString('zh-CN', { hour12: false })
-}
-
-function formatScenarioChange(value) {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) {
-    return '变化数据缺失'
-  }
-  const percent = (Number(value) * 100).toFixed(1)
-  if (Number(value) > 0) {
-    return `预计增加 ${percent}%`
-  }
-  if (Number(value) < 0) {
-    return `预计下降 ${Math.abs(percent)}%`
-  }
-  return '与基准持平'
 }
 </script>
 
@@ -1432,95 +1121,6 @@ function formatScenarioChange(value) {
   display: flex;
   justify-content: flex-end;
   padding: 16px 0 4px;
-}
-
-.scenario-card {
-  border: 1px solid #e8ebf3;
-}
-
-.scenario-content {
-  display: grid;
-  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-  gap: 20px;
-}
-
-@media (max-width: 1200px) {
-  .scenario-content {
-    grid-template-columns: 1fr;
-  }
-}
-
-.scenario-chart {
-  min-height: 320px;
-}
-
-.scenario-insights {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 16px;
-}
-
-.scenario-insight-card {
-  border-radius: 16px;
-  padding: 18px;
-  background: linear-gradient(145deg, var(--scenario-accent-soft, rgba(37, 99, 235, 0.1)), rgba(255, 255, 255, 0.95));
-  border: 1px solid var(--scenario-accent-border, rgba(37, 99, 235, 0.18));
-  box-shadow: 0 18px 30px rgba(15, 23, 42, 0.08);
-}
-
-.scenario-insight-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 24px 36px rgba(15, 23, 42, 0.12);
-}
-
-.scenario-insight-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-  color: #1f2937;
-}
-
-.scenario-insight-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--scenario-accent, #2563eb);
-  box-shadow: 0 0 0 4px var(--scenario-accent-soft, rgba(37, 99, 235, 0.16));
-}
-
-.scenario-insight-temp {
-  margin-top: 4px;
-  color: #6b7280;
-  font-size: 13px;
-}
-
-.scenario-insight-value {
-  margin-top: 12px;
-  font-size: 24px;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.scenario-insight-change {
-  margin-top: 6px;
-  font-size: 13px;
-  color: #475569;
-}
-
-.scenario-insight-change.positive {
-  color: #16a34a;
-}
-
-.scenario-insight-change.negative {
-  color: #dc2626;
-}
-
-.scenario-insight-desc {
-  margin-top: 10px;
-  font-size: 12px;
-  color: #6b7280;
-  line-height: 1.6;
 }
 
 /* User theme enhancements */

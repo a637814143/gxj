@@ -169,6 +169,11 @@
               {{ formatNumber(row.yieldPerHectare) }}
             </template>
           </el-table-column>
+          <el-table-column prop="averagePrice" label="平均价格 (元/公斤)" width="190">
+            <template #default="{ row }">
+              {{ formatNumber(row.averagePrice) }}
+            </template>
+          </el-table-column>
           <el-table-column prop="collectedAt" label="采集日期" width="180">
             <template #default="{ row }">
               {{ formatDate(row.collectedAt) }}
@@ -524,12 +529,16 @@ const lastImportDatasetLabel = computed(() => {
 
 const datasetTypeMap = {
   YIELD: '产量',
-  WEATHER: '气象'
+  PRICE: '价格',
+  WEATHER: '气象',
+  SOIL: '土壤'
 }
 
 const datasetTypeOptions = [
   { value: 'YIELD', label: '产量' },
-  { value: 'WEATHER', label: '气象' }
+  { value: 'PRICE', label: '价格' },
+  { value: 'WEATHER', label: '气象' },
+  { value: 'SOIL', label: '土壤' }
 ]
 
 const statusDisplayMap = {
@@ -681,7 +690,7 @@ const importSummaryBadges = computed(() => {
 const reminders = [
   '建议每周核对一次数据来源与口径',
   '导入前请确保文件格式符合模板要求',
-  '气象等外部数据也请通过数据中心导入，便于统一治理',
+  '气象、土壤等外部数据也请通过数据中心导入，便于统一治理',
   '完成导入后及时通知模型团队更新训练集'
 ]
 

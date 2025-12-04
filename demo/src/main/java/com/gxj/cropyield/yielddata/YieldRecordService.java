@@ -59,7 +59,7 @@ public class YieldRecordService {
             CellStyle dateStyle = workbook.createCellStyle();
             dateStyle.setDataFormat(creationHelper.createDataFormat().getFormat("yyyy-mm-dd"));
 
-            String[] headers = new String[]{"作物", "类别", "地区", "地区级别", "年份", "播种面积(千公顷)", "产量(万吨)", "单产(吨/公顷)", "采集日期", "数据来源"};
+            String[] headers = new String[]{"作物", "类别", "地区", "地区级别", "年份", "播种面积(千公顷)", "产量(万吨)", "单产(吨/公顷)", "平均价格(元/公斤)", "采集日期", "预估产值(亿元)", "数据来源"};
             Row headerRow = sheet.createRow(0);
             for (int i = 0; i < headers.length; i++) {
                 Cell cell = headerRow.createCell(i);
@@ -77,13 +77,15 @@ public class YieldRecordService {
                 setNumeric(row, 5, record.getSownArea());
                 setNumeric(row, 6, record.getProduction());
                 setNumeric(row, 7, record.getYieldPerHectare());
+                setNumeric(row, 8, record.getAveragePrice());
 
-                Cell collectedAtCell = row.createCell(8);
+                Cell collectedAtCell = row.createCell(9);
                 if (record.getCollectedAt() != null) {
                     collectedAtCell.setCellValue(java.sql.Date.valueOf(record.getCollectedAt()));
                     collectedAtCell.setCellStyle(dateStyle);
                 }
-                row.createCell(9).setCellValue(nullToEmpty(record.getDataSource()));
+                setNumeric(row, 10, calculateRevenue(record));
+                row.createCell(11).setCellValue(nullToEmpty(record.getDataSource()));
             }
 
             for (int i = 0; i < headers.length; i++) {
@@ -118,9 +120,9 @@ public class YieldRecordService {
             document.add(new Paragraph("记录总数：" + records.size(), bodyFont));
             document.add(new Paragraph(" "));
 
-            PdfPTable table = new PdfPTable(10);
+            PdfPTable table = new PdfPTable(12);
             table.setWidthPercentage(100);
-            table.setWidths(new float[]{18, 13, 18, 12, 8, 14, 14, 14, 14, 18});
+            table.setWidths(new float[]{18, 13, 18, 12, 8, 14, 14, 14, 14, 14, 16, 18});
 
             addHeaderCell(table, "作物", headerFont);
             addHeaderCell(table, "类别", headerFont);
@@ -130,7 +132,9 @@ public class YieldRecordService {
             addHeaderCell(table, "播种面积(千公顷)", headerFont);
             addHeaderCell(table, "产量(万吨)", headerFont);
             addHeaderCell(table, "单产(吨/公顷)", headerFont);
+            addHeaderCell(table, "平均价格(元/公斤)", headerFont);
             addHeaderCell(table, "采集日期", headerFont);
+            addHeaderCell(table, "预估产值(亿元)", headerFont);
             addHeaderCell(table, "数据来源", headerFont);
 
             for (YieldRecord record : records) {
@@ -142,7 +146,9 @@ public class YieldRecordService {
                 addBodyCell(table, formatNumber(record.getSownArea()), bodyFont);
                 addBodyCell(table, formatNumber(record.getProduction()), bodyFont);
                 addBodyCell(table, formatNumber(record.getYieldPerHectare()), bodyFont);
+                addBodyCell(table, formatNumber(record.getAveragePrice()), bodyFont);
                 addBodyCell(table, formatDate(record.getCollectedAt()), bodyFont);
+                addBodyCell(table, formatNumber(calculateRevenue(record)), bodyFont);
                 addBodyCell(table, nullToEmpty(record.getDataSource()), bodyFont);
             }
 
@@ -224,6 +230,13 @@ public class YieldRecordService {
         return value == null ? "" : value;
     }
 
+    private double calculateRevenue(YieldRecord record) {
+        if (record.getProduction() == null || record.getAveragePrice() == null) {
+            return 0.0;
+        }
+        return record.getProduction() * record.getAveragePrice() * 0.1;
+    }
+
     private YieldRecordResponse mapToResponse(YieldRecord record) {
         return new YieldRecordResponse(
                 record.getId(),
@@ -235,6 +248,8 @@ public class YieldRecordService {
                 record.getSownArea(),
                 record.getProduction(),
                 record.getYieldPerHectare(),
+                record.getAveragePrice(),
+                calculateRevenue(record),
                 record.getDataSource(),
                 record.getCollectedAt()
         );

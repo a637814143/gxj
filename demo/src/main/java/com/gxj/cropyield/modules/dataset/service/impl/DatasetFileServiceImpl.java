@@ -9,6 +9,7 @@ import com.gxj.cropyield.modules.dataset.dto.DatasetFileRequest;
 import com.gxj.cropyield.modules.dataset.entity.DatasetFile;
 import com.gxj.cropyield.modules.dataset.entity.DatasetFile.DatasetType;
 import com.gxj.cropyield.modules.dataset.repository.DatasetFileRepository;
+import com.gxj.cropyield.modules.dataset.repository.PriceRecordRepository;
 import com.gxj.cropyield.modules.dataset.repository.YieldRecordRepository;
 import com.gxj.cropyield.modules.dataset.service.DatasetFileService;
 import com.gxj.cropyield.modules.forecast.repository.ForecastRunRepository;
@@ -33,6 +34,7 @@ public class DatasetFileServiceImpl implements DatasetFileService {
 
     private final DatasetFileRepository datasetFileRepository;
     private final YieldRecordRepository yieldRecordRepository;
+    private final PriceRecordRepository priceRecordRepository;
     private final DataImportJobRepository jobRepository;
     private final CropRepository cropRepository;
     private final RegionRepository regionRepository;
@@ -41,6 +43,7 @@ public class DatasetFileServiceImpl implements DatasetFileService {
 
     public DatasetFileServiceImpl(DatasetFileRepository datasetFileRepository,
                                   YieldRecordRepository yieldRecordRepository,
+                                  PriceRecordRepository priceRecordRepository,
                                   DataImportJobRepository jobRepository,
                                   CropRepository cropRepository,
                                   RegionRepository regionRepository,
@@ -48,6 +51,7 @@ public class DatasetFileServiceImpl implements DatasetFileService {
                                   ForecastRunRepository forecastRunRepository) {
         this.datasetFileRepository = datasetFileRepository;
         this.yieldRecordRepository = yieldRecordRepository;
+        this.priceRecordRepository = priceRecordRepository;
         this.jobRepository = jobRepository;
         this.cropRepository = cropRepository;
         this.regionRepository = regionRepository;
@@ -128,6 +132,7 @@ public class DatasetFileServiceImpl implements DatasetFileService {
         }
         Long removed = switch (type) {
             case YIELD -> yieldRecordRepository.deleteByDatasetFileId(file.getId());
+            case PRICE -> priceRecordRepository.deleteByDatasetFileId(file.getId());
             default -> 0L;
         };
         return removed == null ? 0L : removed;
@@ -166,6 +171,8 @@ public class DatasetFileServiceImpl implements DatasetFileService {
         Set<Long> regionIds = new LinkedHashSet<>();
         cropIds.addAll(yieldRecordRepository.findDistinctCropIdsByDatasetFileId(file.getId()));
         regionIds.addAll(yieldRecordRepository.findDistinctRegionIdsByDatasetFileId(file.getId()));
+        cropIds.addAll(priceRecordRepository.findDistinctCropIdsByDatasetFileId(file.getId()));
+        regionIds.addAll(priceRecordRepository.findDistinctRegionIdsByDatasetFileId(file.getId()));
         return new CleanupImpact(cropIds, regionIds);
     }
 
@@ -174,6 +181,7 @@ public class DatasetFileServiceImpl implements DatasetFileService {
             List<Long> removableCrops = cropIds.stream()
                     .filter(Objects::nonNull)
                     .filter(id -> !yieldRecordRepository.existsByCropId(id))
+                    .filter(id -> !priceRecordRepository.existsByCropId(id))
                     .filter(id -> !forecastTaskRepository.existsByCropId(id))
                     .filter(id -> !forecastRunRepository.existsByCropId(id))
                     .collect(Collectors.toList());
@@ -185,6 +193,7 @@ public class DatasetFileServiceImpl implements DatasetFileService {
             List<Long> removableRegions = regionIds.stream()
                     .filter(Objects::nonNull)
                     .filter(id -> !yieldRecordRepository.existsByRegionId(id))
+                    .filter(id -> !priceRecordRepository.existsByRegionId(id))
                     .filter(id -> !forecastTaskRepository.existsByRegionId(id))
                     .filter(id -> !forecastRunRepository.existsByRegionId(id))
                     .collect(Collectors.toList());

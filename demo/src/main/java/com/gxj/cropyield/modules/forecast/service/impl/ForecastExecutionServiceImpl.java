@@ -362,6 +362,7 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         snapshot.setMeasurementUnit(measurementType.valueUnit());
 
         Double referenceArea = referenceRecord != null ? referenceRecord.getSownArea() : null;
+        Double referencePrice = referenceRecord != null ? referenceRecord.getAveragePrice() : null;
 
         Double predictedProduction = null;
         Double predictedYield = null;
@@ -381,7 +382,16 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         snapshot.setPredictedProduction(predictedProduction);
         snapshot.setPredictedYield(predictedYield);
         snapshot.setSownArea(referenceArea);
+        snapshot.setAveragePrice(referencePrice);
+        snapshot.setEstimatedRevenue(calculateRevenue(predictedProduction, referencePrice));
         return snapshot;
+    }
+
+    private Double calculateRevenue(Double production, Double averagePrice) {
+        if (production == null || averagePrice == null) {
+            return null;
+        }
+        return production * averagePrice * 0.1d;
     }
 
     private Integer parseYear(String period) {

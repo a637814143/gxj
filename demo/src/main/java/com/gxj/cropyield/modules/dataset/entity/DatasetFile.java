@@ -16,7 +16,9 @@ public class DatasetFile extends BaseEntity {
 
     public enum DatasetType {
         YIELD,
-        WEATHER
+        PRICE,
+        WEATHER,
+        SOIL
     }
 
     @Column(nullable = false, length = 128)
