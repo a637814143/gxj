@@ -30,6 +30,9 @@ public class Region extends BaseEntity {
     @Column(length = 256)
     private String description;
 
+    @Column(nullable = false)
+    private boolean hidden = false;
+
     public String getCode() {
         return code;
     }
@@ -76,5 +79,13 @@ public class Region extends BaseEntity {
 
     public void setParentName(String parentName) {
         this.parentName = parentName;
+    }
+
+    public boolean isHidden() {
+        return hidden;
+    }
+
+    public void setHidden(boolean hidden) {
+        this.hidden = hidden;
     }
 }

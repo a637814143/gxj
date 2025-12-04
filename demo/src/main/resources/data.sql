@@ -1,14 +1,15 @@
 -- 初始化基础行政区域信息
-INSERT INTO base_region (id, code, name, level, parent_code, parent_name, description)
+INSERT INTO base_region (id, code, name, level, parent_code, parent_name, description, hidden)
 VALUES
-    (1, 'YUNNAN', '云南省', 'PROVINCE', NULL, NULL, '云南省省级行政区。'),
-    (2, 'KUNMING', '昆明市', 'PREFECTURE', 'YUNNAN', '云南省', '云南省省会城市。')
+    (1, 'YUNNAN', '云南省', 'PROVINCE', NULL, NULL, '云南省省级行政区。', 0),
+    (2, 'KUNMING', '昆明市', 'PREFECTURE', 'YUNNAN', '云南省', '云南省省会城市。', 0)
 ON DUPLICATE KEY UPDATE
     name = VALUES(name),
     level = VALUES(level),
     parent_code = VALUES(parent_code),
     parent_name = VALUES(parent_name),
-    description = VALUES(description);
+    description = VALUES(description),
+    hidden = VALUES(hidden);
 
 -- 初始化基础农作物信息
 INSERT INTO base_crop (id, code, name, category, harvest_season, description)
