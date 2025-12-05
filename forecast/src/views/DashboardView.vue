@@ -131,12 +131,6 @@
         <el-table-column label="单产 (吨/公顷)" min-width="150">
           <template #default="{ row }">{{ formatNumber(row.yieldPerHectare) }}</template>
         </el-table-column>
-        <el-table-column label="平均价格 (元/公斤)" min-width="180">
-          <template #default="{ row }">{{ formatNumber(row.averagePrice) }}</template>
-        </el-table-column>
-        <el-table-column label="预计收益 (万元)" min-width="160">
-          <template #default="{ row }">{{ formatNumber(row.estimatedRevenue) }}</template>
-        </el-table-column>
         <el-table-column label="数据日期" width="160">
           <template #default="{ row }">{{ formatDate(row.collectedAt) }}</template>
         </el-table-column>
@@ -268,11 +262,11 @@ const quickOverview = computed(() => {
   ]
 })
 
-const reminders = computed(() => {
-  const data = summary.value
-  if (!data) {
-    return ['正在加载最新的产量与价格统计…', '请稍候']
-  }
+  const reminders = computed(() => {
+    const data = summary.value
+    if (!data) {
+      return ['正在加载最新的产量统计…', '请稍候']
+    }
   const list = []
   const topCrop = data.cropStructure?.[0]
   if (topCrop) {
@@ -446,8 +440,6 @@ const exportHeaders = [
   '播种面积 (公顷)',
   '总产量 (吨)',
   '单产 (吨/公顷)',
-  '平均价格 (元/公斤)',
-  '预计收益 (万元)',
   '数据日期'
 ]
 
@@ -459,8 +451,6 @@ const buildExcelRows = () =>
     record.sownArea ?? '',
     record.production ?? '',
     record.yieldPerHectare ?? '',
-    record.averagePrice ?? '',
-    record.estimatedRevenue ?? '',
     record.collectedAt ? formatDate(record.collectedAt) : ''
   ])
 
@@ -472,8 +462,6 @@ const buildPdfRows = () =>
     formatNumber(record.sownArea),
     formatNumber(record.production),
     formatNumber(record.yieldPerHectare),
-    formatNumber(record.averagePrice),
-    formatNumber(record.estimatedRevenue),
     formatDate(record.collectedAt)
   ])
 

@@ -125,8 +125,6 @@ public class ForecastHistoryServiceImpl implements ForecastHistoryService {
             snapshot.getPredictedProduction(),
             snapshot.getPredictedYield(),
             snapshot.getSownArea(),
-            snapshot.getAveragePrice(),
-            snapshot.getEstimatedRevenue(),
             generatedAt
         );
     }

@@ -49,7 +49,47 @@ export const fetchRegionCrops = async regionId => {
 }
 
 export const fetchModels = async () => {
+  const { data } = await apiClient.get('/api/forecast/models/available')
+  return extractData(data)
+}
+
+export const fetchModelOptions = async () => {
+  const { data } = await apiClient.get('/api/forecast/models/options')
+  return data?.data ?? data ?? { allowedTypes: [], canManageModels: false }
+}
+
+export const fetchModelList = async () => {
   const { data } = await apiClient.get('/api/forecast/models')
+  return extractData(data)
+}
+
+export const createModel = async payload => {
+  const { data } = await apiClient.post('/api/forecast/models', payload)
+  return data?.data ?? data
+}
+
+export const updateModel = async (id, payload) => {
+  const { data } = await apiClient.put(`/api/forecast/models/${id}`, payload)
+  return data?.data ?? data
+}
+
+export const copyModel = async id => {
+  const { data } = await apiClient.post(`/api/forecast/models/${id}/copy`)
+  return data?.data ?? data
+}
+
+export const toggleModel = async (id, enabled) => {
+  const { data } = await apiClient.patch(`/api/forecast/models/${id}/enabled`, { enabled })
+  return data?.data ?? data
+}
+
+export const fetchModelPolicies = async () => {
+  const { data } = await apiClient.get('/api/forecast/models/policies')
+  return extractData(data)
+}
+
+export const saveModelPolicies = async payload => {
+  const { data } = await apiClient.put('/api/forecast/models/policies', payload)
   return extractData(data)
 }
 
@@ -116,6 +156,14 @@ export default {
   fetchRegions,
   fetchRegionCrops,
   fetchModels,
+  fetchModelOptions,
+  fetchModelList,
+  createModel,
+  updateModel,
+  copyModel,
+  toggleModel,
+  fetchModelPolicies,
+  saveModelPolicies,
   fetchForecastHistory,
   deleteForecastRun,
   executeForecast,

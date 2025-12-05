@@ -87,26 +87,7 @@
                     label="单产"
                     :formatter="(_, __, value) => formatNumber(value, { maximumFractionDigits: 2 }) + ' 吨/公顷'"
                   />
-                  <el-table-column
-                    prop="averagePrice"
-                    label="平均价格"
-                    :formatter="(_, __, value) => value != null ? formatNumber(value, { maximumFractionDigits: 0 }) + ' 元/吨' : '--'"
-                  />
                 </el-table>
-              </template>
-
-              <template v-else-if="section.type === 'PRICE_TREND'">
-                <el-table :data="section.data?.series || []" border size="small" style="width: 100%">
-                  <el-table-column prop="date" label="日期" :formatter="(_, __, value) => formatDate(value)" />
-                  <el-table-column
-                    prop="price"
-                    label="价格"
-                    :formatter="(_, __, value) => formatNumber(value, { maximumFractionDigits: 0 }) + ' 元/吨'"
-                  />
-                </el-table>
-                <div class="section-footer" v-if="section.data?.averagePrice">
-                  平均价格：{{ formatNumber(section.data.averagePrice, { maximumFractionDigits: 0 }) }} 元/吨
-                </div>
               </template>
 
               <template v-else-if="section.type === 'FORECAST_COMPARISON'">
@@ -244,19 +225,17 @@ const formatDifference = data => {
   return formatWithUnit(data.difference, unit)
 }
 
-const formatSectionType = type => {
-  switch (type) {
-    case 'OVERVIEW':
-      return '指标概览'
-    case 'YIELD_TREND':
-      return '产量趋势'
-    case 'PRICE_TREND':
-      return '价格走势'
-    case 'FORECAST_COMPARISON':
-      return '预测对比'
-    default:
-      return type || '附录'
-  }
+  const formatSectionType = type => {
+    switch (type) {
+      case 'OVERVIEW':
+        return '指标概览'
+      case 'YIELD_TREND':
+        return '产量趋势'
+      case 'FORECAST_COMPARISON':
+        return '预测对比'
+      default:
+        return type || '附录'
+    }
 }
 
 const fetchDetail = async id => {

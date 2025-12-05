@@ -114,8 +114,7 @@ graph TD
 
 | 表名 | 说明 | 关键字段 |
 | --- | --- | --- |
-| `dataset_yield_record` | 作物年均单产 | `id`(PK)、`crop_id`(FK)、`region_id`(FK)、`year`、`sown_area`、`production`、`yield_per_hectare`、`average_price`、`data_source`、`collected_at` |
-| `dataset_price_record` | 作物价格序列 | `id`(PK)、`crop_id`(FK)、`region_id`(FK)、`record_date`、`price` |
+| `dataset_yield_record` | 作物年均单产 | `id`(PK)、`crop_id`(FK)、`region_id`(FK)、`year`、`sown_area`、`production`、`yield_per_hectare`、`data_source`、`collected_at` |
 | `data_import_job` | 数据导入任务队列 | `id`(PK)、`task_id`、`dataset_name`、`dataset_type`、`total_rows`、`processed_rows`、`inserted_rows`、`updated_rows`、`skipped_rows`、`failed_rows`、`status`、`message`、`created_at`、`updated_at` |
 | `data_import_job_error` | 导入错误摘要 | `id`(PK)、`job_id`(FK)、`line_number`、`error_code`、`message`、`raw_value`、`created_at`、`updated_at` |
 
@@ -123,12 +122,15 @@ graph TD
 
 | 表名 | 说明 | 关键字段 |
 | --- | --- | --- |
-| `forecast_model` | 预测模型配置 | `id`(PK)、`name`、`type`、`description` |
+| `forecast_model` | 预测模型配置 | `id`(PK)、`name`、`type`、`enabled`、`granularity`、`history_window`、`forecast_horizon`、`crop_scope`、`region_scope`、`hyper_parameters`、`description` |
+| `forecast_model_department_policy` | 模型部门权限 | `id`(PK)、`department_code`、`allowed_types`(可为空，空值代表继承全局配置)、`can_manage`(0/1)、`created_at/updated_at` |
 | `forecast_task` | 预测任务 | `id`(PK)、`model_id`(FK)、`crop_id`(FK)、`region_id`(FK)、`status`、`parameters`、`created_at`、`updated_at` |
 | `forecast_run` | 预测执行记录 | `id`(PK)、`model_id`(FK)、`crop_id`(FK)、`region_id`(FK)、`status`、`forecast_periods`、`history_years`、`frequency`、`mae`、`rmse`、`mape`、`r2` |
 | `forecast_run_series` | 预测序列明细 | `id`(PK)、`run_id`(FK)、`period`、`value`、`lower_bound`、`upper_bound`、`historical` |
 | `forecast_result` | 预测结果摘要 | `id`(PK)、`task_id`(FK)、`target_year`、`predicted_yield`、`evaluation` |
 | `report_summary` | 预测报告 | `id`(PK)、`title`、`forecast_result_id`(FK)、`insights` |
+
+> 运营侧可通过 `forecast.model.allowed-types` 配置项限制可用模型类型；管理员还可在“模型部门权限”中为农业部门账号按 `department_code` 精细化限制模型类型并显式授予/收回模型管理权限。
 
 ### 3.4 用户与审计
 
@@ -145,7 +147,6 @@ graph TD
 
 **索引与约束建议**
 - `dataset_yield_record` 建立 `(crop_id, region_id, year)` 唯一索引，保证年度单产唯一。
-- `dataset_price_record` 建立 `(crop_id, region_id, record_date)` 唯一索引，快速定位价格时间点。
 - `forecast_result` 建立 `(task_id, target_year)` 唯一索引，便于查询各任务年度预测。
 - 所有外键字段加索引提升联表效率。
 

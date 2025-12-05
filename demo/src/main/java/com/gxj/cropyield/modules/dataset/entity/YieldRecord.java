@@ -10,6 +10,8 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.NotFound;
+import org.hibernate.annotations.NotFoundAction;
 /**
  * 数据集管理模块的实体类，映射数据集管理领域对应的数据表结构。
  */
@@ -28,6 +30,7 @@ public class YieldRecord extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "dataset_file_id")
+    @NotFound(action = NotFoundAction.IGNORE)
     private DatasetFile datasetFile;
 
     @Column(nullable = false)
@@ -41,9 +44,6 @@ public class YieldRecord extends BaseEntity {
 
     @Column(name = "yield_per_hectare")
     private Double yieldPerHectare;
-
-    @Column(name = "average_price")
-    private Double averagePrice;
 
     @Column(name = "data_source", length = 256)
     private String dataSource;
@@ -105,14 +105,6 @@ public class YieldRecord extends BaseEntity {
 
     public void setProduction(Double production) {
         this.production = production;
-    }
-
-    public Double getAveragePrice() {
-        return averagePrice;
-    }
-
-    public void setAveragePrice(Double averagePrice) {
-        this.averagePrice = averagePrice;
     }
 
     public String getDataSource() {

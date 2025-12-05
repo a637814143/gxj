@@ -13,5 +13,13 @@ public interface ForecastModelService {
 
     List<ForecastModel> listAll();
 
+    List<ForecastModel> listAvailable();
+
     ForecastModel create(ForecastModelRequest request);
+
+    ForecastModel update(Long id, ForecastModelRequest request);
+
+    ForecastModel duplicate(Long id);
+
+    ForecastModel toggleEnabled(Long id, boolean enabled);
 }

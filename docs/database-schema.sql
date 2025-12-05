@@ -8,8 +8,8 @@ DROP TABLE IF EXISTS forecast_run_series;
 DROP TABLE IF EXISTS forecast_result;
 DROP TABLE IF EXISTS forecast_run;
 DROP TABLE IF EXISTS forecast_task;
+DROP TABLE IF EXISTS forecast_model_department_policy;
 DROP TABLE IF EXISTS forecast_model;
-DROP TABLE IF EXISTS dataset_price_record;
 DROP TABLE IF EXISTS dataset_yield_record;
 DROP TABLE IF EXISTS dataset_file;
 DROP TABLE IF EXISTS base_crop;
@@ -107,7 +107,6 @@ CREATE TABLE dataset_yield_record (
     sown_area DOUBLE,
     production DOUBLE,
     yield_per_hectare DOUBLE,
-    average_price DOUBLE,
     data_source VARCHAR(256),
     collected_at DATE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -119,30 +118,31 @@ CREATE TABLE dataset_yield_record (
     CONSTRAINT fk_yield_region FOREIGN KEY (region_id) REFERENCES base_region (id) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '作物年均单产记录';
 
-CREATE TABLE dataset_price_record (
-    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    crop_id BIGINT UNSIGNED NOT NULL,
-    region_id BIGINT UNSIGNED NOT NULL,
-    record_date DATE NOT NULL,
-    price DOUBLE NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_price_crop_region_date (crop_id, region_id, record_date),
-    KEY idx_price_crop (crop_id),
-    KEY idx_price_region (region_id),
-    CONSTRAINT fk_price_crop FOREIGN KEY (crop_id) REFERENCES base_crop (id) ON DELETE CASCADE,
-    CONSTRAINT fk_price_region FOREIGN KEY (region_id) REFERENCES base_region (id) ON DELETE CASCADE
-) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '作物价格时间序列';
-
 CREATE TABLE forecast_model (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(128) NOT NULL,
     type VARCHAR(32) NOT NULL,
     description VARCHAR(512),
+    enabled TINYINT(1) NOT NULL DEFAULT 1,
+    granularity VARCHAR(32) NOT NULL DEFAULT 'YEARLY',
+    history_window INT NOT NULL DEFAULT 5,
+    forecast_horizon INT NOT NULL DEFAULT 1,
+    crop_scope VARCHAR(128) NOT NULL,
+    region_scope VARCHAR(128) NOT NULL,
+    hyper_parameters VARCHAR(512),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_forecast_model_name (name)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '预测模型定义';
+
+CREATE TABLE forecast_model_department_policy (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    department_code VARCHAR(64) NOT NULL UNIQUE,
+    allowed_types VARCHAR(512),
+    can_manage TINYINT(1) NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '预测模型部门权限';
 
 CREATE TABLE forecast_task (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

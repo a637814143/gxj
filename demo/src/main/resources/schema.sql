@@ -104,7 +104,6 @@ CREATE TABLE IF NOT EXISTS dataset_yield_record (
     sown_area DOUBLE,
     production DOUBLE,
     yield_per_hectare DOUBLE,
-    average_price DOUBLE,
     data_source VARCHAR(256),
     collected_at DATE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -117,24 +116,6 @@ CREATE TABLE IF NOT EXISTS dataset_yield_record (
     CONSTRAINT fk_yield_crop FOREIGN KEY (crop_id) REFERENCES base_crop (id) ON DELETE CASCADE,
     CONSTRAINT fk_yield_region FOREIGN KEY (region_id) REFERENCES base_region (id) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '作物年均单产记录';
-
-CREATE TABLE IF NOT EXISTS dataset_price_record (
-    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    dataset_file_id BIGINT UNSIGNED,
-    crop_id BIGINT UNSIGNED NOT NULL,
-    region_id BIGINT UNSIGNED NOT NULL,
-    record_date DATE NOT NULL,
-    price DOUBLE NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_price_crop_region_date (crop_id, region_id, record_date),
-    KEY idx_price_dataset_file (dataset_file_id),
-    KEY idx_price_crop (crop_id),
-    KEY idx_price_region (region_id),
-    CONSTRAINT fk_price_dataset_file FOREIGN KEY (dataset_file_id) REFERENCES dataset_file (id) ON DELETE CASCADE,
-    CONSTRAINT fk_price_crop FOREIGN KEY (crop_id) REFERENCES base_crop (id) ON DELETE CASCADE,
-    CONSTRAINT fk_price_region FOREIGN KEY (region_id) REFERENCES base_region (id) ON DELETE CASCADE
-) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '作物价格时间序列';
 
 CREATE TABLE IF NOT EXISTS dataset_weather_record (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -161,10 +142,26 @@ CREATE TABLE IF NOT EXISTS forecast_model (
     name VARCHAR(128) NOT NULL,
     type VARCHAR(32) NOT NULL,
     description VARCHAR(512),
+    enabled TINYINT(1) NOT NULL DEFAULT 1,
+    granularity VARCHAR(32) NOT NULL DEFAULT 'YEARLY',
+    history_window INT NOT NULL DEFAULT 5,
+    forecast_horizon INT NOT NULL DEFAULT 1,
+    crop_scope VARCHAR(128) NOT NULL,
+    region_scope VARCHAR(128) NOT NULL,
+    hyper_parameters VARCHAR(512),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_forecast_model_name (name)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '预测模型定义';
+
+CREATE TABLE IF NOT EXISTS forecast_model_department_policy (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    department_code VARCHAR(64) NOT NULL UNIQUE,
+    allowed_types VARCHAR(512),
+    can_manage TINYINT(1) NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '预测模型部门权限';
 
 CREATE TABLE IF NOT EXISTS forecast_task (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -267,8 +264,6 @@ CREATE TABLE IF NOT EXISTS forecast_snapshot (
     predicted_production DOUBLE,
     predicted_yield DOUBLE,
     sown_area DOUBLE,
-    average_price DOUBLE,
-    estimated_revenue DOUBLE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     KEY idx_snapshot_run (run_id),
@@ -360,36 +355,6 @@ SET @ddl := (
     WHERE table_schema = @current_schema
       AND table_name = 'forecast_snapshot'
       AND column_name = 'sown_area'
-);
-PREPARE stmt FROM @ddl;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
-
-SET @ddl := (
-    SELECT IF(
-        COUNT(*) = 0,
-        'ALTER TABLE forecast_snapshot ADD COLUMN average_price DOUBLE NULL AFTER sown_area',
-        'SELECT 1'
-    )
-    FROM information_schema.columns
-    WHERE table_schema = @current_schema
-      AND table_name = 'forecast_snapshot'
-      AND column_name = 'average_price'
-);
-PREPARE stmt FROM @ddl;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
-
-SET @ddl := (
-    SELECT IF(
-        COUNT(*) = 0,
-        'ALTER TABLE forecast_snapshot ADD COLUMN estimated_revenue DOUBLE NULL AFTER average_price',
-        'SELECT 1'
-    )
-    FROM information_schema.columns
-    WHERE table_schema = @current_schema
-      AND table_name = 'forecast_snapshot'
-      AND column_name = 'estimated_revenue'
 );
 PREPARE stmt FROM @ddl;
 EXECUTE stmt;

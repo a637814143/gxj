@@ -302,12 +302,6 @@
         <el-table-column label="参考播种面积 (公顷)" min-width="190">
           <template #default="{ row }">{{ formatHistoryNumber(row.sownArea) }}</template>
         </el-table-column>
-        <el-table-column label="参考均价 (元/公斤)" min-width="190">
-          <template #default="{ row }">{{ formatHistoryNumber(row.averagePrice) }}</template>
-        </el-table-column>
-        <el-table-column label="预计收益 (万元)" min-width="170">
-          <template #default="{ row }">{{ formatHistoryNumber(row.estimatedRevenue) }}</template>
-        </el-table-column>
         <el-table-column label="生成时间" min-width="200">
           <template #default="{ row }">{{ formatHistoryDateTime(row.generatedAt) }}</template>
         </el-table-column>
@@ -339,6 +333,205 @@
         />
       </div>
     </el-card>
+
+    <el-card class="panel-card" shadow="hover">
+      <template #header>
+        <div class="card-header">
+          <div>
+            <div class="card-title">模型管理</div>
+            <div class="card-subtitle">管理员可限制模型类型与权限，授权部门后方可新增/停用模型</div>
+          </div>
+          <div class="card-actions">
+            <el-button @click="loadModelList">刷新列表</el-button>
+            <el-button type="primary" :disabled="modelActionsDisabled" @click="openCreateModel">新增模型</el-button>
+          </div>
+        </div>
+      </template>
+
+      <div class="model-allowed-types">
+        <span class="model-allowed-label">允许的模型类型：</span>
+        <el-tag v-for="item in modelTypeOptions" :key="item.value" type="info" class="model-type-tag">{{ item.label }}</el-tag>
+        <el-tag v-if="modelOptions.departmentCode && !isAdmin" type="info" effect="plain">所属部门：{{ modelOptions.departmentCode }}</el-tag>
+        <el-tag type="warning" effect="plain">管理员可在配置中限制类型与管理权限</el-tag>
+        <el-tag v-if="modelActionsDisabled" type="danger" effect="light">当前账号未获模型管理授权</el-tag>
+      </div>
+
+      <el-alert
+        v-if="modelActionsDisabled"
+        type="warning"
+        show-icon
+        class="panel-alert"
+        :closable="false"
+        title="仅系统管理员或被授权的部门账号可新增/编辑/停用模型"
+        description="如需调整权限，请联系管理员在“模型部门权限”中启用管理权限或限制可用模型类型。"
+      />
+
+      <el-tabs v-model="modelTab">
+        <el-tab-pane label="模型列表" name="list">
+          <el-table :data="modelList" v-loading="modelTableLoading" stripe empty-text="暂无模型，请新增配置">
+            <el-table-column prop="name" label="名称" min-width="160">
+              <template #default="{ row }">
+                <div class="model-name-cell">
+                  <strong>{{ row.name }}</strong>
+                  <el-tag size="small" :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '启用' : '停用' }}</el-tag>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="type" label="类型" min-width="140">
+              <template #default="{ row }">{{ formatModelType(row.type) }}</template>
+            </el-table-column>
+            <el-table-column label="适用范围" min-width="220">
+              <template #default="{ row }">
+                <div class="model-scope">作物：{{ row.cropScope || '-' }}</div>
+                <div class="model-scope">区域：{{ row.regionScope || '-' }}</div>
+              </template>
+            </el-table-column>
+            <el-table-column label="粒度/窗口" min-width="160">
+              <template #default="{ row }">
+                <div>{{ formatGranularity(row.granularity) }}</div>
+                <div class="model-subtext">历史 {{ row.historyWindow }} 期，预测 {{ row.forecastHorizon }} 期</div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="hyperParameters" label="超参数" min-width="180">
+              <template #default="{ row }">{{ row.hyperParameters || '—' }}</template>
+            </el-table-column>
+            <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
+            <el-table-column label="操作" width="220" fixed="right">
+              <template #default="{ row }">
+                <el-space>
+                  <el-button type="primary" link size="small" :disabled="modelActionsDisabled" @click="openEditModel(row)">编辑</el-button>
+                  <el-button type="primary" link size="small" :disabled="modelActionsDisabled" @click="handleCopyModel(row)">复制</el-button>
+                  <el-button
+                    :type="row.enabled ? 'warning' : 'success'"
+                    link
+                    size="small"
+                    :disabled="modelActionsDisabled"
+                    @click="handleToggleModel(row)"
+                  >
+                    {{ row.enabled ? '停用' : '启用' }}
+                  </el-button>
+                </el-space>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-tab-pane>
+      </el-tabs>
+
+      <el-divider v-if="isAdmin" content-position="left">模型部门权限</el-divider>
+      <div v-if="isAdmin" class="policy-editor">
+        <el-table :data="policyRows" v-loading="policyLoading" size="small" empty-text="尚未配置部门权限">
+          <el-table-column label="部门编码" prop="departmentCode" min-width="160">
+            <template #default="{ row }">
+              <el-input v-model="row.departmentCode" placeholder="输入部门编码" />
+            </template>
+          </el-table-column>
+          <el-table-column label="允许的模型类型" min-width="220">
+            <template #default="{ row }">
+              <el-select v-model="row.allowedTypes" multiple placeholder="留空则继承全局配置" style="width: 100%">
+                <el-option v-for="item in modelTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+              </el-select>
+            </template>
+          </el-table-column>
+          <el-table-column label="可管理模型" width="140">
+            <template #default="{ row }">
+              <el-switch v-model="row.canManage" />
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="120">
+            <template #default="{ $index }">
+              <el-button type="danger" link size="small" @click="removePolicyRow($index)">移除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <div class="policy-actions">
+          <el-button size="small" @click="addPolicyRow">新增部门</el-button>
+          <el-button type="primary" size="small" :loading="policyLoading" @click="persistPolicyList">保存权限</el-button>
+        </div>
+      </div>
+    </el-card>
+
+    <el-dialog
+      v-model="modelDialogVisible"
+      :title="editingModelId ? '编辑模型' : '新增模型'"
+      width="720px"
+      destroy-on-close
+    >
+      <el-form :model="modelForm" :rules="modelRules" ref="modelFormRef" label-width="120px">
+        <el-row :gutter="16">
+          <el-col :xs="24" :sm="12">
+            <el-form-item label="模型名称" prop="name">
+              <el-input v-model="modelForm.name" maxlength="128" show-word-limit placeholder="请输入名称" />
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :sm="12">
+            <el-form-item label="模型类型" prop="type">
+              <el-select v-model="modelForm.type" placeholder="请选择模型类型">
+                <el-option v-for="item in modelTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col :xs="24" :sm="12">
+            <el-form-item label="适用作物" prop="cropScope">
+              <el-input v-model="modelForm.cropScope" maxlength="128" placeholder="例如：水稻/玉米" />
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :sm="12">
+            <el-form-item label="适用区域" prop="regionScope">
+              <el-input v-model="modelForm.regionScope" maxlength="128" placeholder="例如：江苏省南部" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col :xs="24" :sm="12">
+            <el-form-item label="预测粒度" prop="granularity">
+              <el-select v-model="modelForm.granularity" placeholder="请选择粒度">
+                <el-option v-for="item in granularityOptions" :key="item.value" :label="item.label" :value="item.value" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :sm="12">
+            <el-form-item label="时间窗口" required>
+              <div class="model-number-group">
+                <el-form-item prop="historyWindow" class="inline-item">
+                  <el-input-number v-model="modelForm.historyWindow" :min="1" :max="120" />
+                  <span class="form-hint">历史期数</span>
+                </el-form-item>
+                <el-form-item prop="forecastHorizon" class="inline-item">
+                  <el-input-number v-model="modelForm.forecastHorizon" :min="1" :max="12" />
+                  <span class="form-hint">预测步数</span>
+                </el-form-item>
+              </div>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="超参数" prop="hyperParameters">
+          <el-input
+            v-model="modelForm.hyperParameters"
+            type="textarea"
+            :rows="2"
+            maxlength="512"
+            show-word-limit
+            placeholder="填写关键超参数，如学习率、层数、正则等"
+          />
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input
+            v-model="modelForm.description"
+            type="textarea"
+            :rows="2"
+            maxlength="200"
+            show-word-limit
+            placeholder="补充模型的适用场景、数据要求等"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="modelDialogVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="modelActionsDisabled" @click="submitModelForm">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -350,9 +543,17 @@ import {
   deleteForecastRun,
   executeForecast,
   fetchForecastHistory,
+  fetchModelList,
+  fetchModelOptions,
+  fetchModelPolicies,
   fetchModels,
   fetchRegionCrops,
   fetchRegions,
+  saveModelPolicies,
+  createModel,
+  updateModel,
+  copyModel,
+  toggleModel,
 } from '@/services/forecast'
 import { useAuthStore } from '@/stores/auth'
 
@@ -371,6 +572,12 @@ const optionLists = reactive({
   models: []
 })
 
+const modelOptions = reactive({
+  allowedTypes: [],
+  canManage: false,
+  departmentCode: null
+})
+
 const cropRequestId = ref(0)
 
 const authStore = useAuthStore()
@@ -381,6 +588,39 @@ const isUserTheme = computed(() => {
     return !roles.includes('ADMIN')
   }
   return roles !== 'ADMIN'
+})
+const isAdmin = computed(() => authStore.hasAnyRole(['ADMIN']))
+const canManageModels = computed(() => isAdmin.value || modelOptions.canManage)
+
+const modelTab = ref('list')
+const modelList = ref([])
+const modelTableLoading = ref(false)
+const modelDialogVisible = ref(false)
+const modelFormRef = ref(null)
+const editingModelId = ref(null)
+const policyRows = ref([])
+const policyLoading = ref(false)
+
+const granularityOptions = [
+  { label: '年度', value: 'YEARLY' },
+  { label: '季度', value: 'QUARTERLY' },
+  { label: '月度', value: 'MONTHLY' }
+]
+
+const modelTypeLabels = {
+  TIME_SERIES: '时间序列模型',
+  MACHINE_LEARNING: '机器学习模型',
+  LSTM: 'LSTM（已兼容类型）',
+  WEATHER_REGRESSION: '气象回归（已兼容类型）'
+}
+
+const modelTypeOptions = computed(() => {
+  const allowed = Array.isArray(modelOptions.allowedTypes) ? modelOptions.allowedTypes : []
+  const source = allowed.length ? allowed : Object.keys(modelTypeLabels)
+  return source.map(value => ({
+    value,
+    label: modelTypeLabels[value] || value
+  }))
 })
 
 const loadingOptions = reactive({
@@ -413,6 +653,56 @@ const deletingRunId = ref(null)
 let historyRequestId = 0
 const loading = ref(false)
 const errorMessage = ref('')
+
+const modelForm = reactive({
+  name: '',
+  type: 'TIME_SERIES',
+  description: '',
+  cropScope: '',
+  regionScope: '',
+  granularity: 'YEARLY',
+  historyWindow: 10,
+  forecastHorizon: 3,
+  hyperParameters: ''
+})
+
+const modelRules = {
+  name: [
+    { required: true, message: '请输入模型名称', trigger: 'blur' },
+    { max: 128, message: '名称长度不超过 128 字符', trigger: 'blur' }
+  ],
+  type: [{ required: true, message: '请选择模型类型', trigger: 'change' }],
+  granularity: [{ required: true, message: '请选择预测粒度', trigger: 'change' }],
+  historyWindow: [
+    { required: true, message: '请输入历史期数', trigger: 'change' },
+    {
+      validator: (_, value, callback) => {
+        if (!Number.isInteger(value) || value < 1 || value > 120) {
+          callback(new Error('历史期数需为 1-120 的整数'))
+        } else {
+          callback()
+        }
+      },
+      trigger: 'change'
+    }
+  ],
+  forecastHorizon: [
+    { required: true, message: '请输入预测步数', trigger: 'change' },
+    {
+      validator: (_, value, callback) => {
+        if (!Number.isInteger(value) || value < 1 || value > 12) {
+          callback(new Error('预测步数需为 1-12 的整数'))
+        } else {
+          callback()
+        }
+      },
+      trigger: 'change'
+    }
+  ],
+  cropScope: [{ max: 128, message: '适用作物描述不超过 128 字符', trigger: 'blur' }],
+  regionScope: [{ max: 128, message: '适用区域描述不超过 128 字符', trigger: 'blur' }],
+  hyperParameters: [{ max: 512, message: '超参数说明不超过 512 字符', trigger: 'blur' }]
+}
 
 const disableSubmit = computed(() => !selectors.regionId || !selectors.cropId || !selectors.modelId)
 
@@ -1005,6 +1295,166 @@ const fetchOptions = async type => {
   }
 }
 
+const loadModelOptions = async () => {
+  try {
+    const payload = await fetchModelOptions()
+    const allowed = Array.isArray(payload?.allowedTypes) ? payload.allowedTypes : []
+    modelOptions.allowedTypes = allowed
+    modelOptions.canManage = Boolean(payload?.canManageModels)
+    modelOptions.departmentCode = payload?.departmentCode || null
+  } catch (error) {
+    ElMessage.warning('无法获取模型类型限制，已显示全部类型')
+    modelOptions.allowedTypes = []
+    modelOptions.canManage = false
+    modelOptions.departmentCode = null
+  }
+}
+
+const modelActionsDisabled = computed(() => !canManageModels.value)
+
+const loadModelList = async () => {
+  modelTableLoading.value = true
+  try {
+    const list = await fetchModelList()
+    modelList.value = Array.isArray(list) ? list : []
+  } catch (error) {
+    modelList.value = []
+    ElMessage.error(error?.response?.data?.message || '加载模型列表失败')
+  } finally {
+    modelTableLoading.value = false
+  }
+}
+
+const resetModelForm = () => {
+  editingModelId.value = null
+  modelForm.name = ''
+  modelForm.type = modelTypeOptions.value[0]?.value || 'TIME_SERIES'
+  modelForm.description = ''
+  modelForm.cropScope = ''
+  modelForm.regionScope = ''
+  modelForm.granularity = 'YEARLY'
+  modelForm.historyWindow = 10
+  modelForm.forecastHorizon = 3
+  modelForm.hyperParameters = ''
+}
+
+const openCreateModel = () => {
+  resetModelForm()
+  modelDialogVisible.value = true
+}
+
+const openEditModel = row => {
+  if (!row) return
+  editingModelId.value = row.id
+  modelForm.name = row.name || ''
+  modelForm.type = row.type || modelTypeOptions.value[0]?.value || 'TIME_SERIES'
+  modelForm.description = row.description || ''
+  modelForm.cropScope = row.cropScope || ''
+  modelForm.regionScope = row.regionScope || ''
+  modelForm.granularity = row.granularity || 'YEARLY'
+  modelForm.historyWindow = row.historyWindow ?? 10
+  modelForm.forecastHorizon = row.forecastHorizon ?? 3
+  modelForm.hyperParameters = row.hyperParameters || ''
+  modelDialogVisible.value = true
+}
+
+const submitModelForm = () => {
+  if (!modelFormRef.value) return
+  modelFormRef.value.validate(async valid => {
+    if (!valid) return
+    const payload = { ...modelForm }
+    try {
+      if (editingModelId.value) {
+        await updateModel(editingModelId.value, payload)
+        ElMessage.success('模型已更新')
+      } else {
+        await createModel(payload)
+        ElMessage.success('模型已创建')
+      }
+      modelDialogVisible.value = false
+      await loadModelList()
+    } catch (error) {
+      ElMessage.error(error?.response?.data?.message || '保存模型失败')
+    }
+  })
+}
+
+const handleCopyModel = async row => {
+  if (!row?.id) return
+  try {
+    await copyModel(row.id)
+    ElMessage.success('已复制并生成新的模型配置')
+    await loadModelList()
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.message || '复制模型失败')
+  }
+}
+
+const handleToggleModel = async row => {
+  if (!row?.id) return
+  try {
+    await toggleModel(row.id, !row.enabled)
+    ElMessage.success(row.enabled ? '模型已停用' : '模型已启用')
+    await loadModelList()
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.message || '更新模型状态失败')
+  }
+}
+
+const normalizePolicyRow = item => ({
+  departmentCode: item?.departmentCode ?? '',
+  allowedTypes: Array.isArray(item?.allowedTypes) ? item.allowedTypes : [],
+  canManage: Boolean(item?.canManage),
+})
+
+const loadPolicyList = async () => {
+  if (!isAdmin.value) {
+    policyRows.value = []
+    return
+  }
+  policyLoading.value = true
+  try {
+    const list = await fetchModelPolicies()
+    policyRows.value = Array.isArray(list) ? list.map(normalizePolicyRow) : []
+  } catch (error) {
+    policyRows.value = []
+    ElMessage.error(error?.response?.data?.message || '加载部门权限失败')
+  } finally {
+    policyLoading.value = false
+  }
+}
+
+const addPolicyRow = () => {
+  policyRows.value = policyRows.value || []
+  policyRows.value.push({ departmentCode: '', allowedTypes: [], canManage: false })
+}
+
+const removePolicyRow = index => {
+  if (!Array.isArray(policyRows.value)) return
+  policyRows.value.splice(index, 1)
+}
+
+const persistPolicyList = async () => {
+  if (!isAdmin.value) return
+  policyLoading.value = true
+  try {
+    const payload = (policyRows.value || [])
+      .map(row => ({
+        departmentCode: (row.departmentCode || '').trim(),
+        allowedTypes: Array.isArray(row.allowedTypes) ? row.allowedTypes : [],
+        canManage: Boolean(row.canManage),
+      }))
+      .filter(row => row.departmentCode)
+    const saved = await saveModelPolicies(payload)
+    policyRows.value = Array.isArray(saved) ? saved.map(normalizePolicyRow) : []
+    ElMessage.success('部门模型权限已更新')
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.message || '保存部门权限失败')
+  } finally {
+    policyLoading.value = false
+  }
+}
+
 const runForecast = async () => {
   if (disableSubmit.value) {
     ElMessage.warning('请选择地区、作物和模型后再发起预测')
@@ -1045,9 +1495,12 @@ const runForecast = async () => {
 }
 
 onMounted(async () => {
+  await loadModelOptions()
   await Promise.all([
     loadRegionOptions(),
-    fetchOptions('models')
+    fetchOptions('models'),
+    loadModelList(),
+    loadPolicyList()
   ])
   historyPagination.currentPage = 1
   await loadForecastHistory(1)
@@ -1141,6 +1594,14 @@ const formatHistoryDateTime = value => {
     return '-'
   }
   return date.toLocaleString('zh-CN', { hour12: false })
+}
+
+const formatModelType = value => modelTypeLabels[value] || value || '--'
+
+const formatGranularity = value => {
+  if (!value) return '--'
+  const match = granularityOptions.find(item => item.value === value)
+  return match?.label || value
 }
 
 function formatScenarioChange(value) {
@@ -1438,6 +1899,61 @@ function formatScenarioChange(value) {
   display: flex;
   justify-content: flex-end;
   padding: 16px 0 4px;
+}
+
+.model-allowed-types {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.model-allowed-label {
+  color: #606266;
+}
+
+.model-type-tag {
+  margin-right: 4px;
+}
+
+.model-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.model-scope {
+  font-size: 12px;
+  color: #909399;
+}
+
+.model-subtext {
+  font-size: 12px;
+  color: #909399;
+}
+
+.policy-editor {
+  margin-top: 12px;
+}
+
+.policy-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.model-number-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.inline-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .scenario-card {

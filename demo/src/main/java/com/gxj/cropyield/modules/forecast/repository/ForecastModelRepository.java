@@ -1,6 +1,7 @@
 package com.gxj.cropyield.modules.forecast.repository;
 
 import com.gxj.cropyield.modules.forecast.entity.ForecastModel;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 /**
@@ -11,4 +12,8 @@ public interface ForecastModelRepository extends JpaRepository<ForecastModel, Lo
     Optional<ForecastModel> findByName(String name);
 
     Optional<ForecastModel> findByType(ForecastModel.ModelType type);
+
+    List<ForecastModel> findByEnabledTrueAndTypeIn(List<ForecastModel.ModelType> types);
+
+    List<ForecastModel> findByTypeIn(List<ForecastModel.ModelType> types);
 }

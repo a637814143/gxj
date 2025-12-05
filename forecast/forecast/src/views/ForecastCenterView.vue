@@ -155,6 +155,47 @@
       </div>
     </el-card>
 
+    <el-card v-if="showScenarioPanel" class="panel-card scenario-card" shadow="hover">
+      <template #header>
+        <div class="card-header">
+          <div>
+            <div class="card-title">多情景预测对比</div>
+            <div class="card-subtitle">结合预测结果推演不同气候情景下的产量变化</div>
+          </div>
+          <el-tag type="warning" effect="light">气候范围：0 - 0.2℃（微幅增温情景）</el-tag>
+        </div>
+      </template>
+      <div class="scenario-content">
+        <div class="scenario-chart">
+          <BaseChart v-if="hasScenarioData" :option="scenarioChartOption" :height="340" />
+          <el-empty v-else description="暂无情景数据，请先生成预测" />
+        </div>
+        <div v-if="scenarioInsightCards.length" class="scenario-insights">
+          <div
+            v-for="card in scenarioInsightCards"
+            :key="card.key"
+            class="scenario-insight-card"
+            :style="{
+              '--scenario-accent': card.color,
+              '--scenario-accent-soft': `${card.color}1a`,
+              '--scenario-accent-border': `${card.color}33`
+            }"
+          >
+            <div class="scenario-insight-header">
+              <span class="scenario-insight-dot" :style="{ background: card.color }"></span>
+              <span class="scenario-insight-label">{{ card.label }}</span>
+            </div>
+            <div class="scenario-insight-temp">{{ card.temperature }}</div>
+            <div class="scenario-insight-value">{{ formatNumber(card.value) }} 吨</div>
+            <div class="scenario-insight-change" :class="{ negative: card.change < 0, positive: card.change > 0 }">
+              {{ formatScenarioChange(card.change) }}
+            </div>
+            <div class="scenario-insight-desc">{{ card.description }}</div>
+          </div>
+        </div>
+      </div>
+    </el-card>
+
     <el-card v-if="metadata || metrics" class="panel-card" shadow="hover">
       <template #header>
         <div class="card-header">
@@ -261,12 +302,6 @@
         <el-table-column label="参考播种面积 (公顷)" min-width="190">
           <template #default="{ row }">{{ formatHistoryNumber(row.sownArea) }}</template>
         </el-table-column>
-        <el-table-column label="参考均价 (元/公斤)" min-width="190">
-          <template #default="{ row }">{{ formatHistoryNumber(row.averagePrice) }}</template>
-        </el-table-column>
-        <el-table-column label="预计收益 (万元)" min-width="170">
-          <template #default="{ row }">{{ formatHistoryNumber(row.estimatedRevenue) }}</template>
-        </el-table-column>
         <el-table-column label="生成时间" min-width="200">
           <template #default="{ row }">{{ formatHistoryDateTime(row.generatedAt) }}</template>
         </el-table-column>
@@ -298,6 +333,211 @@
         />
       </div>
     </el-card>
+
+    <el-card class="panel-card" shadow="hover">
+      <template #header>
+        <div class="card-header">
+          <div>
+            <div class="card-title">模型管理</div>
+            <div class="card-subtitle">新增、复制、停用模型并维护粒度、时间窗口与适用范围</div>
+          </div>
+          <div class="card-actions">
+            <el-button @click="loadModelList">刷新列表</el-button>
+            <el-button type="primary" :disabled="modelActionsDisabled" @click="openCreateModel">新增模型</el-button>
+          </div>
+        </div>
+      </template>
+
+      <div class="model-allowed-types">
+        <span class="model-allowed-label">允许的模型类型：</span>
+        <el-tag v-for="item in modelTypeOptions" :key="item.value" type="info" class="model-type-tag">{{ item.label }}</el-tag>
+        <el-tag v-if="modelOptions.departmentCode && !isAdmin" type="info" effect="plain">所属部门：{{ modelOptions.departmentCode }}</el-tag>
+        <el-tag type="warning" effect="plain">管理员可在配置中限制类型与管理权限</el-tag>
+        <el-tag v-if="modelActionsDisabled" type="danger" effect="light">当前账号未获模型管理授权</el-tag>
+      </div>
+
+      <el-alert
+        v-if="modelActionsDisabled"
+        type="warning"
+        show-icon
+        class="panel-alert"
+        :closable="false"
+        title="仅系统管理员或被授权的部门账号可新增/编辑/停用模型"
+        description="如需调整权限，请联系管理员在“模型部门权限”中启用管理权限或调整可用模型类型。"
+      />
+
+      <el-tabs v-model="modelTab">
+        <el-tab-pane label="模型列表" name="list">
+          <el-table :data="modelList" v-loading="modelTableLoading" stripe empty-text="暂无模型，请新增配置">
+            <el-table-column prop="name" label="名称" min-width="160">
+              <template #default="{ row }">
+                <div class="model-name-cell">
+                  <strong>{{ row.name }}</strong>
+                  <el-tag size="small" :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '启用' : '停用' }}</el-tag>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="type" label="类型" min-width="140">
+              <template #default="{ row }">{{ formatModelType(row.type) }}</template>
+            </el-table-column>
+            <el-table-column label="适用范围" min-width="220">
+              <template #default="{ row }">
+                <div class="model-scope">作物：{{ row.cropScope || '-' }}</div>
+                <div class="model-scope">区域：{{ row.regionScope || '-' }}</div>
+              </template>
+            </el-table-column>
+            <el-table-column label="粒度/窗口" min-width="160">
+              <template #default="{ row }">
+                <div>{{ formatGranularity(row.granularity) }}</div>
+                <div class="model-subtext">历史 {{ row.historyWindow }} 期，预测 {{ row.forecastHorizon }} 期</div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="hyperParameters" label="超参数" min-width="180">
+              <template #default="{ row }">{{ row.hyperParameters || '—' }}</template>
+            </el-table-column>
+            <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
+            <el-table-column label="操作" width="220" fixed="right">
+              <template #default="{ row }">
+                <el-space>
+                  <el-button type="primary" link size="small" :disabled="modelActionsDisabled" @click="openEditModel(row)">编辑</el-button>
+                  <el-button type="primary" link size="small" :disabled="modelActionsDisabled" @click="handleCopyModel(row)">复制</el-button>
+                  <el-button
+                    :type="row.enabled ? 'warning' : 'success'"
+                    link
+                    size="small"
+                    :disabled="modelActionsDisabled"
+                    @click="handleToggleModel(row)"
+                  >
+                    {{ row.enabled ? '停用' : '启用' }}
+                  </el-button>
+                </el-space>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-tab-pane>
+      </el-tabs>
+
+      <el-divider v-if="isAdmin" content-position="left">模型部门权限</el-divider>
+      <div v-if="isAdmin" class="policy-editor">
+        <el-table :data="policyRows" v-loading="policyLoading" size="small" empty-text="尚未配置部门权限">
+          <el-table-column label="部门编码" prop="departmentCode" min-width="160">
+            <template #default="{ row }">
+              <el-input v-model="row.departmentCode" placeholder="输入部门编码" />
+            </template>
+          </el-table-column>
+          <el-table-column label="允许的模型类型" min-width="220">
+            <template #default="{ row }">
+              <el-select v-model="row.allowedTypes" multiple placeholder="留空则继承全局配置" style="width: 100%">
+                <el-option v-for="item in modelTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+              </el-select>
+            </template>
+          </el-table-column>
+          <el-table-column label="可管理模型" width="140">
+            <template #default="{ row }">
+              <el-switch v-model="row.canManage" />
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="120">
+            <template #default="{ $index }">
+              <el-button type="danger" link size="small" @click="removePolicyRow($index)">移除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <div class="policy-actions">
+          <el-button size="small" @click="addPolicyRow">新增部门</el-button>
+          <el-button type="primary" size="small" :loading="policyLoading" @click="persistPolicyList">保存权限</el-button>
+        </div>
+      </div>
+    </el-card>
+
+    <el-dialog
+      v-model="modelDialogVisible"
+      :title="editingModelId ? '编辑模型' : '新增模型'"
+      width="720px"
+      destroy-on-close
+    >
+      <el-form :model="modelForm" :rules="modelRules" ref="modelFormRef" label-width="120px">
+        <el-row :gutter="16">
+          <el-col :xs="24" :sm="12">
+            <el-form-item label="模型名称" prop="name">
+              <el-input v-model="modelForm.name" maxlength="128" show-word-limit placeholder="请输入名称" />
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :sm="12">
+            <el-form-item label="模型类型" prop="type">
+              <el-select v-model="modelForm.type" placeholder="请选择模型类型">
+                <el-option v-for="item in modelTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col :xs="24" :sm="12">
+            <el-form-item label="适用作物" prop="cropScope">
+              <el-input v-model="modelForm.cropScope" maxlength="128" placeholder="例如：水稻/玉米" />
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :sm="12">
+            <el-form-item label="适用区域" prop="regionScope">
+              <el-input v-model="modelForm.regionScope" maxlength="128" placeholder="例如：江苏省南部" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col :xs="24" :sm="12">
+            <el-form-item label="预测粒度" prop="granularity">
+              <el-select v-model="modelForm.granularity" placeholder="请选择粒度">
+                <el-option v-for="item in granularityOptions" :key="item.value" :label="item.label" :value="item.value" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :sm="12">
+            <el-form-item label="时间窗口" required>
+              <div class="model-number-group">
+                <el-form-item prop="historyWindow" class="inline-item">
+                  <el-input-number v-model="modelForm.historyWindow" :min="1" :max="120" />
+                  <span class="form-hint">历史期数</span>
+                </el-form-item>
+                <el-form-item prop="forecastHorizon" class="inline-item">
+                  <el-input-number v-model="modelForm.forecastHorizon" :min="1" :max="12" />
+                  <span class="form-hint">预测步数</span>
+                </el-form-item>
+              </div>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="超参数" prop="hyperParameters">
+          <el-input
+            v-model="modelForm.hyperParameters"
+            type="textarea"
+            :rows="2"
+            maxlength="512"
+            show-word-limit
+            placeholder="填写关键超参数，如学习率、层数、正则等"
+          />
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input
+            v-model="modelForm.description"
+            type="textarea"
+            :rows="2"
+            maxlength="512"
+            show-word-limit
+            placeholder="简要说明模型适用场景与备注"
+          />
+        </el-form-item>
+        <el-form-item label="启用状态">
+          <el-switch v-model="modelForm.enabled" />
+          <span class="form-hint">停用后新增预测任务将不再显示此模型</span>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="modelDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitModelForm">保存</el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -309,9 +549,17 @@ import {
   deleteForecastRun,
   executeForecast,
   fetchForecastHistory,
+  fetchModelList,
+  fetchModelOptions,
+  fetchModelPolicies,
   fetchModels,
+  createModel,
+  updateModel,
+  copyModel,
+  toggleModel,
   fetchRegionCrops,
   fetchRegions,
+  saveModelPolicies,
 } from '@/services/forecast'
 import { useAuthStore } from '@/stores/auth'
 
@@ -330,9 +578,40 @@ const optionLists = reactive({
   models: []
 })
 
+const modelTab = ref('list')
+const modelList = ref([])
+const modelTableLoading = ref(false)
+const modelOptions = reactive({
+  allowedTypes: [],
+  canManage: false,
+  departmentCode: null
+})
+
+const modelFormRef = ref()
+const modelDialogVisible = ref(false)
+const editingModelId = ref(null)
+const modelForm = reactive({
+  name: '',
+  type: 'TIME_SERIES',
+  description: '',
+  cropScope: '',
+  regionScope: '',
+  granularity: 'YEARLY',
+  historyWindow: 6,
+  forecastHorizon: 1,
+  hyperParameters: '',
+  enabled: true
+})
+
+const policyRows = ref([])
+const policyLoading = ref(false)
+
 const cropRequestId = ref(0)
 
 const authStore = useAuthStore()
+const isAdmin = computed(() => authStore.hasAnyRole(['ADMIN']))
+const canManageModels = computed(() => isAdmin.value || modelOptions.canManage)
+const modelActionsDisabled = computed(() => !canManageModels.value)
 const isUserTheme = computed(() => {
   const roles = authStore.user?.roles
   if (!roles) return true
@@ -381,6 +660,36 @@ const metricLabel = computed(() => metadata.value?.valueLabel || '产量')
 const metricUnit = computed(() => metadata.value?.valueUnit || '吨 / 公顷')
 const historyLegendLabel = computed(() => `历史${metricLabel.value}`)
 const forecastLegendLabel = computed(() => `预测${metricLabel.value}`)
+
+const DEFAULT_SCENARIO_CONFIGS = [
+  {
+    key: 'baseline',
+    label: '基准',
+    temperature: '当前气候（0℃ 基准）',
+    delta: 0,
+    color: '#2563eb',
+    description: '保持当前气候条件，沿用历史增长趋势的预测基线。',
+    isBaseline: true
+  },
+  {
+    key: 'warming01',
+    label: '微升+0.1℃',
+    temperature: '+0.1℃ 轻微增温情景',
+    delta: -0.015,
+    color: '#f97316',
+    description: '在 0.1℃ 的增温假设下，模型推测轻微减产，可关注灌溉与遮阴调控。'
+  },
+  {
+    key: 'warming02',
+    label: '微升+0.2℃',
+    temperature: '+0.2℃ 微幅增温情景',
+    delta: -0.028,
+    color: '#dc2626',
+    description: '当气温提升至 0.2℃ 时，需及早部署抗热品种与生产保障方案。'
+  }
+]
+
+const SCENARIO_COLOR_PALETTE = ['#2563eb', '#f97316', '#dc2626', '#0f766e', '#9333ea', '#facc15']
 
 function formatTrend(value) {
   if (value > 0) return `较昨日 +${value}`
@@ -451,13 +760,8 @@ const chartOption = computed(() => {
   const xAxis = combinedPeriods.value
   const historyMap = Object.fromEntries(historySeries.value.map(item => [item.period, item.value]))
   const forecastMap = Object.fromEntries(forecastSeries.value.map(item => [item.period, item.value]))
-  const lowerMap = Object.fromEntries(forecastSeries.value.map(item => [item.period, item.lowerBound ?? null]))
-  const upperMap = Object.fromEntries(forecastSeries.value.map(item => [item.period, item.upperBound ?? null]))
-
   const historyData = xAxis.map(period => historyMap[period] ?? null)
   const forecastData = xAxis.map(period => forecastMap[period] ?? null)
-  const lowerBand = xAxis.map(period => lowerMap[period] ?? null)
-  const upperBand = xAxis.map(period => upperMap[period] ?? null)
 
   return {
     grid: { top: 48, left: 60, right: 28, bottom: 40 },
@@ -465,7 +769,7 @@ const chartOption = computed(() => {
       trigger: 'axis'
     },
     legend: {
-      data: [historyLegendLabel.value, forecastLegendLabel.value, '预测区间'],
+      data: [historyLegendLabel.value, forecastLegendLabel.value],
       top: 10
     },
     xAxis: {
@@ -499,31 +803,258 @@ const chartOption = computed(() => {
           type: 'dashed',
           color: '#67C23A'
         }
-      },
-      {
-        name: '预测区间',
-        type: 'line',
-        data: upperBand,
-        lineStyle: { opacity: 0 },
-        stack: 'confidence-band',
-        areaStyle: {
-          color: 'rgba(103, 194, 58, 0.18)'
-        },
-        emphasis: { focus: 'series' }
-      },
-      {
-        name: '预测区间',
-        type: 'line',
-        data: lowerBand,
-        lineStyle: { opacity: 0 },
-        stack: 'confidence-band',
-        areaStyle: {
-          color: 'rgba(103, 194, 58, 0.18)'
-        },
-        emphasis: { focus: 'series' }
       }
     ]
   }
+})
+
+const parseNumeric = value => {
+  const numeric = Number(value)
+  return Number.isFinite(numeric) ? numeric : null
+}
+
+const forecastPoints = computed(() =>
+  forecastSeries.value.map(point => ({
+    label: point?.period ?? point?.label ?? '',
+    value: parseNumeric(point?.value)
+  }))
+)
+
+const resolvedScenarioConfigs = computed(() => {
+  const scenarios = Array.isArray(metadata.value?.scenarioComparisons)
+    ? metadata.value.scenarioComparisons
+    : []
+
+  if (scenarios.length) {
+    return scenarios.map((scenario, index) => {
+      const color = scenario.color || SCENARIO_COLOR_PALETTE[index % SCENARIO_COLOR_PALETTE.length]
+      const normalizeSeries = Array.isArray(scenario.series)
+        ? scenario.series.map(point => ({
+            label: point?.label ?? point?.period ?? point?.name ?? '',
+            value: parseNumeric(point?.value)
+          }))
+        : []
+      return {
+        key: scenario.key ?? scenario.code ?? `scenario-${index}`,
+        label: scenario.label ?? scenario.name ?? `情景${index + 1}`,
+        temperature: scenario.temperature ?? scenario.temperatureLabel ?? '',
+        color,
+        description: scenario.description ?? '',
+        isBaseline:
+          typeof scenario.isBaseline === 'boolean'
+            ? scenario.isBaseline
+            : /基准|baseline/i.test(String(scenario.label ?? '')),
+        delta: typeof scenario.delta === 'number' ? scenario.delta : null,
+        change: typeof scenario.change === 'number' ? scenario.change : null,
+        series: normalizeSeries,
+      }
+    })
+  }
+
+  return DEFAULT_SCENARIO_CONFIGS.map((config, index) => ({
+    ...config,
+    color: config.color || SCENARIO_COLOR_PALETTE[index % SCENARIO_COLOR_PALETTE.length],
+    series: [],
+    change: null
+  }))
+})
+
+const applyScenarioDelta = (value, delta) => {
+  if (value === null || value === undefined) {
+    return null
+  }
+  const numeric = Number(value)
+  if (Number.isNaN(numeric)) {
+    return null
+  }
+  const scaled = numeric * (1 + (delta ?? 0))
+  return Math.round(scaled * 100) / 100
+}
+
+const scenarioSeries = computed(() => {
+  const points = forecastPoints.value
+  return resolvedScenarioConfigs.value.map((config, index) => {
+    let series = Array.isArray(config.series) ? config.series.filter(point => point && typeof point === 'object') : []
+    if (!series.length && points.length) {
+      if (config.delta !== null && config.delta !== undefined) {
+        series = points.map(point => ({
+          label: point?.label ?? '',
+          value: applyScenarioDelta(point?.value, config.delta)
+        }))
+      } else if (config.isBaseline || index === 0) {
+        series = points.map(point => ({
+          label: point?.label ?? '',
+          value: point?.value ?? null
+        }))
+      }
+    }
+    return {
+      ...config,
+      series
+    }
+  })
+})
+
+const scenarioConfigMap = computed(
+  () => new Map(scenarioSeries.value.map(config => [config.label, config]))
+)
+
+const hasScenarioData = computed(() =>
+  scenarioSeries.value.some(config => Array.isArray(config.series) && config.series.length)
+)
+
+const showScenarioPanel = computed(() => hasResult.value && hasScenarioData.value)
+
+const formatScenarioTooltip = params => {
+  if (!Array.isArray(params) || !params.length) {
+    return ''
+  }
+  const axisLabel = params[0]?.axisValueLabel ?? ''
+  const lines = [`<div style="font-weight:600;margin-bottom:6px;">${axisLabel}</div>`]
+  params.forEach(item => {
+    const config = scenarioConfigMap.value.get(item.seriesName)
+    const temperature = config?.temperature ? `（${config.temperature}）` : ''
+    lines.push(
+      `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">` +
+        `<span>${item.marker}${item.seriesName}${temperature}</span>` +
+        `<span style='font-weight:600;'>${formatNumber(item.data)} 吨</span>` +
+      `</div>`
+    )
+  })
+  return lines.join('')
+}
+
+const scenarioChartOption = computed(() => {
+  const scenarios = scenarioSeries.value.filter(config => config.series.length)
+  if (!scenarios.length) {
+    return {
+      color: [],
+      series: [],
+      tooltip: { trigger: 'axis' },
+      legend: { data: [] },
+      grid: { top: 48, left: 40, right: 24, bottom: 32 },
+      xAxis: { type: 'category', data: [] },
+      yAxis: { type: 'value' }
+    }
+  }
+
+  const baseline = scenarios.find(config => config.isBaseline) ?? scenarios[0]
+  const categories = Array.from(
+    new Set(
+      baseline.series
+        .map(point => point.label)
+        .filter(label => label !== undefined && label !== null)
+    )
+  )
+
+  const series = scenarios.map(config => {
+    const dataMap = new Map(
+      config.series
+        .filter(point => point && point.label !== undefined && point.label !== null)
+        .map(point => [point.label, point.value])
+    )
+    const data = categories.map(label => {
+      const value = dataMap.get(label)
+      if (value === null || value === undefined || Number.isNaN(Number(value))) {
+        return null
+      }
+      return Math.round(Number(value) * 100) / 100
+    })
+
+    return {
+      name: config.label,
+      type: 'line',
+      smooth: true,
+      showSymbol: true,
+      symbolSize: 8,
+      lineStyle: {
+        width: 3
+      },
+      areaStyle: config.isBaseline ? { opacity: 0.1 } : undefined,
+      emphasis: { focus: 'series' },
+      data
+    }
+  })
+
+  return {
+    color: scenarios.map(config => config.color),
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: 'rgba(15, 23, 42, 0.92)',
+      borderWidth: 0,
+      padding: 12,
+      textStyle: { color: '#f8fafc' },
+      formatter: formatScenarioTooltip
+    },
+    legend: {
+      data: scenarios.map(config => config.label),
+      top: 18,
+      textStyle: { color: '#475569', fontSize: 13 }
+    },
+    grid: { top: 78, left: 64, right: 28, bottom: 40 },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: categories,
+      axisTick: { alignWithLabel: true },
+      axisLine: { lineStyle: { color: '#d0d7ff' } },
+      axisLabel: { color: '#4b5563' }
+    },
+    yAxis: {
+      type: 'value',
+      axisLine: { show: false },
+      axisLabel: {
+        color: '#4b5563',
+        formatter: value => formatNumber(value)
+      },
+      splitLine: { lineStyle: { type: 'dashed', color: '#e2e8f0' } }
+    },
+    series
+  }
+})
+
+const scenarioInsightCards = computed(() => {
+  const scenarios = scenarioSeries.value.filter(config => config.series.length)
+  if (!scenarios.length) {
+    return []
+  }
+  const baseline = scenarios.find(config => config.isBaseline) ?? scenarios[0]
+  const baselineSeries = baseline.series
+  const baselineLast = baselineSeries.length
+    ? baselineSeries[baselineSeries.length - 1]?.value ?? null
+    : null
+
+  return scenarios
+    .map(config => {
+      const series = config.series
+      const lastPoint = series.length ? series[series.length - 1] : null
+      const lastValue = lastPoint?.value ?? null
+      let change = 0
+      if (config.change !== null && config.change !== undefined) {
+        change = config.change
+      } else if (
+        !config.isBaseline &&
+        baselineLast !== null &&
+        baselineLast !== undefined &&
+        baselineLast !== 0 &&
+        lastValue !== null &&
+        lastValue !== undefined
+      ) {
+        change = (Number(lastValue) - Number(baselineLast)) / Number(baselineLast)
+      }
+      const temperature = config.temperature || (config.isBaseline ? '当前气候' : '')
+
+      return {
+        key: config.key,
+        label: config.label,
+        temperature,
+        value: lastValue,
+        change,
+        description: config.description,
+        color: config.color
+      }
+    })
+    .filter(card => card.value !== null && card.value !== undefined)
 })
 
 const generatedAtLabel = computed(() => {
@@ -550,6 +1081,28 @@ const resetResult = (options = { keepError: false }) => {
 const optionFetchers = {
   models: fetchModels,
 }
+
+const granularityOptions = [
+  { label: '年度', value: 'YEARLY' },
+  { label: '季度', value: 'QUARTERLY' },
+  { label: '月度', value: 'MONTHLY' }
+]
+
+const modelTypeLabels = {
+  TIME_SERIES: '时间序列模型',
+  MACHINE_LEARNING: '机器学习模型',
+  LSTM: 'LSTM（已兼容类型）',
+  WEATHER_REGRESSION: '气象回归（已兼容类型）'
+}
+
+const modelTypeOptions = computed(() => {
+  const allowed = Array.isArray(modelOptions.allowedTypes) ? modelOptions.allowedTypes : []
+  const source = allowed.length ? allowed : Object.keys(modelTypeLabels)
+  return source.map(value => ({
+    value,
+    label: modelTypeLabels[value] || value
+  }))
+})
 
 const loadCropOptions = async regionId => {
   cropRequestId.value += 1
@@ -712,6 +1265,227 @@ const fetchOptions = async type => {
   }
 }
 
+const loadModelOptions = async () => {
+  try {
+    const payload = await fetchModelOptions()
+    const allowed = Array.isArray(payload?.allowedTypes) ? payload.allowedTypes : []
+    modelOptions.allowedTypes = allowed
+    modelOptions.canManage = Boolean(payload?.canManageModels)
+    modelOptions.departmentCode = payload?.departmentCode || null
+  } catch (error) {
+    ElMessage.warning('无法获取模型类型限制，已显示全部类型')
+    modelOptions.allowedTypes = []
+    modelOptions.canManage = false
+    modelOptions.departmentCode = null
+  }
+}
+
+const loadModelList = async () => {
+  modelTableLoading.value = true
+  try {
+    const list = await fetchModelList()
+    modelList.value = Array.isArray(list) ? list : []
+  } catch (error) {
+    modelList.value = []
+    ElMessage.error(error?.response?.data?.message || '加载模型列表失败')
+  } finally {
+    modelTableLoading.value = false
+  }
+}
+
+const normalizePolicyRow = item => ({
+  departmentCode: item?.departmentCode ?? '',
+  allowedTypes: Array.isArray(item?.allowedTypes) ? item.allowedTypes : [],
+  canManage: Boolean(item?.canManage),
+})
+
+const loadPolicyList = async () => {
+  if (!isAdmin.value) {
+    policyRows.value = []
+    return
+  }
+  policyLoading.value = true
+  try {
+    const list = await fetchModelPolicies()
+    policyRows.value = Array.isArray(list) ? list.map(normalizePolicyRow) : []
+  } catch (error) {
+    policyRows.value = []
+    ElMessage.error(error?.response?.data?.message || '加载部门权限失败')
+  } finally {
+    policyLoading.value = false
+  }
+}
+
+const addPolicyRow = () => {
+  policyRows.value = policyRows.value || []
+  policyRows.value.push({ departmentCode: '', allowedTypes: [], canManage: false })
+}
+
+const removePolicyRow = index => {
+  if (!Array.isArray(policyRows.value)) return
+  policyRows.value.splice(index, 1)
+}
+
+const persistPolicyList = async () => {
+  if (!isAdmin.value) return
+  policyLoading.value = true
+  try {
+    const payload = (policyRows.value || [])
+      .map(row => ({
+        departmentCode: (row.departmentCode || '').trim(),
+        allowedTypes: Array.isArray(row.allowedTypes) ? row.allowedTypes : [],
+        canManage: Boolean(row.canManage),
+      }))
+      .filter(row => row.departmentCode)
+    const saved = await saveModelPolicies(payload)
+    policyRows.value = Array.isArray(saved) ? saved.map(normalizePolicyRow) : []
+    ElMessage.success('部门模型权限已更新')
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.message || '保存部门权限失败')
+  } finally {
+    policyLoading.value = false
+  }
+}
+
+const resetModelForm = () => {
+  editingModelId.value = null
+  modelForm.name = ''
+  modelForm.type = modelTypeOptions.value[0]?.value || 'TIME_SERIES'
+  modelForm.description = ''
+  modelForm.cropScope = ''
+  modelForm.regionScope = ''
+  modelForm.granularity = 'YEARLY'
+  modelForm.historyWindow = 6
+  modelForm.forecastHorizon = 1
+  modelForm.hyperParameters = ''
+  modelForm.enabled = true
+}
+
+const openCreateModel = () => {
+  if (modelActionsDisabled.value) {
+    ElMessage.warning('当前账号未被授权管理模型')
+    return
+  }
+  resetModelForm()
+  modelDialogVisible.value = true
+}
+
+const openEditModel = row => {
+  if (modelActionsDisabled.value) {
+    ElMessage.warning('当前账号未被授权管理模型')
+    return
+  }
+  if (!row) return
+  editingModelId.value = row.id
+  modelForm.name = row.name ?? ''
+  modelForm.type = row.type ?? modelTypeOptions.value[0]?.value ?? 'TIME_SERIES'
+  modelForm.description = row.description ?? ''
+  modelForm.cropScope = row.cropScope ?? ''
+  modelForm.regionScope = row.regionScope ?? ''
+  modelForm.granularity = row.granularity ?? 'YEARLY'
+  modelForm.historyWindow = row.historyWindow ?? 6
+  modelForm.forecastHorizon = row.forecastHorizon ?? 1
+  modelForm.hyperParameters = row.hyperParameters ?? ''
+  modelForm.enabled = row.enabled ?? true
+  modelDialogVisible.value = true
+}
+
+const modelRules = {
+  name: [
+    { required: true, message: '请输入模型名称', trigger: 'blur' },
+    { min: 1, max: 128, message: '名称长度需在 1-128 之间', trigger: 'blur' }
+  ],
+  type: [{ required: true, message: '请选择模型类型', trigger: 'change' }],
+  cropScope: [
+    { required: true, message: '请输入适用作物', trigger: 'blur' },
+    { min: 1, max: 128, message: '适用作物描述过长', trigger: 'blur' }
+  ],
+  regionScope: [
+    { required: true, message: '请输入适用区域', trigger: 'blur' },
+    { min: 1, max: 128, message: '适用区域描述过长', trigger: 'blur' }
+  ],
+  granularity: [{ required: true, message: '请选择预测粒度', trigger: 'change' }],
+  historyWindow: [
+    { required: true, message: '请输入历史窗口', trigger: 'change' },
+    {
+      validator: (_, value, callback) => {
+        if (!Number.isFinite(value)) return callback(new Error('请输入数字'))
+        if (value <= 0 || value > 120) return callback(new Error('历史窗口需在 1-120 之间'))
+        callback()
+      },
+      trigger: 'change'
+    }
+  ],
+  forecastHorizon: [
+    { required: true, message: '请输入预测步数', trigger: 'change' },
+    {
+      validator: (_, value, callback) => {
+        if (!Number.isFinite(value)) return callback(new Error('请输入数字'))
+        if (value <= 0 || value > 12) return callback(new Error('预测步数需在 1-12 之间'))
+        callback()
+      },
+      trigger: 'change'
+    }
+  ],
+  hyperParameters: [{ max: 512, message: '超参数描述过长', trigger: 'blur' }]
+}
+
+const submitModelForm = async () => {
+  if (modelActionsDisabled.value) {
+    ElMessage.warning('当前账号未被授权管理模型')
+    return
+  }
+  const formRef = modelFormRef.value
+  if (!formRef) return
+  await formRef.validate()
+  const payload = { ...modelForm }
+  try {
+    if (editingModelId.value) {
+      await updateModel(editingModelId.value, payload)
+      ElMessage.success('模型已更新')
+    } else {
+      await createModel(payload)
+      ElMessage.success('模型已创建')
+    }
+    modelDialogVisible.value = false
+    await Promise.all([loadModelList(), fetchOptions('models')])
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.message || '保存模型失败')
+  }
+}
+
+const handleCopyModel = async row => {
+  if (modelActionsDisabled.value) {
+    ElMessage.warning('当前账号未被授权管理模型')
+    return
+  }
+  if (!row?.id) return
+  try {
+    await copyModel(row.id)
+    ElMessage.success('已复制模型配置')
+    await Promise.all([loadModelList(), fetchOptions('models')])
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.message || '复制模型失败')
+  }
+}
+
+const handleToggleModel = async row => {
+  if (modelActionsDisabled.value) {
+    ElMessage.warning('当前账号未被授权管理模型')
+    return
+  }
+  if (!row?.id) return
+  const nextEnabled = !row.enabled
+  try {
+    await toggleModel(row.id, nextEnabled)
+    row.enabled = nextEnabled
+    ElMessage.success(nextEnabled ? '模型已启用' : '模型已停用')
+    await fetchOptions('models')
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.message || '更新模型状态失败')
+  }
+}
+
 const runForecast = async () => {
   if (disableSubmit.value) {
     ElMessage.warning('请选择地区、作物和模型后再发起预测')
@@ -754,8 +1528,13 @@ const runForecast = async () => {
 onMounted(async () => {
   await Promise.all([
     loadRegionOptions(),
-    fetchOptions('models')
+    fetchOptions('models'),
+    loadModelOptions(),
+    loadModelList()
   ])
+  if (isAdmin.value) {
+    await loadPolicyList()
+  }
   historyPagination.currentPage = 1
   await loadForecastHistory(1)
 })
@@ -782,6 +1561,16 @@ const formatMetric = value => {
     return '--'
   }
   return Number(value).toFixed(2)
+}
+
+const formatNumber = (value, fractionDigits = 2) => {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return '--'
+  }
+  return Number(value).toLocaleString('zh-CN', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: fractionDigits
+  })
 }
 
 const copyForecastResultId = async id => {
@@ -838,6 +1627,27 @@ const formatHistoryDateTime = value => {
     return '-'
   }
   return date.toLocaleString('zh-CN', { hour12: false })
+}
+
+const formatModelType = value => modelTypeLabels[value] || value || '--'
+
+const formatGranularity = value => {
+  const match = granularityOptions.find(item => item.value === value)
+  return match?.label || value || '--'
+}
+
+function formatScenarioChange(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return '变化数据缺失'
+  }
+  const percent = (Number(value) * 100).toFixed(1)
+  if (Number(value) > 0) {
+    return `预计增加 ${percent}%`
+  }
+  if (Number(value) < 0) {
+    return `预计下降 ${Math.abs(percent)}%`
+  }
+  return '与基准持平'
 }
 </script>
 
@@ -1059,6 +1869,19 @@ const formatHistoryDateTime = value => {
   margin-top: 16px;
 }
 
+.policy-editor {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.policy-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .chart-body {
   min-height: 320px;
 }
@@ -1121,6 +1944,95 @@ const formatHistoryDateTime = value => {
   display: flex;
   justify-content: flex-end;
   padding: 16px 0 4px;
+}
+
+.scenario-card {
+  border: 1px solid #e8ebf3;
+}
+
+.scenario-content {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 20px;
+}
+
+@media (max-width: 1200px) {
+  .scenario-content {
+    grid-template-columns: 1fr;
+  }
+}
+
+.scenario-chart {
+  min-height: 320px;
+}
+
+.scenario-insights {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.scenario-insight-card {
+  border-radius: 16px;
+  padding: 18px;
+  background: linear-gradient(145deg, var(--scenario-accent-soft, rgba(37, 99, 235, 0.1)), rgba(255, 255, 255, 0.95));
+  border: 1px solid var(--scenario-accent-border, rgba(37, 99, 235, 0.18));
+  box-shadow: 0 18px 30px rgba(15, 23, 42, 0.08);
+}
+
+.scenario-insight-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 24px 36px rgba(15, 23, 42, 0.12);
+}
+
+.scenario-insight-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.scenario-insight-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--scenario-accent, #2563eb);
+  box-shadow: 0 0 0 4px var(--scenario-accent-soft, rgba(37, 99, 235, 0.16));
+}
+
+.scenario-insight-temp {
+  margin-top: 4px;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.scenario-insight-value {
+  margin-top: 12px;
+  font-size: 24px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.scenario-insight-change {
+  margin-top: 6px;
+  font-size: 13px;
+  color: #475569;
+}
+
+.scenario-insight-change.positive {
+  color: #16a34a;
+}
+
+.scenario-insight-change.negative {
+  color: #dc2626;
+}
+
+.scenario-insight-desc {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.6;
 }
 
 /* User theme enhancements */
@@ -1199,6 +2111,57 @@ const formatHistoryDateTime = value => {
 
 .forecast-page.user-friendly .history-id span {
   color: #2563eb;
+}
+
+.card-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.model-allowed-types {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: #4b5563;
+}
+
+.model-allowed-label {
+  font-weight: 600;
+}
+
+.model-type-tag {
+  margin-right: 4px;
+}
+
+.model-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.model-scope {
+  color: #6b7280;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.model-subtext {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.model-number-group {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.model-number-group .inline-item {
+  margin-bottom: 0;
 }
 
 @media (max-width: 992px) {

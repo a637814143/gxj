@@ -43,12 +43,6 @@ public class ForecastSnapshot extends BaseEntity {
     @Column
     private Double sownArea;
 
-    @Column
-    private Double averagePrice;
-
-    @Column
-    private Double estimatedRevenue;
-
     public ForecastRun getRun() {
         return run;
     }
@@ -119,21 +113,5 @@ public class ForecastSnapshot extends BaseEntity {
 
     public void setSownArea(Double sownArea) {
         this.sownArea = sownArea;
-    }
-
-    public Double getAveragePrice() {
-        return averagePrice;
-    }
-
-    public void setAveragePrice(Double averagePrice) {
-        this.averagePrice = averagePrice;
-    }
-
-    public Double getEstimatedRevenue() {
-        return estimatedRevenue;
-    }
-
-    public void setEstimatedRevenue(Double estimatedRevenue) {
-        this.estimatedRevenue = estimatedRevenue;
     }
 }
