@@ -64,7 +64,9 @@ public class EmailNotificationServiceImpl implements EmailNotificationService {
 
     private String buildRegistrationSuccess(Map<String, String> context) {
         String username = StringUtils.trimWhitespace(context.getOrDefault("username", "用户"));
+        String brandTag = "<div style=\\\"display:inline-block;padding:6px 12px;margin-bottom:8px;border-radius:10px;background:#0f172a;color:#fff;font-weight:700;letter-spacing:0.5px\\\">农作物产量平台</div>";
         return "<div style=\"font-family:Arial,sans-serif;line-height:1.6\">" +
+            brandTag +
             "<h2>注册成功通知</h2>" +
             "<p>您好，" + username + "：</p>" +
             "<p>您的账号已成功注册并激活，现在可以登录系统。</p>" +
