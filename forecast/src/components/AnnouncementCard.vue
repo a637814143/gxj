@@ -9,6 +9,7 @@
     </div>
     <h4 class="card-title">{{ announcement?.title || '平台通知' }}</h4>
     <p class="card-message">{{ displayMessage }}</p>
+    <div class="platform-chip">农作物产量平台</div>
     <div class="contact-line">
       <span class="contact-label">通知邮箱</span>
       <span class="contact-value">{{ contactEmail || '未配置' }}</span>
@@ -122,6 +123,19 @@ const updatedAtText = computed(() => {
   font-size: 13px;
   color: #44566c;
   line-height: 1.5;
+}
+
+.platform-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  margin: 0 0 10px;
+  border-radius: 10px;
+  background: #0f172a;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
 }
 
 .contact-line {
