@@ -12,15 +12,19 @@ import com.gxj.cropyield.modules.auth.entity.User;
 import com.gxj.cropyield.modules.auth.repository.RoleRepository;
 import com.gxj.cropyield.modules.auth.repository.UserRepository;
 import com.gxj.cropyield.modules.auth.service.UserService;
+import com.gxj.cropyield.modules.notification.dto.EmailNotificationRequest;
+import com.gxj.cropyield.modules.notification.service.EmailNotificationService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 /**
@@ -34,11 +38,16 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final EmailNotificationService emailNotificationService;
 
-    public UserServiceImpl(UserRepository userRepository, RoleRepository roleRepository, PasswordEncoder passwordEncoder) {
+    public UserServiceImpl(UserRepository userRepository,
+                           RoleRepository roleRepository,
+                           PasswordEncoder passwordEncoder,
+                           EmailNotificationService emailNotificationService) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
+        this.emailNotificationService = emailNotificationService;
     }
 
     @Override
@@ -100,8 +109,24 @@ public class UserServiceImpl implements UserService {
     public void updatePassword(Long userId, UserPasswordRequest request) {
         User user = userRepository.findById(userId)
             .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "用户不存在"));
-        user.setPassword(passwordEncoder.encode(request.newPassword()));
+        String defaultPassword = user.getUsername() + "123456";
+        user.setPassword(passwordEncoder.encode(defaultPassword));
         userRepository.save(user);
+
+        String email = user.getEmail();
+        if (!StringUtils.hasText(email)) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "用户未绑定邮箱，无法发送重置密码通知");
+        }
+
+        emailNotificationService.sendEmailNotification(new EmailNotificationRequest(
+            email.trim(),
+            "密码已重置通知",
+            "PASSWORD_RESET",
+            Map.of(
+                "username", user.getUsername(),
+                "newPassword", defaultPassword
+            )
+        ));
     }
 
     @Override
