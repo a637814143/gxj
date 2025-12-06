@@ -9,7 +9,7 @@
     </div>
     <h4 class="card-title">{{ announcement?.title || '平台通知' }}</h4>
     <p class="card-message">{{ displayMessage }}</p>
-    <div v-if="displayEmail" class="card-email">
+    <div class="card-email">
       <span class="email-label">通知邮箱</span>
       <span class="email-value">{{ displayEmail }}</span>
     </div>
@@ -36,7 +36,11 @@ const props = defineProps({
 
 const statusValue = computed(() => (props.announcement?.status || 'INACTIVE').toUpperCase())
 const displayMessage = computed(() => props.announcement?.message || '暂无通知内容')
-const displayEmail = computed(() => (props.announcement?.notifyEmail || '').trim())
+const displayEmail = computed(() => {
+  const raw = props.announcement?.notifyEmail ?? props.announcement?.notify_email ?? ''
+  const normalized = typeof raw === 'string' ? raw.trim() : ''
+  return normalized || '未配置'
+})
 
 const updatedAtText = computed(() => {
   const raw = props.announcement?.updatedAt

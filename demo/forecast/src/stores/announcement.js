@@ -34,7 +34,7 @@ export const useAnnouncementStore = defineStore('announcement', {
         this.announcement = {
           title: payload.announcementTitle || '平台通知',
           message: payload.announcementMessage || '暂无通知内容',
-          notifyEmail: payload.notifyEmail || '',
+          notifyEmail: payload.notifyEmail || payload.notify_email || payload.notificationEmail || '',
           status: (payload.announcementStatus || 'INACTIVE').toUpperCase(),
           updatedAt: payload.updatedAt ?? payload.updated_at ?? null
         }
