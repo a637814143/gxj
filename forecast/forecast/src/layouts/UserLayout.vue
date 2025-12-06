@@ -31,12 +31,21 @@
             <p v-if="userSubtitle" class="header-subtitle">{{ userSubtitle }}</p>
           </div>
           <div class="header-actions">
-            <WeatherWidget class="header-weather" />
+            <div class="header-widgets">
+              <WeatherWidget class="header-weather" />
+              <AnnouncementCard
+                class="header-notice"
+                :announcement="announcementStore.announcement"
+                :status-label="announcementStore.statusLabel"
+              />
+            </div>
             <div class="user-info">
               <div class="user-name">{{ displayName }}</div>
               <div class="user-role">{{ displayRoles }}</div>
             </div>
-            <el-button type="primary" @click="handleLogout">退出登录</el-button>
+            <el-button type="primary" :loading="authStore.isLoggingOut" @click="handleLogout">
+              退出登录
+            </el-button>
           </div>
         </div>
         <div v-if="navLinks.length" class="nav-links">
@@ -61,22 +70,30 @@
 </template>
 
 <script setup>
-import { computed, watch } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useAuthorization } from '../composables/useAuthorization'
 import WeatherWidget from '../components/weather/WeatherWidget.vue'
+import AnnouncementCard from '../components/AnnouncementCard.vue'
+import { useAnnouncementStore } from '../stores/announcement'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const { canAccessRoute, hasRole } = useAuthorization()
+const announcementStore = useAnnouncementStore()
+
+onMounted(() => {
+  announcementStore.fetch()
+})
 
 const rawMenuItems = [
   { label: '仪表盘', name: 'dashboard', path: '/dashboard' },
   { label: '数据中心', name: 'data', path: '/data' },
   { label: '数据可视化', name: 'visualization', path: '/visualization' },
   { label: '预测中心', name: 'forecast', path: '/forecast' },
+  { label: '预测可视化', name: 'forecastVisualization', path: '/forecast-visualization' },
   { label: '天气监测', name: 'weather', path: '/weather' },
   { label: '气象分析', name: 'weatherAnalytics', path: '/weather-analytics' },
   { label: '在线咨询', name: 'consultation', path: '/consultation' },
@@ -91,6 +108,7 @@ const quickActionConfigs = computed(() => [
   { key: 'data', label: '数据中心', icon: '🗄️', type: 'route', name: 'data', accent: 'coral' },
   { key: 'visualization', label: '数据可视化', icon: '📈', type: 'route', name: 'visualization', accent: 'violet' },
   { key: 'forecast', label: '预测中心', icon: '🚀', type: 'route', name: 'forecast', accent: 'sunset' },
+  { key: 'forecast-visualization', label: '预测可视化', icon: '📉', type: 'route', name: 'forecastVisualization', accent: 'violet' },
   { key: 'weather-analytics', label: '气象分析', icon: '🌤️', type: 'route', name: 'weatherAnalytics', accent: 'lagoon' },
   { key: 'consultation', label: '在线咨询', icon: '💬', type: 'route', name: 'consultation', accent: 'lagoon' },
   { key: 'weather', label: '天气监测', icon: '☀️', type: 'route', name: 'weather', accent: 'sky' },
@@ -122,6 +140,7 @@ const titles = {
   data: '数据资源管理',
   visualization: '数据可视化洞察',
   forecast: '预测建模与任务',
+  forecastVisualization: '预测数据可视化',
   weather: '实时天气监测',
   weatherAnalytics: '气象数据分析',
   consultation: '在线咨询与专家建议',
@@ -176,9 +195,18 @@ const handleAction = action => {
   }
 }
 
-const handleLogout = () => {
-  authStore.logout()
-  router.push({ name: 'login', query: { redirect: route.fullPath } }).catch(() => {})
+const handleLogout = async () => {
+  if (authStore.isLoggingOut) {
+    return
+  }
+  authStore.beginLogout()
+  try {
+    await router.push({ name: 'login', query: { redirect: route.fullPath } })
+  } catch (error) {
+    console.warn('导航至登录页失败', error)
+  } finally {
+    authStore.logout()
+  }
 }
 
 watch(
@@ -381,6 +409,16 @@ watch(
   display: flex;
   align-items: center;
   gap: 16px;
+}
+
+.header-widgets {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-notice {
+  width: 260px;
 }
 
 .header-weather {

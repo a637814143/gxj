@@ -78,10 +78,6 @@
           <el-input v-model="form.author" placeholder="默认显示为系统自动" maxlength="128" />
         </el-form-item>
 
-        <el-form-item label="包含价格分析">
-          <el-switch v-model="form.includePriceAnalysis" />
-        </el-form-item>
-
         <el-form-item label="对比预测结果">
           <el-switch v-model="form.includeForecastComparison" @change="handleForecastToggle" />
         </el-form-item>
@@ -135,7 +131,6 @@ const form = reactive({
   title: '',
   description: '',
   author: '',
-  includePriceAnalysis: true,
   includeForecastComparison: false,
   forecastResultId: null
 })
@@ -261,7 +256,6 @@ const resetForm = () => {
   form.title = ''
   form.description = ''
   form.author = ''
-  form.includePriceAnalysis = true
   form.includeForecastComparison = false
   form.forecastResultId = null
   titleTouched.value = false
@@ -282,7 +276,6 @@ const handleSubmit = async () => {
       regionId: form.regionId,
       startYear: form.startYear,
       endYear: form.endYear,
-      includePriceAnalysis: form.includePriceAnalysis,
       includeForecastComparison: form.includeForecastComparison,
       forecastResultId: form.includeForecastComparison ? form.forecastResultId : null,
       title: buildTitle(),

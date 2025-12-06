@@ -22,7 +22,9 @@
             <div class="user-name">{{ displayName }}</div>
             <div class="user-role">{{ displayRoles }}</div>
           </div>
-          <el-button type="primary" link @click="handleLogout">退出登录</el-button>
+          <el-button type="primary" link :loading="authStore.isLoggingOut" @click="handleLogout">
+            退出登录
+          </el-button>
         </div>
       </el-header>
       <el-main class="main">
@@ -48,6 +50,7 @@ const rawMenuItems = [
   { label: '数据中心', name: 'data', path: '/data' },
   { label: '数据可视化', name: 'visualization', path: '/visualization' },
   { label: '预测中心', name: 'forecast', path: '/forecast' },
+  { label: '预测可视化', name: 'forecastVisualization', path: '/forecast-visualization' },
   { label: '天气监测', name: 'weather', path: '/weather' },
   { label: '气象分析', name: 'weatherAnalytics', path: '/weather-analytics' },
   { label: '报告中心', name: 'report', path: '/report' },
@@ -65,6 +68,7 @@ const titles = {
   data: '数据资源管理',
   visualization: '数据可视化洞察',
   forecast: '预测建模与任务',
+  forecastVisualization: '预测数据可视化',
   report: '报告输出与分享',
   weather: '实时天气监测',
   weatherAnalytics: '气象数据分析',
@@ -86,9 +90,18 @@ const displayRoles = computed(() => {
   return roles.join(' / ')
 })
 
-const handleLogout = () => {
-  authStore.logout()
-  router.push({ name: 'login', query: { redirect: route.fullPath } }).catch(() => {})
+const handleLogout = async () => {
+  if (authStore.isLoggingOut) {
+    return
+  }
+  authStore.beginLogout()
+  try {
+    await router.push({ name: 'login', query: { redirect: route.fullPath } })
+  } catch (error) {
+    console.warn('导航至登录页失败', error)
+  } finally {
+    authStore.logout()
+  }
 }
 
 watch(
@@ -164,6 +177,12 @@ watch(
   display: flex;
   align-items: center;
   gap: 16px;
+}
+
+.header-widgets {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .user-info {

@@ -179,6 +179,12 @@ watch(
   gap: 16px;
 }
 
+.header-widgets {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .user-info {
   display: flex;
   flex-direction: column;
