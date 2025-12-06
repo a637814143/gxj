@@ -9,6 +9,10 @@
     </div>
     <h4 class="card-title">{{ announcement?.title || '平台通知' }}</h4>
     <p class="card-message">{{ displayMessage }}</p>
+    <div class="contact-line">
+      <span class="contact-label">通知邮箱</span>
+      <span class="contact-value">{{ contactEmail || '未配置' }}</span>
+    </div>
     <div class="card-footer">
       <span class="footer-label">{{ statusValue === 'ACTIVE' ? '正在展示给所有用户' : '未生效' }}</span>
       <el-link v-if="announcement?.link" type="primary" :href="announcement.link" target="_blank">查看详情</el-link>
@@ -32,6 +36,7 @@ const props = defineProps({
 
 const statusValue = computed(() => (props.announcement?.status || 'INACTIVE').toUpperCase())
 const displayMessage = computed(() => props.announcement?.message || '暂无通知内容')
+const contactEmail = computed(() => props.announcement?.notifyEmail || '')
 
 const updatedAtText = computed(() => {
   const raw = props.announcement?.updatedAt
@@ -117,6 +122,33 @@ const updatedAtText = computed(() => {
   font-size: 13px;
   color: #44566c;
   line-height: 1.5;
+}
+
+.contact-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  margin: 4px 0 12px;
+  border-radius: 10px;
+  background: rgba(33, 150, 243, 0.08);
+  color: #0f172a;
+  font-size: 12px;
+}
+
+.contact-label {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: #e3f2fd;
+  color: #1878d1;
+  font-weight: 600;
+}
+
+.contact-value {
+  font-weight: 600;
+  color: #0f172a;
 }
 
 .card-footer {

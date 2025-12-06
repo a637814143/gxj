@@ -35,7 +35,8 @@ export const useAnnouncementStore = defineStore('announcement', {
           title: payload.announcementTitle || payload.announcement_title || '平台通知',
           message: payload.announcementMessage || payload.announcement_message || '暂无通知内容',
           status: (payload.announcementStatus || payload.announcement_status || 'INACTIVE').toUpperCase(),
-          updatedAt: payload.updatedAt ?? payload.updated_at ?? null
+          updatedAt: payload.updatedAt ?? payload.updated_at ?? null,
+          notifyEmail: payload.notifyEmail || payload.notify_email || ''
         }
         this.lastLoaded = now
       } catch (error) {
