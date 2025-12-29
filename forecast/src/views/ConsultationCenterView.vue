@@ -30,27 +30,6 @@
       />
     </section>
 
-    <aside class="knowledge-panel">
-      <div class="knowledge-header">
-        <h4>作物诊断助手</h4>
-        <p>查看常见病虫害与处理建议</p>
-      </div>
-      <el-collapse>
-        <el-collapse-item title="水稻叶瘟" name="blast">
-          <p>症状：叶片出现褐色梭形斑点。</p>
-          <p>处理建议：选择抗病品种，使用三环唑、稻瘟灵等药剂喷施。</p>
-        </el-collapse-item>
-        <el-collapse-item title="小麦赤霉病" name="scab">
-          <p>症状：穗部、茎部呈褐色霉层。</p>
-          <p>处理建议：抽穗期喷施氰霜唑、戊唑醇等药剂，注意轮作。</p>
-        </el-collapse-item>
-        <el-collapse-item title="玉米螟" name="corn-borer">
-          <p>症状：心叶被蛀孔，植株生长受阻。</p>
-          <p>处理建议：采用灯光诱杀、释放赤眼蜂，结合防治药剂。</p>
-        </el-collapse-item>
-      </el-collapse>
-    </aside>
-
     <el-dialog
       v-if="canCreateConsultation"
       v-model="createVisible"
@@ -356,7 +335,7 @@ watch(
 <style scoped>
 .consultation-center {
   display: grid;
-  grid-template-columns: 320px minmax(420px, 1fr) 320px;
+  grid-template-columns: 320px minmax(420px, 1fr);
   grid-template-rows: minmax(0, 1fr);
   height: calc(100vh - 80px);
   background: #ffffff;
@@ -442,32 +421,6 @@ watch(
   opacity: 0;
 }
 
-.knowledge-panel {
-  min-width: 320px;
-  max-width: 380px;
-  padding: 24px;
-  border-left: 1px solid #e4e7ed;
-  background: linear-gradient(180deg, #f3fbf7 0%, #ffffff 100%);
-  overflow-y: auto;
-  box-sizing: border-box;
-}
-
-.knowledge-header {
-  margin-bottom: 16px;
-}
-
-.knowledge-header h4 {
-  margin: 0;
-  font-size: 16px;
-  color: #1b4332;
-}
-
-.knowledge-header p {
-  margin: 4px 0 0;
-  font-size: 12px;
-  color: #607d8b;
-}
-
 .dialog-footer {
   display: flex;
   justify-content: flex-end;
@@ -484,30 +437,16 @@ watch(
 @media (max-width: 1280px) {
   .consultation-center {
     grid-template-columns: 280px minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) 240px;
+    grid-template-rows: minmax(0, 1fr);
     height: auto;
-  }
-
-  .knowledge-panel {
-    grid-column: 1 / -1;
-    border-left: none;
-    border-top: 1px solid #e4e7ed;
   }
 }
 
 @media (max-width: 920px) {
   .consultation-center {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto auto;
+    grid-template-rows: auto auto;
     height: auto;
-  }
-
-  .knowledge-panel {
-    order: 3;
-  }
-
-  .conversation-panel {
-    order: 2;
   }
 }
 </style>
