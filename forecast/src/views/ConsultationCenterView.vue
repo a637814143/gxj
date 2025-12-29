@@ -356,13 +356,13 @@ watch(
 <style scoped>
 .consultation-center {
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr) 280px;
+  grid-template-columns: 320px minmax(420px, 1fr) 320px;
   grid-template-rows: minmax(0, 1fr);
   height: calc(100vh - 80px);
   background: #ffffff;
   border-radius: 18px;
-  overflow: hidden;
   overflow-y: auto;
+  overflow-x: auto;
   scrollbar-width: thin;
   scrollbar-color: rgba(27, 67, 50, 0.28) transparent;
   box-shadow: 0 24px 60px rgba(21, 82, 56, 0.12);
@@ -443,11 +443,13 @@ watch(
 }
 
 .knowledge-panel {
-  min-width: 0;
+  min-width: 320px;
+  max-width: 380px;
   padding: 24px;
   border-left: 1px solid #e4e7ed;
   background: linear-gradient(180deg, #f3fbf7 0%, #ffffff 100%);
   overflow-y: auto;
+  box-sizing: border-box;
 }
 
 .knowledge-header {
