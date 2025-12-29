@@ -164,23 +164,12 @@
       width="480px"
       :close-on-click-modal="false"
     >
-      <el-alert
-        title="确认后将立即重置密码并发送通知邮件"
-        type="warning"
-        :closable="false"
-        show-icon
-        class="password-alert"
-      />
-      <el-form ref="passwordFormRef" :model="passwordForm" label-width="100px" status-icon>
+      <el-form ref="passwordFormRef" :model="passwordForm" :rules="passwordRules" label-width="100px" status-icon>
         <el-form-item label="用户名">
           <el-input :model-value="passwordForm.username" disabled />
         </el-form-item>
-        <el-form-item label="新密码">
-          <el-input :model-value="passwordForm.newPassword" disabled />
-          <template #label>
-            <span>新密码</span>
-            <el-tag size="small" type="info" class="password-label-tag">用户名 + 123456</el-tag>
-          </template>
+        <el-form-item label="新密码" prop="newPassword">
+          <el-input v-model="passwordForm.newPassword" type="password" show-password placeholder="请输入新密码" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -376,7 +365,7 @@ const openPasswordDialog = user => {
   passwordForm.id = user.id ?? null
   passwordForm.username = user.username ?? ''
   passwordForm.email = normalizedEmail
-  passwordForm.newPassword = (passwordForm.username || '') + '123456'
+  passwordForm.newPassword = ''
   passwordDialogVisible.value = true
 }
 
@@ -421,6 +410,13 @@ const editRules = {
   fullName: [{ max: 128, message: '姓名长度不能超过128个字符', trigger: 'blur' }],
   email: [{ type: 'email', message: '请输入正确的邮箱地址', trigger: 'blur' }],
   roleIds: [{ type: 'array', required: true, message: '请至少选择一个角色', trigger: 'change' }]
+}
+
+const passwordRules = {
+  newPassword: [
+    { required: true, message: '请输入新密码', trigger: 'blur' },
+    { min: 6, max: 128, message: '密码长度需要在6-128个字符之间', trigger: 'blur' }
+  ]
 }
 
 const submitEditForm = async () => {
@@ -494,16 +490,11 @@ const notifyPasswordResetByEmail = async () => {
 }
 
 const submitPasswordForm = async () => {
+  if (!passwordFormRef.value) {
+    return
+  }
   try {
-    await ElMessageBox.confirm(
-      `确认将用户「${passwordForm.username}」的密码重置为「${passwordForm.newPassword}」吗？`,
-      '确认重置',
-      {
-        confirmButtonText: '确认',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }
-    )
+    await passwordFormRef.value.validate()
   } catch (error) {
     return
   }
@@ -724,14 +715,6 @@ onMounted(async () => {
 
 .full-width {
   width: 100%;
-}
-
-.password-alert {
-  margin-bottom: 12px;
-}
-
-.password-label-tag {
-  margin-left: 6px;
 }
 
 @media (max-width: 1024px) {
