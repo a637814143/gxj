@@ -315,7 +315,11 @@ watch(
 }
 
 .bubble {
-  flex: 1;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  flex: 0 1 auto;
+  width: fit-content;
   max-width: 70%;
   background: #ffffff;
   border-radius: 12px;
@@ -362,5 +366,6 @@ watch(
   margin: 0;
   line-height: 1.6;
   white-space: pre-wrap;
+  word-break: break-word;
 }
 </style>
