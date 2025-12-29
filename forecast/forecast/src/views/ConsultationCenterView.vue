@@ -351,6 +351,7 @@ watch(
 .conversation-panel {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   min-height: 0;
   background: linear-gradient(180deg, #fefefe 0%, #f5f9ff 100%);
 }
@@ -405,6 +406,7 @@ watch(
 }
 
 .knowledge-panel {
+  min-width: 0;
   padding: 24px;
   border-left: 1px solid #e4e7ed;
   background: linear-gradient(180deg, #f3fbf7 0%, #ffffff 100%);
