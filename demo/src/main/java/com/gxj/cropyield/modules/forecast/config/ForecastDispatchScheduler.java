@@ -4,7 +4,10 @@ import com.gxj.cropyield.modules.forecast.dto.ForecastExecutionRequest;
 import com.gxj.cropyield.modules.forecast.entity.ForecastTask;
 import com.gxj.cropyield.modules.forecast.repository.ForecastTaskRepository;
 import com.gxj.cropyield.modules.forecast.service.ForecastTaskQueue;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -35,16 +38,59 @@ public class ForecastDispatchScheduler {
         }
         log.info("Dispatching {} pending forecast tasks", pendingTasks.size());
         pendingTasks.forEach(task -> {
+            Map<String, Object> parameters = parseTaskParameters(task.getParameters());
+            Integer forecastPeriods = parseInteger(parameters.get("forecastPeriods"));
+            Integer historyYears = parseInteger(parameters.get("historyYears"));
+            String frequency = parameters.getOrDefault("frequency", "YEAR").toString();
             forecastTaskQueue.publish(new ForecastExecutionRequest(
                     task.getRegion().getId(),
                     task.getCrop().getId(),
                     task.getModel().getId(),
-                    3,
-                    3,
-                    "YEAR"
+                    forecastPeriods != null ? forecastPeriods : 3,
+                    historyYears != null ? historyYears : 3,
+                    frequency,
+                    parameters.isEmpty() ? Collections.emptyMap() : parameters
             ));
             task.setStatus(ForecastTask.TaskStatus.RUNNING);
         });
         forecastTaskRepository.saveAll(pendingTasks);
+    }
+
+    private Map<String, Object> parseTaskParameters(String parameters) {
+        if (parameters == null || parameters.isBlank()) {
+            return Collections.emptyMap();
+        }
+        Map<String, Object> parsed = new HashMap<>();
+        for (String pair : parameters.split(";")) {
+            String trimmed = pair.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            int separatorIndex = trimmed.indexOf('=');
+            if (separatorIndex <= 0) {
+                continue;
+            }
+            String key = trimmed.substring(0, separatorIndex).trim();
+            String value = trimmed.substring(separatorIndex + 1).trim();
+            if (!key.isEmpty()) {
+                parsed.put(key, value);
+            }
+        }
+        return parsed;
+    }
+
+    private Integer parseInteger(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        try {
+            return Integer.parseInt(value.toString());
+        } catch (NumberFormatException ex) {
+            log.warn("Unable to parse integer from task parameter '{}': {}", value, ex.getMessage());
+            return null;
+        }
     }
 }
