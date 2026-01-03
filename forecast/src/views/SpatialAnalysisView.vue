@@ -4,8 +4,8 @@
       <div>
         <p class="page-badge">空间分布分析 · 区域下钻</p>
         <h1 class="page-title">地图分层展示产量、预测区间与风险热力</h1>
-        <p class="page-subtitle">
-          结合论文中的空间分布分析需求，使用分层地图呈现不同区域的实测产量、预测可信区间与风险热力图，可在点击区域后继续下钻至更细粒度的作业单元。
+        <p class="page-subtitle" :class="{ 'user-highlight': !isAdminExperience.value }">
+          结合项目中的空间分布分析需求，使用分层地图呈现不同区域的实测产量、预测可信区间与风险热力图，可在点击区域后继续下钻至更细粒度的作业单元。
         </p>
         <div class="breadcrumb">
           <span v-for="(item, idx) in drillPath" :key="item">
@@ -123,10 +123,13 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as echarts from 'echarts'
 import { fetchSpatialMaps } from '../services/spatial'
+import { useAuthStore } from '../stores/auth'
 
 const mapRef = ref(null)
 let chartInstance
 
+const authStore = useAuthStore()
+const isAdminExperience = computed(() => (authStore.user?.roles || []).includes('ADMIN'))
 const mapDefinitions = ref({})
 const isLoading = ref(false)
 const loadError = ref('')
@@ -469,6 +472,16 @@ onBeforeUnmount(() => {
   margin: 6px 0 10px;
   opacity: 0.85;
   line-height: 1.5;
+}
+
+.user-highlight {
+  background: linear-gradient(120deg, #ffe082, #ffb3ba, #8ec5fc);
+  color: #0b3d2e;
+  padding: 10px 12px;
+  border-radius: 12px;
+  display: inline-block;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
+  opacity: 1;
 }
 
 .page-actions {
