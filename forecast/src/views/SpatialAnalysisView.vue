@@ -49,14 +49,18 @@
               </div>
             </div>
           </template>
-          <el-alert
-            v-if="loadError"
-            :title="loadError"
-            type="error"
-            :closable="false"
-            show-icon
-            style="margin-bottom: 12px"
-          />
+          <div v-if="loadError" class="error-block">
+            <el-alert
+              :title="loadError"
+              type="error"
+              :closable="false"
+              show-icon
+              style="margin-bottom: 12px"
+            />
+            <el-button type="primary" size="small" :loading="isLoading" @click="initializeSpatialMaps">
+              重试加载
+            </el-button>
+          </div>
           <div v-if="!hasMapData && !isLoading" class="empty-tip">未获取到空间分布数据</div>
           <div v-else ref="mapRef" class="map-container" />
         </el-card>
@@ -190,6 +194,18 @@ const topRisks = computed(() => adjustedRegions.value.slice().sort((a, b) => b.r
 
 const hasMapData = computed(() => !!currentMap.value && (!!currentMap.value.geoJson || (currentMap.value.regions || []).length))
 
+const resolveLoadErrorMessage = error => {
+  if (error?.response?.status) {
+    const statusText = error.response.statusText || '请求错误'
+    const detail = error.response.data?.message || error.response.data?.error || error.message || ''
+    return `加载失败 (${error.response.status} ${statusText})${detail ? `：${detail}` : ''}`
+  }
+  if (error?.message) {
+    return `加载失败：${error.message}`
+  }
+  return '获取空间分布数据失败'
+}
+
 const initializeSpatialMaps = async () => {
   isLoading.value = true
   loadError.value = ''
@@ -206,7 +222,7 @@ const initializeSpatialMaps = async () => {
     selectedRegion.value = adjustedRegions.value[0] || null
     renderChart()
   } catch (error) {
-    loadError.value = error?.message || '获取空间分布数据失败'
+    loadError.value = resolveLoadErrorMessage(error)
     mapDefinitions.value = {}
     drillStack.value = []
     selectedRegion.value = null
@@ -459,6 +475,14 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.error-block {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
 .breadcrumb {
