@@ -32,6 +32,7 @@ public class ForecastModelServiceImpl implements ForecastModelService {
         model.setName(request.name());
         model.setType(request.type());
         model.setDescription(request.description());
+        model.setParameters(request.parameters());
         return forecastModelRepository.save(model);
     }
 }

@@ -126,6 +126,83 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <div class="model-parameter-panel">
+          <div class="parameter-header">
+            <div>
+              <div class="parameter-title">模型参数</div>
+              <div class="parameter-subtitle">
+                支持在提交预测前调整模型超参或天气情景参数，默认读取模型侧配置，可按需增删。数值、true/false、
+                JSON 对象/数组或普通字符串均可作为参数值。
+              </div>
+            </div>
+            <div class="parameter-actions">
+              <el-button
+                size="small"
+                :disabled="!selectors.modelId"
+                @click="resetModelParameters"
+              >
+                恢复默认
+              </el-button>
+              <el-button
+                type="primary"
+                size="small"
+                plain
+                :disabled="!selectors.modelId"
+                @click="addParameterRow"
+              >
+                新增参数
+              </el-button>
+            </div>
+          </div>
+          <el-empty
+            v-if="!selectors.modelId"
+            description="请选择模型后配置参数"
+            :image-size="120"
+            class="parameter-empty"
+          />
+          <div v-else class="parameter-grid">
+            <el-alert
+              v-if="parameterExamples.length"
+              type="info"
+              :closable="false"
+              class="parameter-hint"
+            >
+              <template #title>常用填法示例</template>
+              <div class="parameter-hint-content">
+                <div class="parameter-hint-row" v-for="item in parameterExamples" :key="item.key">
+                  <el-tag size="small" effect="plain">{{ item.key }}</el-tag>
+                  <span class="parameter-hint-text">{{ item.hint }}</span>
+                </div>
+              </div>
+            </el-alert>
+            <div
+              v-for="(param, index) in modelParameters"
+              :key="`param-${index}`"
+              class="parameter-row"
+            >
+              <el-input
+                v-model="param.key"
+                placeholder="参数键（如 futureWeatherFeatures 或 learningRate）"
+                clearable
+              />
+              <el-input
+                v-model="param.value"
+                placeholder="参数值"
+                clearable
+              />
+              <el-button
+                v-if="modelParameters.length > 0"
+                type="danger"
+                link
+                :icon="Delete"
+                @click="removeParameterRow(index)"
+              />
+            </div>
+            <div v-if="!modelParameters.length" class="parameter-placeholder">
+              <el-tag effect="plain" type="info">当前模型未提供默认参数，可手动新增</el-tag>
+            </div>
+          </div>
+        </div>
       </el-form>
       <el-alert
         v-if="errorMessage"
@@ -345,6 +422,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Delete } from '@element-plus/icons-vue'
 import BaseChart from '@/components/charts/BaseChart.vue'
 import {
   deleteForecastRun,
@@ -371,6 +449,8 @@ const optionLists = reactive({
   models: []
 })
 
+const modelParameters = ref([])
+
 const cropRequestId = ref(0)
 
 const authStore = useAuthStore()
@@ -395,6 +475,25 @@ const selectedRegion = computed(
 const selectedCrop = computed(
   () => optionLists.crops.find(crop => crop.id === selectors.cropId) || null
 )
+const selectedModel = computed(
+  () => optionLists.models.find(model => model.id === selectors.modelId) || null
+)
+
+const parameterExamples = computed(() => {
+  const defaults = selectedModel.value?.parameters
+  if (defaults && typeof defaults === 'object' && Object.keys(defaults).length > 0) {
+    return Object.entries(defaults).map(([key, value]) => ({
+      key,
+      hint: typeof value === 'object' ? JSON.stringify(value) : String(value)
+    }))
+  }
+  return [
+    { key: 'learningRate', hint: '0.01 或 0.05（数字）' },
+    { key: 'futureWeatherFeatures', hint: '["temp", "rainfall"]（数组 JSON）' },
+    { key: 'useNormalization', hint: 'true / false（布尔值）' },
+    { key: 'seed', hint: '42（可复现随机种子）' }
+  ]
+})
 
 const historySeries = ref([])
 const forecastSeries = ref([])
@@ -417,6 +516,70 @@ const errorMessage = ref('')
 const disableSubmit = computed(() => !selectors.regionId || !selectors.cropId || !selectors.modelId)
 
 const hasResult = computed(() => historySeries.value.length > 0 || forecastSeries.value.length > 0)
+
+const normalizeParameterValue = value => {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'number' || typeof value === 'boolean') return value
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return null
+    const lower = trimmed.toLowerCase()
+    if (lower === 'true') return true
+    if (lower === 'false') return false
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        return JSON.parse(trimmed)
+      } catch (error) {
+        // 保留原始字符串
+      }
+    }
+    const numeric = Number(trimmed)
+    if (!Number.isNaN(numeric) && trimmed === `${numeric}`) {
+      return numeric
+    }
+    return trimmed
+  }
+  return value
+}
+
+const parameterPayload = computed(() => {
+  const payload = {}
+  modelParameters.value.forEach(param => {
+    const key = (param.key || '').trim()
+    if (!key) return
+    const normalized = normalizeParameterValue(param.value)
+    if (normalized !== null && normalized !== undefined) {
+      payload[key] = normalized
+    }
+  })
+  return payload
+})
+
+const syncModelParameters = model => {
+  if (!model || !model.parameters || typeof model.parameters !== 'object') {
+    modelParameters.value = []
+    return
+  }
+  modelParameters.value = Object.entries(model.parameters)
+    .filter(([key]) => key)
+    .map(([key, value]) => ({ key, value: value === undefined || value === null ? '' : String(value) }))
+}
+
+const resetModelParameters = () => {
+  if (selectedModel.value) {
+    syncModelParameters(selectedModel.value)
+  } else {
+    modelParameters.value = []
+  }
+}
+
+const addParameterRow = () => {
+  modelParameters.value.push({ key: '', value: '' })
+}
+
+const removeParameterRow = index => {
+  modelParameters.value.splice(index, 1)
+}
 
 const metricLabel = computed(() => metadata.value?.valueLabel || '产量')
 const metricUnit = computed(() => metadata.value?.valueUnit || '吨 / 公顷')
@@ -1019,7 +1182,8 @@ const runForecast = async () => {
       modelId: selectors.modelId,
       historyYears: selectors.historyYears,
       forecastPeriods: selectors.forecastPeriods,
-      frequency: selectors.frequency
+      frequency: selectors.frequency,
+      parameters: parameterPayload.value
     }
     const result = await executeForecast(payload)
     historySeries.value = result.history
@@ -1068,6 +1232,22 @@ watch(
   () => {
     resetResult()
   }
+)
+
+watch(
+  selectedModel,
+  model => {
+    syncModelParameters(model)
+    resetResult()
+  }
+)
+
+watch(
+  modelParameters,
+  () => {
+    resetResult()
+  },
+  { deep: true }
 )
 
 const formatMetric = value => {
@@ -1607,6 +1787,84 @@ function formatScenarioChange(value) {
   color: #2563eb;
 }
 
+.model-parameter-panel {
+  margin-top: 12px;
+  padding: 12px 16px 16px;
+  border: 1px dashed #d0d7ff;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.parameter-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.parameter-title {
+  font-weight: 700;
+  font-size: 15px;
+  color: #0f172a;
+}
+
+.parameter-subtitle {
+  color: #475569;
+  margin-top: 4px;
+  font-size: 13px;
+}
+
+.parameter-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.parameter-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.parameter-hint {
+  border: 1px dashed #cbd5e1;
+  background: #f8fafc;
+}
+
+.parameter-hint-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.parameter-hint-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #475569;
+  font-size: 13px;
+}
+
+.parameter-hint-text {
+  word-break: break-all;
+}
+
+.parameter-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.parameter-placeholder {
+  padding: 8px 0 4px;
+}
+
+.parameter-empty {
+  margin-top: 12px;
+}
+
 @media (max-width: 992px) {
   .hero-card {
     padding: 24px;
@@ -1631,6 +1889,15 @@ function formatScenarioChange(value) {
 
   .card-header > :last-child {
     justify-content: flex-start;
+  }
+
+  .parameter-row {
+    grid-template-columns: 1fr;
+  }
+
+  .parameter-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 }
 </style>

@@ -155,7 +155,7 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         run.setMeasurementUnit(measurementType.valueUnit());
         forecastRunRepository.save(run);
 
-        ForecastEngineResponse response = invokeEngine(limitedHistory, run);
+        ForecastEngineResponse response = invokeEngine(limitedHistory, run, request.parameters());
 
         run.setStatus(ForecastRun.RunStatus.SUCCESS);
         run.setExternalRequestId(response.requestId());
@@ -419,8 +419,12 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
     }
 
     private ForecastEngineResponse invokeEngine(List<HistoryObservation> history,
-                                                ForecastRun run) {
+                                                ForecastRun run,
+                                                Map<String, Object> userParameters) {
         Map<String, Object> parameters = new HashMap<>();
+        if (userParameters != null && !userParameters.isEmpty()) {
+            parameters.putAll(userParameters);
+        }
         parameters.put("historyYears", run.getHistoryYears());
         parameters.put("frequency", run.getFrequency());
 

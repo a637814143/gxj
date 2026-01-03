@@ -145,10 +145,26 @@ CREATE TABLE IF NOT EXISTS forecast_model (
     name VARCHAR(128) NOT NULL,
     type VARCHAR(32) NOT NULL,
     description VARCHAR(512),
+    parameters TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_forecast_model_name (name)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '预测模型定义';
+
+SET @ddl := (
+    SELECT IF(
+        COUNT(*) = 0,
+        'ALTER TABLE forecast_model ADD COLUMN parameters TEXT NULL AFTER description',
+        'SELECT 1'
+    )
+    FROM information_schema.columns
+    WHERE table_schema = @current_schema
+      AND table_name = 'forecast_model'
+      AND column_name = 'parameters'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 CREATE TABLE IF NOT EXISTS model_registry (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
