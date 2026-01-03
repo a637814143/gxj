@@ -26,7 +26,7 @@
 
     <el-row :gutter="16">
       <el-col :span="16">
-        <el-card class="map-card" shadow="never">
+        <el-card class="map-card" shadow="never" v-loading="isLoading">
           <template #header>
             <div class="card-header">
               <div>
@@ -49,7 +49,16 @@
               </div>
             </div>
           </template>
-          <div ref="mapRef" class="map-container" />
+          <el-alert
+            v-if="loadError"
+            :title="loadError"
+            type="error"
+            :closable="false"
+            show-icon
+            style="margin-bottom: 12px"
+          />
+          <div v-if="!hasMapData && !isLoading" class="empty-tip">未获取到空间分布数据</div>
+          <div v-else ref="mapRef" class="map-container" />
         </el-card>
       </el-col>
 
@@ -109,12 +118,15 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as echarts from 'echarts'
-import { spatialMapDefinitions } from '../data/spatialMaps'
+import { fetchSpatialMaps } from '../services/spatial'
 
 const mapRef = ref(null)
 let chartInstance
 
-const drillStack = ref(['macro'])
+const mapDefinitions = ref({})
+const isLoading = ref(false)
+const loadError = ref('')
+const drillStack = ref([])
 const selectedScenario = ref('baseline')
 const showHeatmap = ref(true)
 const showForecastPoints = ref(true)
@@ -134,13 +146,16 @@ const riskLabels = {
 
 const currentScenario = computed(() => scenarioOptions.find(item => item.value === selectedScenario.value) || scenarioOptions[0])
 
-const currentMap = computed(() => spatialMapDefinitions[drillStack.value[drillStack.value.length - 1]])
+const currentMap = computed(() => mapDefinitions.value[drillStack.value[drillStack.value.length - 1]] || null)
 
-const drillPath = computed(() => drillStack.value.map(key => spatialMapDefinitions[key]?.label || key))
+const drillPath = computed(() => drillStack.value.map(key => mapDefinitions.value[key]?.label || key))
 
 const canDrillBack = computed(() => drillStack.value.length > 1)
 
 const adjustedRegions = computed(() => {
+  if (!currentMap.value) {
+    return []
+  }
   const multiplier = currentScenario.value.multiplier
   return (currentMap.value?.regions || []).map(region => {
     const delta = multiplier - 1
@@ -159,6 +174,9 @@ const adjustedRegions = computed(() => {
 })
 
 const heatmapPoints = computed(() => {
+  if (!currentMap.value) {
+    return []
+  }
   const multiplier = currentScenario.value.multiplier
   const base = currentMap.value?.heatmapPoints || []
   return base.map(point => {
@@ -169,6 +187,36 @@ const heatmapPoints = computed(() => {
 })
 
 const topRisks = computed(() => adjustedRegions.value.slice().sort((a, b) => b.risk - a.risk).slice(0, 4))
+
+const hasMapData = computed(() => !!currentMap.value && (!!currentMap.value.geoJson || (currentMap.value.regions || []).length))
+
+const initializeSpatialMaps = async () => {
+  isLoading.value = true
+  loadError.value = ''
+  try {
+    const { maps, rootKey } = await fetchSpatialMaps()
+    const normalized = maps.reduce((acc, item) => {
+      acc[item.key] = item
+      return acc
+    }, {})
+    mapDefinitions.value = normalized
+
+    const initialKey = rootKey || Object.keys(normalized)[0]
+    drillStack.value = initialKey ? [initialKey] : []
+    selectedRegion.value = adjustedRegions.value[0] || null
+    renderChart()
+  } catch (error) {
+    loadError.value = error?.message || '获取空间分布数据失败'
+    mapDefinitions.value = {}
+    drillStack.value = []
+    selectedRegion.value = null
+    if (chartInstance) {
+      chartInstance.clear()
+    }
+  } finally {
+    isLoading.value = false
+  }
+}
 
 const drillBack = () => {
   if (!canDrillBack.value) return
@@ -181,7 +229,7 @@ const handleRegionClick = params => {
     selectedRegion.value = target
   }
   if (!target?.childKey) return
-  if (spatialMapDefinitions[target.childKey]) {
+  if (mapDefinitions.value[target.childKey]) {
     drillStack.value = [...drillStack.value, target.childKey]
   }
 }
@@ -193,13 +241,20 @@ const renderChart = () => {
   }
 
   const mapKey = currentMap.value?.mapKey
-  if (!mapKey || !currentMap.value?.geoJson) return
+  if (!mapKey || !currentMap.value?.geoJson) {
+    chartInstance.clear()
+    return
+  }
 
   if (!echarts.getMap(mapKey)) {
     echarts.registerMap(mapKey, currentMap.value.geoJson)
   }
 
   const regionData = adjustedRegions.value
+  if (!regionData.length) {
+    chartInstance.clear()
+    return
+  }
   const productionValues = regionData.map(item => item.production)
   const minProduction = Math.min(...productionValues)
   const maxProduction = Math.max(...productionValues)
@@ -323,17 +378,31 @@ const renderChart = () => {
 }
 
 watch([currentMap, selectedScenario, showForecastPoints, showHeatmap], () => {
+  if (!currentMap.value) {
+    selectedRegion.value = null
+    if (chartInstance) {
+      chartInstance.clear()
+    }
+    return
+  }
   selectedRegion.value = adjustedRegions.value[0] || null
   renderChart()
 })
 
 watch(drillStack, () => {
+  if (!currentMap.value) {
+    selectedRegion.value = null
+    if (chartInstance) {
+      chartInstance.clear()
+    }
+    return
+  }
   selectedRegion.value = adjustedRegions.value[0] || null
   renderChart()
 })
 
 onMounted(() => {
-  renderChart()
+  initializeSpatialMaps()
   window.addEventListener('resize', resizeChart)
 })
 
