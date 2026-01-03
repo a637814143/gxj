@@ -16,7 +16,9 @@ public class ForecastModel extends BaseEntity {
 
     public enum ModelType {
         LSTM,
-        WEATHER_REGRESSION
+        WEATHER_REGRESSION,
+        ARIMA,
+        PROPHET
     }
 
     @Column(nullable = false, length = 128)

@@ -3,12 +3,13 @@
     <div class="login-card">
       <div class="login-toggle">
         <el-radio-group v-model="loginMode" size="large" class="login-toggle-group">
-          <el-radio-button label="admin">管理员登录</el-radio-button>
-          <el-radio-button label="user">用户登录</el-radio-button>
+          <el-radio-button label="admin">{{ t('auth.admin') }}</el-radio-button>
+          <el-radio-button label="user">{{ t('auth.user') }}</el-radio-button>
         </el-radio-group>
+        <LanguageSwitcher />
       </div>
       <div class="login-header">
-        <h1>农作物产量预测平台</h1>
+        <h1>{{ t('app.title') }}</h1>
         <p>{{ loginSubtitle }}</p>
       </div>
       <el-alert
@@ -23,7 +24,7 @@
       </el-alert>
       <el-form :model="form" class="login-form" @keyup.enter="handleSubmit">
         <el-form-item>
-          <el-input v-model.trim="form.username" placeholder="用户名" autocomplete="username">
+          <el-input v-model.trim="form.username" :placeholder="t('auth.username')" autocomplete="username">
             <template #prefix>
               <el-icon><User /></el-icon>
             </template>
@@ -32,7 +33,7 @@
         <el-form-item>
           <el-input
             v-model="form.password"
-            placeholder="密码"
+            :placeholder="t('auth.password')"
             type="password"
             autocomplete="current-password"
             show-password
@@ -43,34 +44,34 @@
           </el-input>
         </el-form-item>
         <el-form-item class="captcha-item">
-          <el-input v-model.trim="form.captchaCode" placeholder="验证码">
+          <el-input v-model.trim="form.captchaCode" :placeholder="t('auth.captcha')">
             <template #prefix>
               <el-icon><Picture /></el-icon>
             </template>
           </el-input>
           <div class="captcha-image" @click="refreshCaptcha" role="button">
-            <img v-if="captchaImage" :src="captchaImage" alt="验证码" />
-            <span v-else>点击刷新</span>
+            <img v-if="captchaImage" :src="captchaImage" :alt="t('auth.captcha')" />
+            <span v-else>{{ t('auth.refresh') }}</span>
           </div>
         </el-form-item>
         <div class="form-footer">
-          <el-checkbox v-model="form.rememberMe">记住我</el-checkbox>
-          <el-button type="primary" :loading="loading" @click="handleSubmit" class="login-button">登录</el-button>
+          <el-checkbox v-model="form.rememberMe">{{ t('auth.remember') }}</el-checkbox>
+          <el-button type="primary" :loading="loading" @click="handleSubmit" class="login-button">{{ t('auth.login') }}</el-button>
         </div>
       </el-form>
       <p class="login-mode-hint">{{ loginModeHint }}</p>
       <div class="login-actions">
         <div class="switch-auth">
           <template v-if="loginMode === 'admin'">
-            普通用户入口？
-            <el-link type="primary" @click.prevent="switchToMode('user')">切换至用户登录</el-link>
+            {{ t('auth.userEntrance') }}
+            <el-link type="primary" @click.prevent="switchToMode('user')">{{ t('auth.switchUser') }}</el-link>
           </template>
           <template v-else>
-            还没有账号？
-            <el-link type="primary" @click.prevent="goToRegister">立即注册</el-link>
+            {{ t('auth.noAccount') }}
+            <el-link type="primary" @click.prevent="goToRegister">{{ t('auth.register') }}</el-link>
           </template>
         </div>
-        <el-link type="primary" class="forgot-link" @click.prevent="openForgotPassword">忘记密码？</el-link>
+        <el-link type="primary" class="forgot-link" @click.prevent="openForgotPassword">{{ t('auth.forgot') }}</el-link>
       </div>
     </div>
   </div>
@@ -178,10 +179,13 @@ import { User, Lock, Picture, Message } from '@element-plus/icons-vue'
 import apiClient from '../services/http'
 import { useAuthStore } from '../stores/auth'
 import { getPasswordStrength, validatePasswordPolicy } from '../utils/password'
+import LanguageSwitcher from '../components/LanguageSwitcher.vue'
+import { useI18n } from 'vue-i18n'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+const { t } = useI18n()
 
 const loginMode = ref(route.query.mode === 'user' ? 'user' : 'admin')
 

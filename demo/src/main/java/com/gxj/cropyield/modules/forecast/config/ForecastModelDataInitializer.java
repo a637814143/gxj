@@ -38,6 +38,16 @@ public class ForecastModelDataInitializer implements ApplicationRunner {
                 ForecastModel.ModelType.WEATHER_REGRESSION,
                 "结合逐年气象特征与历史产量进行多元线性回归，量化天气变化对产量的影响。"
         );
+        ensureDefaultModel(
+                "ARIMA 季节性时序模型",
+                ForecastModel.ModelType.ARIMA,
+                "利用差分、移动平均与季节性分量捕捉产量序列的周期性与趋势。"
+        );
+        ensureDefaultModel(
+                "Prophet 节假日回归模型",
+                ForecastModel.ModelType.PROPHET,
+                "基于 Facebook Prophet，将节假日与季节项回归到产量预测。"
+        );
     }
 
     private void ensureDefaultModel(String name, ForecastModel.ModelType type, String description) {

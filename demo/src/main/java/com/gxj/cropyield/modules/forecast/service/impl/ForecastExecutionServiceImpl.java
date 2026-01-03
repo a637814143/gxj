@@ -28,9 +28,11 @@ import com.gxj.cropyield.modules.forecast.repository.ForecastRunSeriesRepository
 import com.gxj.cropyield.modules.forecast.repository.ForecastSnapshotRepository;
 import com.gxj.cropyield.modules.forecast.repository.ForecastTaskRepository;
 import com.gxj.cropyield.modules.forecast.repository.ForecastResultRepository;
+import com.gxj.cropyield.modules.forecast.service.ModelRegistryService;
 import com.gxj.cropyield.modules.forecast.service.ForecastExecutionService;
 import com.gxj.cropyield.modules.weather.service.QWeatherForecastClient;
 import com.gxj.cropyield.modules.weather.service.WeatherLocationResolver;
+import com.gxj.cropyield.modules.storage.ObjectStorageService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
@@ -73,6 +75,8 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
     private final WeatherRecordRepository weatherRecordRepository;
     private final QWeatherForecastClient qWeatherForecastClient;
     private final WeatherLocationResolver weatherLocationResolver;
+    private final ObjectStorageService objectStorageService;
+    private final ModelRegistryService modelRegistryService;
 
     public ForecastExecutionServiceImpl(RegionRepository regionRepository,
                                         CropRepository cropRepository,
@@ -86,7 +90,9 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
                                         ForecastEngineClient forecastEngineClient,
                                         WeatherRecordRepository weatherRecordRepository,
                                         QWeatherForecastClient qWeatherForecastClient,
-                                        WeatherLocationResolver weatherLocationResolver) {
+                                        WeatherLocationResolver weatherLocationResolver,
+                                        ObjectStorageService objectStorageService,
+                                        ModelRegistryService modelRegistryService) {
         this.regionRepository = regionRepository;
         this.cropRepository = cropRepository;
         this.forecastModelRepository = forecastModelRepository;
@@ -100,6 +106,8 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
         this.weatherRecordRepository = weatherRecordRepository;
         this.qWeatherForecastClient = qWeatherForecastClient;
         this.weatherLocationResolver = weatherLocationResolver;
+        this.objectStorageService = objectStorageService;
+        this.modelRegistryService = modelRegistryService;
     }
 
     @Override
@@ -272,6 +280,10 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
             if (primaryResultId == null) {
                 primaryResultId = saved.getId();
             }
+        }
+        if (evaluation != null) {
+            String storageUri = objectStorageService.saveText("models", "forecast-run-" + run.getId(), evaluation);
+            modelRegistryService.registerSnapshot(run.getModel(), storageUri, evaluation);
         }
         return primaryResultId;
     }
