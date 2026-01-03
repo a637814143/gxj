@@ -24,13 +24,35 @@ import com.gxj.cropyield.modules.report.dto.ReportSummaryResponse;
 import com.gxj.cropyield.modules.report.entity.Report;
 import com.gxj.cropyield.modules.report.entity.ReportSection;
 import com.gxj.cropyield.modules.report.repository.ReportRepository;
+import com.gxj.cropyield.modules.report.service.ReportExportResult;
 import com.gxj.cropyield.modules.report.service.ReportService;
+import com.lowagie.text.Document;
+import com.lowagie.text.DocumentException;
+import com.lowagie.text.Element;
+import com.lowagie.text.Font;
+import com.lowagie.text.PageSize;
+import com.lowagie.text.Paragraph;
+import com.lowagie.text.Phrase;
+import com.lowagie.text.pdf.BaseFont;
+import com.lowagie.text.pdf.PdfPCell;
+import com.lowagie.text.pdf.PdfPTable;
+import com.lowagie.text.pdf.PdfWriter;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.CreationHelper;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -53,6 +75,13 @@ import java.util.stream.Collectors;
 
 @Service
 public class ReportServiceImpl implements ReportService {
+
+    private static final MediaType EXCEL_MEDIA_TYPE = MediaType.parseMediaType(
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    private static final String DEFAULT_FONT = "STSongStd-Light";
+
+    private static final java.time.format.DateTimeFormatter DATE_FORMATTER = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     private final ReportRepository reportRepository;
     private final ForecastResultRepository forecastResultRepository;
@@ -248,6 +277,26 @@ public class ReportServiceImpl implements ReportService {
         return toDetail(report);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public ReportExportResult export(Long id, String format) {
+        ReportDetailResponse detail = getDetail(id);
+        String normalized = StringUtils.hasText(format) ? format.trim().toLowerCase(Locale.ROOT) : "pdf";
+        return switch (normalized) {
+            case "excel", "xlsx" -> new ReportExportResult(
+                exportAsExcel(detail),
+                buildFilename(detail.summary().title(), "xlsx"),
+                EXCEL_MEDIA_TYPE
+            );
+            case "pdf" -> new ReportExportResult(
+                exportAsPdf(detail),
+                buildFilename(detail.summary().title(), "pdf"),
+                MediaType.APPLICATION_PDF
+            );
+            default -> throw new BusinessException(ResultCode.BAD_REQUEST, "暂不支持的导出格式: " + format);
+        };
+    }
+
     private ReportDetailResponse toDetail(Report report) {
         List<ReportSectionResponse> sections = report.getSections().stream()
             .sorted(Comparator.comparing(ReportSection::getSortOrder, Comparator.nullsLast(Integer::compareTo))
@@ -255,6 +304,162 @@ public class ReportServiceImpl implements ReportService {
             .map(this::toSectionResponse)
             .toList();
         return new ReportDetailResponse(toSummary(report), sections);
+    }
+
+    private byte[] exportAsPdf(ReportDetailResponse detail) {
+        try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+            Document document = new Document(PageSize.A4);
+            PdfWriter.getInstance(document, outputStream);
+            document.open();
+
+            BaseFont baseFont = BaseFont.createFont(DEFAULT_FONT, "UniGB-UCS2-H", BaseFont.NOT_EMBEDDED);
+            Font titleFont = new Font(baseFont, 16, Font.BOLD);
+            Font headerFont = new Font(baseFont, 12, Font.BOLD);
+            Font bodyFont = new Font(baseFont, 10);
+
+            Paragraph title = new Paragraph("报告导出：" + detail.summary().title(), titleFont);
+            title.setAlignment(Element.ALIGN_CENTER);
+            document.add(title);
+            document.add(new Paragraph("导出时间：" + DATE_FORMATTER.format(LocalDate.now()), bodyFont));
+            document.add(new Paragraph("作者：" + safeText(detail.summary().author()), bodyFont));
+            document.add(new Paragraph("覆盖周期：" + safeText(detail.summary().coveragePeriod()), bodyFont));
+            document.add(new Paragraph("状态：" + safeText(detail.summary().status()), bodyFont));
+            if (detail.summary().insights() != null) {
+                document.add(new Paragraph("洞察：" + detail.summary().insights(), bodyFont));
+            }
+            document.add(new Paragraph(" "));
+
+            for (ReportSectionResponse section : detail.sections()) {
+                Paragraph sectionTitle = new Paragraph(section.title(), headerFont);
+                sectionTitle.setSpacingBefore(6f);
+                document.add(sectionTitle);
+                if (StringUtils.hasText(section.description())) {
+                    document.add(new Paragraph(section.description(), bodyFont));
+                }
+
+                if ("OVERVIEW".equalsIgnoreCase(section.type())) {
+                    PdfPTable metricTable = new PdfPTable(3);
+                    metricTable.setWidthPercentage(100);
+                    addHeaderCell(metricTable, "指标", headerFont);
+                    addHeaderCell(metricTable, "数值", headerFont);
+                    addHeaderCell(metricTable, "单位", headerFont);
+                    JsonNode metrics = section.data() != null ? section.data().get("metrics") : null;
+                    if (metrics != null && metrics.isArray()) {
+                        metrics.forEach(node -> {
+                            addBodyCell(metricTable, safeText(node.get("label")), bodyFont);
+                            addBodyCell(metricTable, formatNullableNumber(node.get("value")), bodyFont);
+                            addBodyCell(metricTable, safeText(node.get("unit")), bodyFont);
+                        });
+                    }
+                    document.add(metricTable);
+
+                    JsonNode highlights = section.data() != null ? section.data().get("highlights") : null;
+                    if (highlights != null && highlights.isArray() && highlights.size() > 0) {
+                        document.add(new Paragraph("重点洞察：", bodyFont));
+                        highlights.forEach(node -> document.add(new Paragraph("• " + node.asText(), bodyFont)));
+                    }
+                } else if ("YIELD_TREND".equalsIgnoreCase(section.type())) {
+                    PdfPTable table = new PdfPTable(4);
+                    table.setWidthPercentage(100);
+                    addHeaderCell(table, "年份", headerFont);
+                    addHeaderCell(table, "播种面积(千公顷)", headerFont);
+                    addHeaderCell(table, "总产量(万吨)", headerFont);
+                    addHeaderCell(table, "单产(吨/公顷)", headerFont);
+                    JsonNode series = section.data() != null ? section.data().get("series") : null;
+                    if (series != null && series.isArray()) {
+                        series.forEach(node -> {
+                            addBodyCell(table, formatNullableNumber(node.get("year")), bodyFont);
+                            addBodyCell(table, formatNullableNumber(node.get("sownArea")), bodyFont);
+                            addBodyCell(table, formatNullableNumber(node.get("production")), bodyFont);
+                            addBodyCell(table, formatNullableNumber(node.get("yieldPerHectare")), bodyFont);
+                        });
+                    }
+                    document.add(table);
+                } else {
+                    document.add(new Paragraph(toPrettyJson(section.data()), bodyFont));
+                }
+
+                document.add(new Paragraph(" "));
+            }
+
+            document.close();
+            return outputStream.toByteArray();
+        } catch (DocumentException | IOException exception) {
+            throw new IllegalStateException("导出 PDF 失败", exception);
+        }
+    }
+
+    private byte[] exportAsExcel(ReportDetailResponse detail) {
+        try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+            Sheet sheet = workbook.createSheet("报告详情");
+            CreationHelper creationHelper = workbook.getCreationHelper();
+            CellStyle dateStyle = workbook.createCellStyle();
+            dateStyle.setDataFormat(creationHelper.createDataFormat().getFormat("yyyy-mm-dd"));
+
+            int rowIndex = 0;
+            rowIndex = writeSummaryRows(detail, sheet, dateStyle, rowIndex);
+            rowIndex += 1;
+
+            for (ReportSectionResponse section : detail.sections()) {
+                Row sectionHeader = sheet.createRow(rowIndex++);
+                sectionHeader.createCell(0).setCellValue(section.title());
+                sectionHeader.createCell(1).setCellValue(section.type());
+                if (StringUtils.hasText(section.description())) {
+                    sectionHeader.createCell(2).setCellValue(section.description());
+                }
+
+                if ("OVERVIEW".equalsIgnoreCase(section.type())) {
+                    Row headerRow = sheet.createRow(rowIndex++);
+                    headerRow.createCell(0).setCellValue("指标");
+                    headerRow.createCell(1).setCellValue("数值");
+                    headerRow.createCell(2).setCellValue("单位");
+                    JsonNode metrics = section.data() != null ? section.data().get("metrics") : null;
+                    if (metrics != null && metrics.isArray()) {
+                        for (JsonNode metric : metrics) {
+                            Row row = sheet.createRow(rowIndex++);
+                            row.createCell(0).setCellValue(safeText(metric.get("label")));
+                            setNumeric(row, 1, metric.get("value"));
+                            row.createCell(2).setCellValue(safeText(metric.get("unit")));
+                        }
+                    }
+                    JsonNode highlights = section.data() != null ? section.data().get("highlights") : null;
+                    if (highlights != null && highlights.isArray() && highlights.size() > 0) {
+                        Row highlightHeader = sheet.createRow(rowIndex++);
+                        highlightHeader.createCell(0).setCellValue("重点洞察");
+                        highlights.forEach(node -> sheet.createRow(rowIndex++).createCell(0).setCellValue(node.asText()));
+                    }
+                } else if ("YIELD_TREND".equalsIgnoreCase(section.type())) {
+                    Row headerRow = sheet.createRow(rowIndex++);
+                    headerRow.createCell(0).setCellValue("年份");
+                    headerRow.createCell(1).setCellValue("播种面积(千公顷)");
+                    headerRow.createCell(2).setCellValue("总产量(万吨)");
+                    headerRow.createCell(3).setCellValue("单产(吨/公顷)");
+                    JsonNode series = section.data() != null ? section.data().get("series") : null;
+                    if (series != null && series.isArray()) {
+                        for (JsonNode node : series) {
+                            Row row = sheet.createRow(rowIndex++);
+                            setNumeric(row, 0, node.get("year"));
+                            setNumeric(row, 1, node.get("sownArea"));
+                            setNumeric(row, 2, node.get("production"));
+                            setNumeric(row, 3, node.get("yieldPerHectare"));
+                        }
+                    }
+                } else {
+                    sheet.createRow(rowIndex++).createCell(0).setCellValue(toPrettyJson(section.data()));
+                }
+
+                rowIndex += 1;
+            }
+
+            for (int i = 0; i < 6; i++) {
+                sheet.autoSizeColumn(i);
+            }
+
+            workbook.write(outputStream);
+            return outputStream.toByteArray();
+        } catch (IOException exception) {
+            throw new IllegalStateException("导出 Excel 失败", exception);
+        }
     }
 
     private ReportSummaryResponse toSummary(Report report) {
@@ -269,6 +474,39 @@ public class ReportServiceImpl implements ReportService {
             report.getPublishedAt(),
             report.getInsights()
         );
+    }
+
+    private int writeSummaryRows(ReportDetailResponse detail, Sheet sheet, CellStyle dateStyle, int rowIndex) {
+        Row titleRow = sheet.createRow(rowIndex++);
+        titleRow.createCell(0).setCellValue("报告标题");
+        titleRow.createCell(1).setCellValue(detail.summary().title());
+
+        Row coverageRow = sheet.createRow(rowIndex++);
+        coverageRow.createCell(0).setCellValue("覆盖周期");
+        coverageRow.createCell(1).setCellValue(safeText(detail.summary().coveragePeriod()));
+
+        Row authorRow = sheet.createRow(rowIndex++);
+        authorRow.createCell(0).setCellValue("作者");
+        authorRow.createCell(1).setCellValue(safeText(detail.summary().author()));
+
+        Row statusRow = sheet.createRow(rowIndex++);
+        statusRow.createCell(0).setCellValue("状态");
+        statusRow.createCell(1).setCellValue(safeText(detail.summary().status()));
+
+        if (detail.summary().publishedAt() != null) {
+            Row publishRow = sheet.createRow(rowIndex++);
+            publishRow.createCell(0).setCellValue("发布时间");
+            Cell dateCell = publishRow.createCell(1);
+            dateCell.setCellValue(java.sql.Timestamp.valueOf(detail.summary().publishedAt()));
+            dateCell.setCellStyle(dateStyle);
+        }
+
+        if (StringUtils.hasText(detail.summary().insights())) {
+            Row insightRow = sheet.createRow(rowIndex++);
+            insightRow.createCell(0).setCellValue("洞察");
+            insightRow.createCell(1).setCellValue(detail.summary().insights());
+        }
+        return rowIndex;
     }
 
     private ReportSection buildSection(String type, String title, String description, Object data, int sortOrder) {
@@ -290,6 +528,69 @@ public class ReportServiceImpl implements ReportService {
             toJsonNode(section.getData()),
             section.getSortOrder()
         );
+    }
+
+    private void addHeaderCell(PdfPTable table, String value, Font font) {
+        PdfPCell cell = new PdfPCell(new Phrase(value, font));
+        cell.setHorizontalAlignment(Element.ALIGN_CENTER);
+        cell.setVerticalAlignment(Element.ALIGN_MIDDLE);
+        table.addCell(cell);
+    }
+
+    private void addBodyCell(PdfPTable table, String value, Font font) {
+        PdfPCell cell = new PdfPCell(new Phrase(value, font));
+        cell.setVerticalAlignment(Element.ALIGN_MIDDLE);
+        table.addCell(cell);
+    }
+
+    private void setNumeric(Row row, int columnIndex, JsonNode value) {
+        if (value == null || value.isNull()) {
+            row.createCell(columnIndex).setBlank();
+            return;
+        }
+        if (value.isNumber()) {
+            row.createCell(columnIndex).setCellValue(value.asDouble());
+            return;
+        }
+        row.createCell(columnIndex).setCellValue(value.asText());
+    }
+
+    private String formatNullableNumber(JsonNode value) {
+        if (value == null || value.isNull()) {
+            return "-";
+        }
+        if (value.isIntegralNumber()) {
+            return value.asText();
+        }
+        if (value.isNumber()) {
+            return String.format(Locale.CHINA, "%.2f", value.asDouble());
+        }
+        return value.asText();
+    }
+
+    private String toPrettyJson(JsonNode node) {
+        if (node == null || node.isMissingNode()) {
+            return "{}";
+        }
+        try {
+            return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(node);
+        } catch (JsonProcessingException e) {
+            return node.toString();
+        }
+    }
+
+    private String safeText(JsonNode node) {
+        return node == null || node.isNull() ? "" : node.asText();
+    }
+
+    private String safeText(String value) {
+        return value == null ? "" : value;
+    }
+
+    private String buildFilename(String title, String extension) {
+        String base = StringUtils.hasText(title) ? title : "报告导出";
+        String sanitized = base.replaceAll("[\\\\/:*?\"<>|]", "_");
+        return sanitized + "_" + LocalDate.now() + "." + extension;
     }
 
     private String toJsonString(Object data) {

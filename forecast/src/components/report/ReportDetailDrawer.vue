@@ -16,6 +16,15 @@
           <span v-if="summaryData.author">作者：{{ summaryData.author }}</span>
           <span v-if="summaryData.publishedAt">发布时间：{{ formatDate(summaryData.publishedAt) }}</span>
         </div>
+        <div v-if="summaryData" class="header-actions">
+          <el-select v-model="exportFormat" size="small" class="export-select">
+            <el-option label="PDF" value="pdf" />
+            <el-option label="Excel" value="excel" />
+          </el-select>
+          <el-button type="primary" size="small" :loading="exporting" @click="handleExport">
+            导出
+          </el-button>
+        </div>
       </div>
     </template>
 
@@ -127,7 +136,8 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { fetchReportDetail } from '../../services/report'
+import { ElMessage } from 'element-plus'
+import { exportReport as exportReportApi, fetchReportDetail } from '../../services/report'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -141,6 +151,8 @@ const loading = ref(false)
 const errorMessage = ref('')
 const detail = ref(null)
 const lastLoadedId = ref(null)
+const exportFormat = ref('pdf')
+const exporting = ref(false)
 
 const summaryData = computed(() => detail.value?.summary ?? props.summary ?? null)
 const sections = computed(() => detail.value?.sections ?? [])
@@ -223,6 +235,45 @@ const formatDifference = data => {
   }
   const unit = isYieldMeasurement(data) ? '吨/公顷' : data?.measurementUnit || ''
   return formatWithUnit(data.difference, unit)
+}
+
+const extractFilename = disposition => {
+  if (!disposition) return ''
+  const utf8Match = /filename\*=UTF-8''([^;]+)/i.exec(disposition)
+  if (utf8Match && utf8Match[1]) {
+    return decodeURIComponent(utf8Match[1])
+  }
+  const filenameMatch = /filename="?([^";]+)"?/i.exec(disposition)
+  return filenameMatch ? filenameMatch[1] : ''
+}
+
+const handleExport = async () => {
+  if (!props.reportId) {
+    ElMessage.warning('请选择要导出的报告')
+    return
+  }
+  exporting.value = true
+  try {
+    const response = await exportReportApi(props.reportId, exportFormat.value)
+    const blob = new Blob([response.data], {
+      type: response.headers['content-type'] || 'application/octet-stream'
+    })
+    const filename =
+      extractFilename(response.headers['content-disposition']) ||
+      `报告导出.${exportFormat.value === 'excel' ? 'xlsx' : 'pdf'}`
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    link.click()
+    window.URL.revokeObjectURL(url)
+  } catch (error) {
+    const message = error?.response?.data?.message || '导出报告失败'
+    errorMessage.value = message
+    ElMessage.error(message)
+  } finally {
+    exporting.value = false
+  }
 }
 
 const formatSectionType = type => {
@@ -322,6 +373,17 @@ const handleClose = () => {
   gap: 16px;
   font-size: 13px;
   color: var(--el-text-color-secondary);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.export-select {
+  width: 120px;
 }
 
 .drawer-body {

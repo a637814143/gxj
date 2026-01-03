@@ -9,3 +9,9 @@ export const fetchReportDetail = reportId => apiClient.get(`/api/report/${report
 export const fetchCrops = () => apiClient.get('/api/base/crops')
 
 export const fetchRegions = () => apiClient.get('/api/base/regions')
+
+export const exportReport = (reportId, format = 'pdf') =>
+  apiClient.get(`/api/report/export/${reportId}`, {
+    params: { format },
+    responseType: 'blob'
+  })
