@@ -97,7 +97,12 @@ const normalizeMapDefinition = map => {
 }
 
 export const fetchSpatialMaps = async () => {
-  const { data } = await apiClient.get('/api/spatial/maps')
+  const endpoint =
+    typeof import.meta?.env?.VITE_SPATIAL_MAPS_ENDPOINT === 'string' && import.meta.env.VITE_SPATIAL_MAPS_ENDPOINT.trim()
+      ? import.meta.env.VITE_SPATIAL_MAPS_ENDPOINT.trim()
+      : '/spatial/maps'
+
+  const { data } = await apiClient.get(endpoint)
   const payload = data?.data ?? data ?? {}
 
   const items = Array.isArray(payload.maps) ? payload.maps : Array.isArray(payload) ? payload : []
