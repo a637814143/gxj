@@ -1,0 +1,60 @@
+大理大学本科毕业设计
+基于
+SpringBoot
+和Vue3的云南主要农作物产量分析与预测系统的设计与实现
+Design and Implementation of a Yunnan Major Crop Yield Analysis and Forecasting System Based on Spring Boot and Vue 3
+学      院：
+数学与计算机学院
+学生  姓名：
+恭
+浩
+杰
+学      号：
+20221108900212
+指导  教师：
+杨润标
+专      业：
+计算机科学与技术
+年级（班级）：
+2022级2班
+起止  日期：
+20
+2
+5
+年
+6
+月
+—
+20
+2
+5
+年 12 月
+摘  要
+农作物产量受到气候波动、耕作制度以及市场变化等多种因素共同影响，如果只是依靠经验来做估算，往往难以达到精细化管理与科学决策所提出的要求。围绕云南省主要农作物统计数据，这篇文章完成了一套产量预测与可视化分析系统的设计并加以实现，用于支撑数据管理、预测建模以及结果展示等业务环节。
+系统采用前后端分离方式进行开发。后端借助Spring Boot给出REST接口服务，结合Spring Security与JWT完成登录认证与权限控制，并借助MySQL开展数据存储与管理；前端基于Vue3与Vite加以构建，配合Element Plus实现交互界面开发，使用
+ECharts
+展示产量统计与预测结果，系统给出数据集导入与管理、模型参数配置、预测任务创建与执行、结果对比分析与报表导出等功能，并支持对不同模型的预测效果开展指标评价。
+在典型业务场景下开展功能与性能测试之后，系统能够稳定完成数据导入、批量预测与图表渲染等关键流程，降低了预测分析过程中重复操作带来的成本。这篇文章工作为农作物产量预测的工程化实现给出可供参考的思路，并可为智慧农业场景下的生产规划与决策支持提供一定借鉴。
+关键词：
+农业产量预测；数据可视化；
+SpringBoot
+；
+Vue3
+；
+LSTM
+Abstract
+Crop yield is jointly influenced by factors such as climate variability, cultivation practices, and market changes. If estimation relies only on experience, it is often difficult to meet the requirements of refined management and evidence-based decision-making. Based on statistical data of major crops in Yunnan Province, this paper designs and implements a yield forecasting and visual analytics system to support key business processes, including data management, predictive modeling, and result presentation.
+The system is developed with a front–back separation architecture. The back end provides REST APIs built on Spring Boot, using Spring Security and JWT for authentication and access control, with MySQL for data storage and management. The front end is built with Vue 3 and Vite; Element Plus is used to develop the interactive user interface, and
+ECharts
+is used to visualize yield statistics and forecasting results. The system offers functions such as dataset import and management, model parameter configuration, forecasting task creation and execution, result comparison and analysis, and report exporting, and it supports metric-based evaluation of forecasting performance across different models.
+After functional and performance testing under typical business scenarios, the system proved capable of reliably completing key workflows such as data import, batch forecasting, and chart rendering, reducing the cost caused by repetitive operations during forecasting and analysis. This work provides a practical reference for engineering crop-yield forecasting into real-world applications and offers insights for production planning and decision support in smart agriculture contexts.
+Keywords:
+crop yield forecasting; data visualization; Spring Boot; Vue 3; LSTM
+目  录
+TOC \o "1-3" \u
+摘  要
+PAGEREF _Toc218022259 \h
+I
+Abstract
+PAGEREF _Toc218022260 \h
+II
