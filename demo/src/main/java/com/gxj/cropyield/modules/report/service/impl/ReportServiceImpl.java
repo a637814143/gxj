@@ -356,7 +356,9 @@ public class ReportServiceImpl implements ReportService {
                     JsonNode highlights = section.data() != null ? section.data().get("highlights") : null;
                     if (highlights != null && highlights.isArray() && highlights.size() > 0) {
                         document.add(new Paragraph("重点洞察：", bodyFont));
-                        highlights.forEach(node -> document.add(new Paragraph("• " + node.asText(), bodyFont)));
+                        highlights.forEach(node -> {
+                            document.add(new Paragraph("• " + node.asText(), bodyFont));
+                        });
                     }
                 } else if ("YIELD_TREND".equalsIgnoreCase(section.type())) {
                     PdfPTable table = new PdfPTable(4);
@@ -426,7 +428,11 @@ public class ReportServiceImpl implements ReportService {
                     if (highlights != null && highlights.isArray() && highlights.size() > 0) {
                         Row highlightHeader = sheet.createRow(rowIndex++);
                         highlightHeader.createCell(0).setCellValue("重点洞察");
-                        highlights.forEach(node -> sheet.createRow(rowIndex++).createCell(0).setCellValue(node.asText()));
+                        highlights.forEach(node -> {
+                            sheet.createRow(rowIndex++)
+                                .createCell(0)
+                                .setCellValue(node.asText());
+                        });
                     }
                 } else if ("YIELD_TREND".equalsIgnoreCase(section.type())) {
                     Row headerRow = sheet.createRow(rowIndex++);
