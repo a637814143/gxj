@@ -131,7 +131,8 @@
             <div>
               <div class="parameter-title">模型参数</div>
               <div class="parameter-subtitle">
-                支持在提交预测前调整模型超参或天气情景参数，默认读取模型侧配置，可按需增删。
+                支持在提交预测前调整模型超参或天气情景参数，默认读取模型侧配置，可按需增删。数值、true/false、
+                JSON 对象/数组或普通字符串均可作为参数值。
               </div>
             </div>
             <div class="parameter-actions">
@@ -160,6 +161,20 @@
             class="parameter-empty"
           />
           <div v-else class="parameter-grid">
+            <el-alert
+              v-if="parameterExamples.length"
+              type="info"
+              :closable="false"
+              class="parameter-hint"
+            >
+              <template #title>常用填法示例</template>
+              <div class="parameter-hint-content">
+                <div class="parameter-hint-row" v-for="item in parameterExamples" :key="item.key">
+                  <el-tag size="small" effect="plain">{{ item.key }}</el-tag>
+                  <span class="parameter-hint-text">{{ item.hint }}</span>
+                </div>
+              </div>
+            </el-alert>
             <div
               v-for="(param, index) in modelParameters"
               :key="`param-${index}`"
@@ -463,6 +478,22 @@ const selectedCrop = computed(
 const selectedModel = computed(
   () => optionLists.models.find(model => model.id === selectors.modelId) || null
 )
+
+const parameterExamples = computed(() => {
+  const defaults = selectedModel.value?.parameters
+  if (defaults && typeof defaults === 'object' && Object.keys(defaults).length > 0) {
+    return Object.entries(defaults).map(([key, value]) => ({
+      key,
+      hint: typeof value === 'object' ? JSON.stringify(value) : String(value)
+    }))
+  }
+  return [
+    { key: 'learningRate', hint: '0.01 或 0.05（数字）' },
+    { key: 'futureWeatherFeatures', hint: '["temp", "rainfall"]（数组 JSON）' },
+    { key: 'useNormalization', hint: 'true / false（布尔值）' },
+    { key: 'seed', hint: '42（可复现随机种子）' }
+  ]
+})
 
 const historySeries = ref([])
 const forecastSeries = ref([])
@@ -1793,6 +1824,30 @@ function formatScenarioChange(value) {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.parameter-hint {
+  border: 1px dashed #cbd5e1;
+  background: #f8fafc;
+}
+
+.parameter-hint-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.parameter-hint-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #475569;
+  font-size: 13px;
+}
+
+.parameter-hint-text {
+  word-break: break-all;
 }
 
 .parameter-row {
