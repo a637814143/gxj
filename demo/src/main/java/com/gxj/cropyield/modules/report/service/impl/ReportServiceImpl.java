@@ -428,11 +428,11 @@ public class ReportServiceImpl implements ReportService {
                     if (highlights != null && highlights.isArray() && highlights.size() > 0) {
                         Row highlightHeader = sheet.createRow(rowIndex++);
                         highlightHeader.createCell(0).setCellValue("重点洞察");
-                        highlights.forEach(node -> {
+                        for (JsonNode node : highlights) {
                             sheet.createRow(rowIndex++)
                                 .createCell(0)
                                 .setCellValue(node.asText());
-                        });
+                        }
                     }
                 } else if ("YIELD_TREND".equalsIgnoreCase(section.type())) {
                     Row headerRow = sheet.createRow(rowIndex++);
