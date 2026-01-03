@@ -19,4 +19,6 @@ public interface ReportService {
     ReportDetailResponse generate(ReportGenerationRequest request);
 
     ReportDetailResponse getDetail(Long id);
+
+    ReportExportResult export(Long id, String format);
 }
