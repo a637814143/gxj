@@ -150,6 +150,17 @@ CREATE TABLE IF NOT EXISTS forecast_model (
     UNIQUE KEY uq_forecast_model_name (name)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '预测模型定义';
 
+CREATE TABLE IF NOT EXISTS model_registry (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    model_name VARCHAR(128) NOT NULL,
+    model_type VARCHAR(32) NOT NULL,
+    storage_uri VARCHAR(255) NOT NULL,
+    metrics_json VARCHAR(1024),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_model_registry_type (model_type)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '预测模型产出与元数据登记';
+
 CREATE TABLE IF NOT EXISTS forecast_task (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     model_id BIGINT UNSIGNED NOT NULL,
