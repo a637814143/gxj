@@ -48,9 +48,9 @@ const { canAccessRoute } = useAuthorization()
 const rawMenuItems = [
   { label: '仪表盘', name: 'dashboard', path: '/dashboard' },
   { label: '数据中心', name: 'data', path: '/data' },
-  { label: '数据可视化', name: 'visualization', path: '/visualization' },
+  { label: '历史产量数据可视化', name: 'visualization', path: '/visualization' },
   { label: '预测中心', name: 'forecast', path: '/forecast' },
-  { label: '预测可视化', name: 'forecastVisualization', path: '/forecast-visualization' },
+  { label: '产量预测可视化', name: 'forecastVisualization', path: '/forecast-visualization' },
   { label: '天气监测', name: 'weather', path: '/weather' },
   { label: '气象分析', name: 'weatherAnalytics', path: '/weather-analytics' },
   { label: '报告中心', name: 'report', path: '/report' },
