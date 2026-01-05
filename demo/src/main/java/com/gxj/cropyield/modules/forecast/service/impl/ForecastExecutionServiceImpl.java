@@ -430,10 +430,12 @@ public class ForecastExecutionServiceImpl implements ForecastExecutionService {
 
         Map<Integer, Map<String, Double>> weatherFeatures = Collections.emptyMap();
         Map<String, Map<String, Double>> futureWeatherFeatures = Collections.emptyMap();
+        boolean userProvidedFutureFeatures =
+                userParameters != null && userParameters.containsKey("futureWeatherFeatures");
         if (run.getModel() != null && run.getModel().getType() == ForecastModel.ModelType.WEATHER_REGRESSION) {
             WeatherFeatureBundle bundle = buildWeatherFeatureBundle(run.getRegion(), run.getCrop(), history, run.getForecastPeriods());
             weatherFeatures = bundle.historyFeatures();
-            if (!bundle.futureFeatures().isEmpty()) {
+            if (!userProvidedFutureFeatures && !bundle.futureFeatures().isEmpty()) {
                 Map<String, Map<String, Double>> mapped = new LinkedHashMap<>();
                 for (Map.Entry<Integer, Map<String, Double>> entry : bundle.futureFeatures().entrySet()) {
                     mapped.put(String.valueOf(entry.getKey()), entry.getValue());
