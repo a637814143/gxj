@@ -171,7 +171,10 @@
               <div class="parameter-hint-content">
                 <div class="parameter-hint-row" v-for="item in parameterExamples" :key="item.key">
                   <el-tag size="small" effect="plain">{{ item.key }}</el-tag>
-                  <span class="parameter-hint-text">{{ item.hint }}</span>
+                  <div class="parameter-hint-text-block">
+                    <span class="parameter-hint-text">{{ item.hint }}</span>
+                    <span v-if="item.reason" class="parameter-hint-reason">原因：{{ item.reason }}</span>
+                  </div>
                 </div>
               </div>
             </el-alert>
@@ -484,14 +487,31 @@ const parameterExamples = computed(() => {
   if (defaults && typeof defaults === 'object' && Object.keys(defaults).length > 0) {
     return Object.entries(defaults).map(([key, value]) => ({
       key,
-      hint: typeof value === 'object' ? JSON.stringify(value) : String(value)
+      hint: typeof value === 'object' ? JSON.stringify(value) : String(value),
+      reason: ''
     }))
   }
   return [
-    { key: 'learningRate', hint: '0.01 或 0.05（数字）' },
-    { key: 'futureWeatherFeatures', hint: '["temp", "rainfall"]（数组 JSON）' },
-    { key: 'useNormalization', hint: 'true / false（布尔值）' },
-    { key: 'seed', hint: '42（可复现随机种子）' }
+    {
+      key: 'learningRate',
+      hint: '0.01 或 0.05（数字）',
+      reason: '控制收敛速度与稳定性，0.01~0.05 兼顾训练速度与不过拟合'
+    },
+    {
+      key: 'futureWeatherFeatures',
+      hint: '{"2025": {"temp": 20, "rainfall": 800}}（JSON，未来年份→特征值）',
+      reason: '已知未来年份的天气特征时显式传入，可避免模型用均值或趋势外推导致偏差'
+    },
+    {
+      key: 'useNormalization',
+      hint: 'true / false（布尔值）',
+      reason: '特征标准化能减轻量纲差异带来的权重偏置，推荐保持 true'
+    },
+    {
+      key: 'seed',
+      hint: '42（可复现随机种子）',
+      reason: '固定随机过程，便于结果复现和对比'
+    }
   ]
 })
 
@@ -1846,7 +1866,19 @@ function formatScenarioChange(value) {
   font-size: 13px;
 }
 
+.parameter-hint-text-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .parameter-hint-text {
+  word-break: break-all;
+}
+
+.parameter-hint-reason {
+  color: #64748b;
+  font-size: 12px;
   word-break: break-all;
 }
 
