@@ -1,0 +1,208 @@
+package com.gxj.cropyield.config;
+
+import com.github.benmanes.caffeine.cache.Caffeine;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.cache.caffeine.CaffeineCacheManager;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+import java.util.concurrent.TimeUnit;
+
+/**
+ * 缓存配置类
+ * 
+ * 使用Caffeine作为缓存实现，提供高性能的本地缓存
+ * 
+ * 使用方法：
+ * 1. 将此文件重命名为 CacheConfig.java
+ * 2. 在 pom.xml 中添加依赖：
+ *    <dependency>
+ *        <groupId>org.springframework.boot</groupId>
+ *        <artifactId>spring-boot-starter-cache</artifactId>
+ *    </dependency>
+ *    <dependency>
+ *        <groupId>com.github.ben-manes.caffeine</groupId>
+ *        <artifactId>caffeine</artifactId>
+ *    </dependency>
+ * 3. 在Service方法上使用 @Cacheable, @CacheEvict, @CachePut 注解
+ */
+@Configuration
+@EnableCaching
+public class CacheConfig {
+    
+    /**
+     * 配置缓存管理器
+     * 
+     * 缓存策略：
+     * - regions: 区域列表，1小时过期
+     * - crops: 作物列表，1小时过期
+     * - forecastModels: 预测模型列表，1小时过期
+     * - systemSettings: 系统设置，30分钟过期
+     * - dashboardSummary: 仪表盘摘要，5分钟过期
+     * - userDetails: 用户详情，15分钟过期
+     */
+    @Bean
+    public CacheManager cacheManager() {
+        CaffeineCacheManager cacheManager = new CaffeineCacheManager(
+            "regions",           // 区域列表缓存
+            "crops",             // 作物列表缓存
+            "forecastModels",    // 预测模型列表缓存
+            "systemSettings",    // 系统设置缓存
+            "dashboardSummary",  // 仪表盘摘要缓存
+            "userDetails",       // 用户详情缓存
+            "reportList"         // 报告列表缓存
+        );
+        
+        // 配置Caffeine缓存
+        cacheManager.setCaffeine(Caffeine.newBuilder()
+            // 最大缓存条目数
+            .maximumSize(1000)
+            // 写入后1小时过期
+            .expireAfterWrite(1, TimeUnit.HOURS)
+            // 启用统计信息收集
+            .recordStats()
+        );
+        
+        return cacheManager;
+    }
+    
+    /**
+     * 为不同的缓存配置不同的过期策略
+     * 
+     * 可选：如果需要为不同缓存设置不同的过期时间，使用此方法
+     */
+    @Bean
+    public CacheManager customCacheManager() {
+        CaffeineCacheManager cacheManager = new CaffeineCacheManager();
+        
+        // 为不同的缓存设置不同的配置
+        cacheManager.registerCustomCache("regions", 
+            Caffeine.newBuilder()
+                .maximumSize(100)
+                .expireAfterWrite(1, TimeUnit.HOURS)
+                .recordStats()
+                .build()
+        );
+        
+        cacheManager.registerCustomCache("crops", 
+            Caffeine.newBuilder()
+                .maximumSize(100)
+                .expireAfterWrite(1, TimeUnit.HOURS)
+                .recordStats()
+                .build()
+        );
+        
+        cacheManager.registerCustomCache("dashboardSummary", 
+            Caffeine.newBuilder()
+                .maximumSize(10)
+                .expireAfterWrite(5, TimeUnit.MINUTES)
+                .recordStats()
+                .build()
+        );
+        
+        cacheManager.registerCustomCache("systemSettings", 
+            Caffeine.newBuilder()
+                .maximumSize(50)
+                .expireAfterWrite(30, TimeUnit.MINUTES)
+                .recordStats()
+                .build()
+        );
+        
+        return cacheManager;
+    }
+}
+
+/**
+ * 使用示例：
+ * 
+ * @Service
+ * public class RegionService {
+ *     
+ *     // 查询时使用缓存
+ *     @Cacheable(value = "regions", key = "'all'")
+ *     public List<Region> findAll() {
+ *         return regionRepository.findAll();
+ *     }
+ *     
+ *     // 根据ID查询，使用ID作为缓存key
+ *     @Cacheable(value = "regions", key = "#id")
+ *     public Optional<Region> findById(Long id) {
+ *         return regionRepository.findById(id);
+ *     }
+ *     
+ *     // 保存时清除所有缓存
+ *     @CacheEvict(value = "regions", allEntries = true)
+ *     public Region save(Region region) {
+ *         return regionRepository.save(region);
+ *     }
+ *     
+ *     // 删除时清除所有缓存
+ *     @CacheEvict(value = "regions", allEntries = true)
+ *     public void deleteById(Long id) {
+ *         regionRepository.deleteById(id);
+ *     }
+ * }
+ * 
+ * @Service
+ * public class DashboardService {
+ *     
+ *     // 缓存仪表盘摘要，5分钟过期
+ *     @Cacheable(value = "dashboardSummary", key = "'summary'")
+ *     public DashboardSummaryResponse getSummary() {
+ *         // 复杂的查询和计算逻辑
+ *         return summary;
+ *     }
+ *     
+ *     // 当数据更新时，清除仪表盘缓存
+ *     @CacheEvict(value = "dashboardSummary", allEntries = true)
+ *     public void refreshDashboard() {
+ *         // 刷新逻辑
+ *     }
+ * }
+ * 
+ * 缓存监控：
+ * 
+ * @RestController
+ * @RequestMapping("/api/admin/cache")
+ * public class CacheController {
+ *     
+ *     @Autowired
+ *     private CacheManager cacheManager;
+ *     
+ *     // 查看缓存统计
+ *     @GetMapping("/stats")
+ *     public Map<String, Object> getCacheStats() {
+ *         Map<String, Object> stats = new HashMap<>();
+ *         cacheManager.getCacheNames().forEach(cacheName -> {
+ *             Cache cache = cacheManager.getCache(cacheName);
+ *             if (cache instanceof CaffeineCache) {
+ *                 com.github.benmanes.caffeine.cache.Cache<Object, Object> nativeCache = 
+ *                     ((CaffeineCache) cache).getNativeCache();
+ *                 stats.put(cacheName, nativeCache.stats());
+ *             }
+ *         });
+ *         return stats;
+ *     }
+ *     
+ *     // 清除指定缓存
+ *     @DeleteMapping("/{cacheName}")
+ *     public void evictCache(@PathVariable String cacheName) {
+ *         Cache cache = cacheManager.getCache(cacheName);
+ *         if (cache != null) {
+ *             cache.clear();
+ *         }
+ *     }
+ *     
+ *     // 清除所有缓存
+ *     @DeleteMapping
+ *     public void evictAllCaches() {
+ *         cacheManager.getCacheNames().forEach(cacheName -> {
+ *             Cache cache = cacheManager.getCache(cacheName);
+ *             if (cache != null) {
+ *                 cache.clear();
+ *             }
+ *         });
+ *     }
+ * }
+ */

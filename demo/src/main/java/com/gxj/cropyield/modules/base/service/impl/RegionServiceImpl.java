@@ -9,6 +9,8 @@ import com.gxj.cropyield.modules.base.service.RegionService;
 import com.gxj.cropyield.modules.dataset.repository.YieldRecordRepository;
 import com.gxj.cropyield.modules.forecast.repository.ForecastRunRepository;
 import com.gxj.cropyield.modules.forecast.repository.ForecastTaskRepository;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -45,12 +47,14 @@ public class RegionServiceImpl implements RegionService {
     }
 
     @Override
+    @Cacheable(value = "regions", key = "'all'")
     public List<Region> listAll() {
         return regionRepository.findAll();
     }
 
     @Override
     @Transactional
+    @CacheEvict(value = "regions", allEntries = true)
     public Region create(RegionRequest request) {
         Region region = new Region();
         applyRequest(region, request, true);
@@ -59,6 +63,7 @@ public class RegionServiceImpl implements RegionService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "regions", allEntries = true)
     public Region update(Long id, RegionRequest request) {
         Region region = regionRepository.findById(id)
             .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "区域不存在"));
@@ -68,6 +73,7 @@ public class RegionServiceImpl implements RegionService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "regions", allEntries = true)
     public void delete(Long id) {
         Region region = regionRepository.findById(id)
             .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "区域不存在"));

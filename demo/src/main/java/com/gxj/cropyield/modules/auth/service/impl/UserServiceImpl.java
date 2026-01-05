@@ -1,5 +1,6 @@
 package com.gxj.cropyield.modules.auth.service.impl;
 
+import com.gxj.cropyield.common.audit.AuditLog;
 import com.gxj.cropyield.common.exception.BusinessException;
 import com.gxj.cropyield.common.response.ResultCode;
 import com.gxj.cropyield.modules.auth.dto.RoleSummary;
@@ -14,6 +15,8 @@ import com.gxj.cropyield.modules.auth.repository.UserRepository;
 import com.gxj.cropyield.modules.auth.service.UserService;
 import com.gxj.cropyield.modules.notification.dto.EmailNotificationRequest;
 import com.gxj.cropyield.modules.notification.service.EmailNotificationService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -34,6 +37,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class UserServiceImpl implements UserService {
+    
+    private static final Logger log = LoggerFactory.getLogger(UserServiceImpl.class);
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
@@ -59,74 +64,123 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
+    @AuditLog(operation = "CREATE_USER", module = "用户管理", description = "创建用户")
     public UserResponse createUser(UserRequest request) {
-        userRepository.findByUsername(request.username())
-            .ifPresent(user -> {
-                throw new BusinessException(ResultCode.BAD_REQUEST, "用户名已存在");
-            });
+        log.info("开始创建用户 - 用户名: {}, 邮箱: {}", request.username(), request.email());
+        
+        try {
+            userRepository.findByUsername(request.username())
+                .ifPresent(user -> {
+                    throw new BusinessException(ResultCode.BAD_REQUEST, "用户名已存在");
+                });
 
-        User user = new User();
-        user.setUsername(request.username());
-        user.setPassword(passwordEncoder.encode(request.password()));
-        user.setFullName(request.fullName());
-        user.setEmail(request.email());
-        user.setRoles(resolveRoles(request.roleIds()));
-
-        User saved = userRepository.save(user);
-        return toResponse(saved);
-    }
-
-    @Override
-    @Transactional
-    public UserResponse updateUser(Long userId, UserUpdateRequest request) {
-        User user = userRepository.findById(userId)
-            .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "用户不存在"));
-
-        if (request.fullName() != null) {
+            User user = new User();
+            user.setUsername(request.username());
+            user.setPassword(passwordEncoder.encode(request.password()));
             user.setFullName(request.fullName());
-        }
-        if (request.email() != null) {
             user.setEmail(request.email());
-        }
-        if (request.roleIds() != null) {
             user.setRoles(resolveRoles(request.roleIds()));
-        }
 
-        User saved = userRepository.save(user);
-        return toResponse(saved);
+            User saved = userRepository.save(user);
+            log.info("用户创建成功 - ID: {}, 用户名: {}", saved.getId(), saved.getUsername());
+            return toResponse(saved);
+            
+        } catch (Exception e) {
+            log.error("用户创建失败 - 用户名: {}, 错误: {}", request.username(), e.getMessage());
+            throw e;
+        }
     }
 
     @Override
     @Transactional
+    @AuditLog(operation = "UPDATE_USER", module = "用户管理", description = "更新用户信息")
+    public UserResponse updateUser(Long userId, UserUpdateRequest request) {
+        log.info("开始更新用户 - ID: {}", userId);
+        
+        try {
+            User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "用户不存在"));
+
+            String oldFullName = user.getFullName();
+            String oldEmail = user.getEmail();
+            
+            if (request.fullName() != null) {
+                user.setFullName(request.fullName());
+            }
+            if (request.email() != null) {
+                user.setEmail(request.email());
+            }
+            if (request.roleIds() != null) {
+                user.setRoles(resolveRoles(request.roleIds()));
+            }
+
+            User saved = userRepository.save(user);
+            log.info("用户更新成功 - ID: {}, 用户名: {}, 变更: 姓名[{}->{}], 邮箱[{}->{}]", 
+                    saved.getId(), saved.getUsername(), oldFullName, saved.getFullName(), 
+                    oldEmail, saved.getEmail());
+            return toResponse(saved);
+            
+        } catch (Exception e) {
+            log.error("用户更新失败 - ID: {}, 错误: {}", userId, e.getMessage());
+            throw e;
+        }
+    }
+
+    @Override
+    @Transactional
+    @AuditLog(operation = "DELETE_USER", module = "用户管理", description = "删除用户")
     public void deleteUser(Long userId) {
-        User user = userRepository.findById(userId)
-            .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "用户不存在"));
-        userRepository.delete(user);
+        log.info("开始删除用户 - ID: {}", userId);
+        
+        try {
+            User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "用户不存在"));
+            
+            String username = user.getUsername();
+            userRepository.delete(user);
+            log.info("用户删除成功 - ID: {}, 用户名: {}", userId, username);
+            
+        } catch (Exception e) {
+            log.error("用户删除失败 - ID: {}, 错误: {}", userId, e.getMessage());
+            throw e;
+        }
     }
 
     @Override
     @Transactional
+    @AuditLog(operation = "RESET_PASSWORD", module = "用户管理", description = "重置用户密码", recordParams = false)
     public void updatePassword(Long userId, UserPasswordRequest request) {
-        User user = userRepository.findById(userId)
-            .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "用户不存在"));
-        String defaultPassword = user.getUsername() + "123456";
-        user.setPassword(passwordEncoder.encode(defaultPassword));
-        userRepository.save(user);
+        log.info("开始重置用户密码 - ID: {}", userId);
+        
+        try {
+            User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "用户不存在"));
+            
+            String defaultPassword = user.getUsername() + "123456";
+            user.setPassword(passwordEncoder.encode(defaultPassword));
+            userRepository.save(user);
 
-        String email = user.getEmail();
-        if (!StringUtils.hasText(email)) {
-            throw new BusinessException(ResultCode.BAD_REQUEST, "用户未绑定邮箱，无法发送重置密码通知");
+            String email = user.getEmail();
+            if (!StringUtils.hasText(email)) {
+                throw new BusinessException(ResultCode.BAD_REQUEST, "用户未绑定邮箱，无法发送重置密码通知");
+            }
+
+            emailNotificationService.sendEmailNotification(new EmailNotificationRequest(
+                email.trim(),
+                "密码已重置通知",
+                "PASSWORD_RESET",
+                Map.of(
+                    "username", user.getUsername(),
+                    "newPassword", defaultPassword
+                )
+            ));
+            
+            log.info("用户密码重置成功 - ID: {}, 用户名: {}, 已发送邮件通知", userId, user.getUsername());
+            
+        } catch (Exception e) {
+            log.error("用户密码重置失败 - ID: {}, 错误: {}", userId, e.getMessage());
+            throw e;
         }
-
-        emailNotificationService.sendEmailNotification(new EmailNotificationRequest(
-            email.trim(),
-            "密码已重置通知",
-            "PASSWORD_RESET",
-            Map.of(
-                "username", user.getUsername(),
-                "newPassword", defaultPassword
-            )
-        ));
     }
 
     @Override

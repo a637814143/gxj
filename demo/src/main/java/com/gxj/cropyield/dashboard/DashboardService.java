@@ -23,6 +23,7 @@ import com.lowagie.text.pdf.PdfPTable;
 import com.lowagie.text.pdf.PdfWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -59,8 +60,14 @@ public class DashboardService {
         this.forecastSnapshotRepository = forecastSnapshotRepository;
     }
 
+    /**
+     * 获取仪表盘摘要数据
+     * 使用缓存优化性能，缓存5分钟后自动过期
+     */
+    @Cacheable(value = "dashboardSummary", key = "'summary'")
     public DashboardSummaryResponse getSummary() {
-        List<YieldRecord> records = yieldRecordRepository.findAll();
+        // 使用优化的查询方法，预加载crop和region，避免N+1查询
+        List<YieldRecord> records = yieldRecordRepository.findAllWithDetails();
         if (records.isEmpty()) {
             return new DashboardSummaryResponse(
                     0,

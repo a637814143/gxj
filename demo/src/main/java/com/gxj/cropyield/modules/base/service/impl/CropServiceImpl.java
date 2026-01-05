@@ -6,6 +6,8 @@ import com.gxj.cropyield.modules.base.dto.CropRequest;
 import com.gxj.cropyield.modules.base.entity.Crop;
 import com.gxj.cropyield.modules.base.repository.CropRepository;
 import com.gxj.cropyield.modules.base.service.CropService;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,12 +27,14 @@ public class CropServiceImpl implements CropService {
     }
 
     @Override
+    @Cacheable(value = "crops", key = "'all'")
     public List<Crop> listAll() {
         return cropRepository.findAll();
     }
 
     @Override
     @Transactional
+    @CacheEvict(value = "crops", allEntries = true)
     public Crop create(CropRequest request) {
         cropRepository.findByCode(request.code()).ifPresent(crop -> {
             throw new BusinessException(ResultCode.BAD_REQUEST, "作物编码已存在");

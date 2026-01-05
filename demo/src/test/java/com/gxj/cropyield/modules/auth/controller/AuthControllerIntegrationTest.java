@@ -96,6 +96,7 @@ class AuthControllerIntegrationTest {
             "Password123!",
             "农业部门测试用户",
             "agri-" + UUID.randomUUID().toString().substring(0, 8) + "@example.com",
+            "TEST_CODE",  // emailCode
             "AGRICULTURE_DEPT"
         );
 
