@@ -26,7 +26,7 @@
 
 ## 5. 数据与模型设计
 - 数据库：`schema.sql` 预置 20 余张表，覆盖作物、区域、数据集、预测运行、报表及权限体系；`data.sql` 写入基础作物、角色与管理员账号，确保开箱即用。【F:README.md†L56-L63】
-- 预测模型：默认创建包括 Prophet 节假日回归在内的多种模型，支持节假日与季节性因素建模，兼顾趋势和鲁棒性。【F:docs/thesis_excerpt.txt†L32-L49】
+- 预测模型：默认创建包括 Prophet 事件影响在内的多种模型，支持事件影响与季节性因素建模，兼顾趋势和鲁棒性。【F:docs/thesis_excerpt.txt†L32-L49】
 - 评估与可视化：使用 ECharts 展示产量统计与预测结果，可对不同模型效果进行指标评价与对比。【F:docs/thesis_excerpt.txt†L32-L49】【F:README.md†L69-L96】
 
 ## 6. 演示节奏建议

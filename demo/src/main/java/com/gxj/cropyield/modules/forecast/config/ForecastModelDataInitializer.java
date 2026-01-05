@@ -44,9 +44,9 @@ public class ForecastModelDataInitializer implements ApplicationRunner {
                 "利用差分、移动平均与季节性分量捕捉产量序列的周期性与趋势。"
         );
         ensureDefaultModel(
-                "Prophet 节假日回归模型",
+                "Prophet 事件影响模型",
                 ForecastModel.ModelType.PROPHET,
-                "基于 Facebook Prophet，将节假日与季节项回归到产量预测。"
+                "基于 Facebook Prophet，将特殊事件影响与季节项回归到产量预测。"
         );
     }
 
