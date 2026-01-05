@@ -91,9 +91,9 @@ onMounted(() => {
 const rawMenuItems = [
   { label: '仪表盘', name: 'dashboard', path: '/dashboard' },
   { label: '数据中心', name: 'data', path: '/data' },
-  { label: '数据可视化', name: 'visualization', path: '/visualization' },
+  { label: '历史产量数据可视化', name: 'visualization', path: '/visualization' },
   { label: '预测中心', name: 'forecast', path: '/forecast' },
-  { label: '预测可视化', name: 'forecastVisualization', path: '/forecast-visualization' },
+  { label: '产量预测可视化', name: 'forecastVisualization', path: '/forecast-visualization' },
   { label: '天气监测', name: 'weather', path: '/weather' },
   { label: '气象分析', name: 'weatherAnalytics', path: '/weather-analytics' },
   { label: '在线咨询', name: 'consultation', path: '/consultation' },
@@ -106,9 +106,9 @@ const menuItems = computed(() => rawMenuItems.filter(item => canAccessRoute(item
 const quickActionConfigs = computed(() => [
   { key: 'dashboard', label: '仪表盘', icon: '📊', type: 'route', name: 'dashboard', accent: 'sunrise' },
   { key: 'data', label: '数据中心', icon: '🗄️', type: 'route', name: 'data', accent: 'coral' },
-  { key: 'visualization', label: '数据可视化', icon: '📈', type: 'route', name: 'visualization', accent: 'violet' },
+  { key: 'visualization', label: '历史产量数据可视化', icon: '📈', type: 'route', name: 'visualization', accent: 'violet' },
   { key: 'forecast', label: '预测中心', icon: '🚀', type: 'route', name: 'forecast', accent: 'sunset' },
-  { key: 'forecast-visualization', label: '预测可视化', icon: '📉', type: 'route', name: 'forecastVisualization', accent: 'violet' },
+  { key: 'forecast-visualization', label: '产量预测可视化', icon: '📉', type: 'route', name: 'forecastVisualization', accent: 'violet' },
   { key: 'weather-analytics', label: '气象分析', icon: '🌤️', type: 'route', name: 'weatherAnalytics', accent: 'lagoon' },
   { key: 'consultation', label: '在线咨询', icon: '💬', type: 'route', name: 'consultation', accent: 'lagoon' },
   { key: 'weather', label: '天气监测', icon: '☀️', type: 'route', name: 'weather', accent: 'sky' },
