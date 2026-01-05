@@ -499,8 +499,8 @@ const parameterExamples = computed(() => {
     },
     {
       key: 'futureWeatherFeatures',
-      hint: '{"2025": {"temp": 20, "rainfall": 800}}（JSON，未来年份→特征值）',
-      reason: '已知未来年份的天气特征时显式传入，可避免模型用均值或趋势外推导致偏差'
+      hint: '{"2025": {"avgTemp": 20, "rainfall": 800}}（JSON，未来年份→【天气特征名: 特征值】）',
+      reason: '“特征值”指该天气特征的具体数值，如平均气温(℃)、降水量(mm)等；用训练时的特征字段填入未来情景，可避免模型用均值或趋势外推导致偏差'
     },
     {
       key: 'useNormalization',
