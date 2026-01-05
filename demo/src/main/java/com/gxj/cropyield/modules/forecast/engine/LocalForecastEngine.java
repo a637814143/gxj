@@ -58,6 +58,8 @@ public class LocalForecastEngine {
     }
 
     private final Dl4jLstmForecaster lstmForecaster = new Dl4jLstmForecaster();
+    private final ArimaForecaster arimaForecaster = new ArimaForecaster();
+    private final ProphetForecaster prophetForecaster = new ProphetForecaster();
     private static final class WeatherRegressionResult {
         private final List<Double> forecast;
         private final ForecastEngineResponse.EvaluationMetrics metrics;
@@ -170,7 +172,50 @@ public class LocalForecastEngine {
             metrics = regressionResult.metrics != null
                 ? regressionResult.metrics
                 : buildBaselineMetrics(historyValues);
+        } else if (modelType == ForecastModel.ModelType.LSTM) {
+            // Force LSTM when explicitly selected
+            Optional<List<Double>> lstmForecast = lstmForecaster.forecast(historyValues, forecastPeriods, request.parameters());
+            if (lstmForecast.isPresent()) {
+                rawForecast = lstmForecast.get();
+                ForecastEvaluation lstmEvaluation = evaluateLstmPerformance(historyValues, request.parameters());
+                metrics = lstmEvaluation != null
+                    ? lstmEvaluation.metrics
+                    : buildBaselineMetrics(historyValues);
+            } else {
+                // Fallback to exponential smoothing if LSTM fails
+                rawForecast = exponentialSmoothingForecast(historyValues, forecastPeriods);
+                metrics = buildBaselineMetrics(historyValues);
+            }
+        } else if (modelType == ForecastModel.ModelType.ARIMA) {
+            // Use ARIMA forecaster
+            Optional<List<Double>> arimaForecast = arimaForecaster.forecast(historyValues, forecastPeriods, request.parameters());
+            if (arimaForecast.isPresent()) {
+                rawForecast = arimaForecast.get();
+                ForecastEvaluation arimaEvaluation = evaluateArimaPerformance(historyValues, request.parameters());
+                metrics = arimaEvaluation != null
+                    ? arimaEvaluation.metrics
+                    : buildBaselineMetrics(historyValues);
+            } else {
+                // Fallback to linear trend if ARIMA fails
+                rawForecast = linearTrendForecast(historyValues, forecastPeriods);
+                metrics = buildBaselineMetrics(historyValues);
+            }
+        } else if (modelType == ForecastModel.ModelType.PROPHET) {
+            // Use Prophet forecaster
+            Optional<List<Double>> prophetForecast = prophetForecaster.forecast(historyValues, forecastPeriods, request.parameters());
+            if (prophetForecast.isPresent()) {
+                rawForecast = prophetForecast.get();
+                ForecastEvaluation prophetEvaluation = evaluateProphetPerformance(historyValues, request.parameters());
+                metrics = prophetEvaluation != null
+                    ? prophetEvaluation.metrics
+                    : buildBaselineMetrics(historyValues);
+            } else {
+                // Fallback to exponential smoothing if Prophet fails
+                rawForecast = exponentialSmoothingForecast(historyValues, forecastPeriods);
+                metrics = buildBaselineMetrics(historyValues);
+            }
         } else {
+            // Auto-select best algorithm for other model types
             List<ForecastCandidate> candidates = new ArrayList<>();
 
             DoubleExponentialModel optimizedModel = fitDoubleExponentialModel(historyValues);
@@ -215,9 +260,9 @@ public class LocalForecastEngine {
                 linearEvaluation != null ? linearEvaluation.mapeScore : scoreFromMetric(linearMetrics.mape())
             ));
 
-            Optional<List<Double>> lstmForecast = lstmForecaster.forecast(historyValues, forecastPeriods);
+            Optional<List<Double>> lstmForecast = lstmForecaster.forecast(historyValues, forecastPeriods, request.parameters());
             if (lstmForecast.isPresent()) {
-                ForecastEvaluation lstmEvaluation = evaluateLstmPerformance(historyValues);
+                ForecastEvaluation lstmEvaluation = evaluateLstmPerformance(historyValues, request.parameters());
                 ForecastEngineResponse.EvaluationMetrics lstmMetrics = lstmEvaluation != null
                     ? lstmEvaluation.metrics
                     : buildBaselineMetrics(historyValues);
@@ -1075,7 +1120,7 @@ public class LocalForecastEngine {
         return computeEvaluation(actual, predicted);
     }
 
-    private ForecastEvaluation evaluateLstmPerformance(List<Double> historyValues) {
+    private ForecastEvaluation evaluateLstmPerformance(List<Double> historyValues, Map<String, Object> parameters) {
         int validationPoints = Math.min(3, historyValues.size() - MIN_LSTM_HISTORY);
         if (validationPoints <= 0) {
             return null;
@@ -1088,7 +1133,7 @@ public class LocalForecastEngine {
                 continue;
             }
             List<Double> training = new ArrayList<>(historyValues.subList(0, trainSize));
-            Optional<List<Double>> forecast = lstmForecaster.forecast(training, 1);
+            Optional<List<Double>> forecast = lstmForecaster.forecast(training, 1, parameters);
             if (forecast.isEmpty()) {
                 return null;
             }
@@ -1140,6 +1185,62 @@ public class LocalForecastEngine {
             r2 != null ? round(r2) : null
         );
         return new ForecastEvaluation(metrics, rmse, mape);
+    }
+
+    private ForecastEvaluation evaluateArimaPerformance(List<Double> historyValues, Map<String, Object> parameters) {
+        int validationPoints = Math.min(3, historyValues.size() - 5);
+        if (validationPoints <= 0) {
+            return null;
+        }
+        List<Double> actual = new ArrayList<>();
+        List<Double> predicted = new ArrayList<>();
+        for (int offset = validationPoints; offset > 0; offset--) {
+            int trainSize = historyValues.size() - offset;
+            if (trainSize < 5) {
+                continue;
+            }
+            List<Double> training = new ArrayList<>(historyValues.subList(0, trainSize));
+            Optional<List<Double>> forecast = arimaForecaster.forecast(training, 1, parameters);
+            if (forecast.isEmpty()) {
+                return null;
+            }
+            predicted.add(forecast.get().get(0));
+            actual.add(historyValues.get(trainSize));
+        }
+        if (actual.isEmpty() || predicted.size() != actual.size()) {
+            return null;
+        }
+        double[] actualArray = actual.stream().mapToDouble(Double::doubleValue).toArray();
+        double[] predictedArray = predicted.stream().mapToDouble(Double::doubleValue).toArray();
+        return computeEvaluation(actualArray, predictedArray);
+    }
+
+    private ForecastEvaluation evaluateProphetPerformance(List<Double> historyValues, Map<String, Object> parameters) {
+        int validationPoints = Math.min(3, historyValues.size() - 4);
+        if (validationPoints <= 0) {
+            return null;
+        }
+        List<Double> actual = new ArrayList<>();
+        List<Double> predicted = new ArrayList<>();
+        for (int offset = validationPoints; offset > 0; offset--) {
+            int trainSize = historyValues.size() - offset;
+            if (trainSize < 4) {
+                continue;
+            }
+            List<Double> training = new ArrayList<>(historyValues.subList(0, trainSize));
+            Optional<List<Double>> forecast = prophetForecaster.forecast(training, 1, parameters);
+            if (forecast.isEmpty()) {
+                return null;
+            }
+            predicted.add(forecast.get().get(0));
+            actual.add(historyValues.get(trainSize));
+        }
+        if (actual.isEmpty() || predicted.size() != actual.size()) {
+            return null;
+        }
+        double[] actualArray = actual.stream().mapToDouble(Double::doubleValue).toArray();
+        double[] predictedArray = predicted.stream().mapToDouble(Double::doubleValue).toArray();
+        return computeEvaluation(actualArray, predictedArray);
     }
 
     private ForecastCandidate selectBestCandidate(List<ForecastCandidate> candidates) {

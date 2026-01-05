@@ -16,6 +16,7 @@ import org.nd4j.linalg.lossfunctions.LossFunctions;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 /**
  * 预测管理模块的业务组件，封装预测管理的算法或执行流程。
@@ -26,8 +27,14 @@ class Dl4jLstmForecaster {
     private static final int MIN_WINDOW_SIZE = 2;
     private static final int MAX_WINDOW_SIZE = 12;
     private static final double EPSILON = 1e-9;
+    private static final double DEFAULT_LEARNING_RATE = 0.01;
+    private static final int DEFAULT_SEED = 42;
 
     Optional<List<Double>> forecast(List<Double> historyValues, int periods) {
+        return forecast(historyValues, periods, null);
+    }
+
+    Optional<List<Double>> forecast(List<Double> historyValues, int periods, Map<String, Object> parameters) {
         if (historyValues == null || historyValues.size() <= MIN_WINDOW_SIZE) {
             return Optional.empty();
         }
@@ -59,10 +66,23 @@ class Dl4jLstmForecaster {
         }
 
         DataSet trainingData = buildTrainingSet(scaledSeries, windowSize, sampleCount);
-        MultiLayerNetwork network = buildNetwork();
+        
+        // Extract parameters
+        double learningRate = extractDoubleParameter(parameters, "learningRate", DEFAULT_LEARNING_RATE);
+        int seed = extractIntParameter(parameters, "seed", DEFAULT_SEED);
+        Integer epochsParam = extractIntParameter(parameters, "epochs", null);
+        
+        // Set random seed if provided
+        if (parameters != null && parameters.containsKey("seed")) {
+            Nd4j.getRandom().setSeed(seed);
+        }
+        
+        MultiLayerNetwork network = buildNetwork(learningRate, seed);
         network.init();
         network.setListeners(new ScoreIterationListener(Math.max(10, sampleCount)));
-        int epochs = Math.max(40, Math.min(200, sampleCount * 15));
+        
+        // Use epochs from parameters if provided, otherwise use calculated value
+        int epochs = epochsParam != null ? epochsParam : Math.max(40, Math.min(200, sampleCount * 15));
         for (int epoch = 0; epoch < epochs; epoch++) {
             network.fit(trainingData);
         }
@@ -109,11 +129,15 @@ class Dl4jLstmForecaster {
     }
 
     private MultiLayerNetwork buildNetwork() {
+        return buildNetwork(DEFAULT_LEARNING_RATE, DEFAULT_SEED);
+    }
+
+    private MultiLayerNetwork buildNetwork(double learningRate, int seed) {
         MultiLayerConfiguration configuration = new NeuralNetConfiguration.Builder()
-            .seed(42)
+            .seed(seed)
             .optimizationAlgo(OptimizationAlgorithm.STOCHASTIC_GRADIENT_DESCENT)
             .weightInit(WeightInit.XAVIER)
-            .updater(new Adam(0.01))
+            .updater(new Adam(learningRate))
             .list(
                 new LSTM.Builder()
                     .activation(Activation.TANH)
@@ -128,6 +152,36 @@ class Dl4jLstmForecaster {
             )
             .build();
         return new MultiLayerNetwork(configuration);
+    }
+
+    private double extractDoubleParameter(Map<String, Object> parameters, String key, double defaultValue) {
+        if (parameters == null || !parameters.containsKey(key)) {
+            return defaultValue;
+        }
+        Object value = parameters.get(key);
+        if (value instanceof Number) {
+            return ((Number) value).doubleValue();
+        }
+        try {
+            return Double.parseDouble(value.toString());
+        } catch (NumberFormatException ex) {
+            return defaultValue;
+        }
+    }
+
+    private Integer extractIntParameter(Map<String, Object> parameters, String key, Integer defaultValue) {
+        if (parameters == null || !parameters.containsKey(key)) {
+            return defaultValue;
+        }
+        Object value = parameters.get(key);
+        if (value instanceof Number) {
+            return ((Number) value).intValue();
+        }
+        try {
+            return Integer.parseInt(value.toString());
+        } catch (NumberFormatException ex) {
+            return defaultValue;
+        }
     }
 
     private double predict(MultiLayerNetwork network, double[] window) {
