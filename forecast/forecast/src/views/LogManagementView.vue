@@ -111,7 +111,7 @@
             {{ row.ipAddress || '未知' }}
           </template>
         </el-table-column>
-        <el-table-column prop="userAgent" label="User-Agent" min-width="220">
+        <el-table-column prop="userAgent" label="用户代理" min-width="220">
           <template #default="{ row }">
             <span class="ua-text" :title="row.userAgent">{{ row.userAgent || '未记录' }}</span>
           </template>
@@ -167,7 +167,7 @@
         <el-form-item label="IP 地址" prop="ipAddress">
           <el-input v-model.trim="dialogForm.ipAddress" placeholder="例如 192.168.0.1" />
         </el-form-item>
-        <el-form-item label="User-Agent" prop="userAgent">
+        <el-form-item label="用户代理" prop="userAgent">
           <el-input v-model.trim="dialogForm.userAgent" placeholder="浏览器或客户端信息" />
         </el-form-item>
         <el-form-item label="描述信息" prop="message">
@@ -202,7 +202,7 @@
             </el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="IP 地址">{{ selectedLog?.ipAddress || '未知' }}</el-descriptions-item>
-          <el-descriptions-item label="User-Agent">
+          <el-descriptions-item label="用户代理">
             <span class="ua-text">{{ selectedLog?.userAgent || '未记录' }}</span>
           </el-descriptions-item>
           <el-descriptions-item label="描述信息">{{ selectedLog?.message || '—' }}</el-descriptions-item>
@@ -319,7 +319,7 @@ const dialogRules = {
   ],
   success: [{ required: true, message: '请选择登录结果', trigger: 'change' }],
   ipAddress: [createOptionalLengthRule(64, 'IP 地址')],
-  userAgent: [createOptionalLengthRule(256, 'User-Agent')],
+  userAgent: [createOptionalLengthRule(256, '用户代理')],
   message: [createOptionalLengthRule(256, '描述信息')]
 }
 
