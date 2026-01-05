@@ -113,7 +113,6 @@ const quickActionConfigs = computed(() => [
   { key: 'consultation', label: '在线咨询', icon: '💬', type: 'route', name: 'consultation', accent: 'lagoon' },
   { key: 'weather', label: '天气监测', icon: '☀️', type: 'route', name: 'weather', accent: 'sky' },
   { key: 'report', label: '报告中心', icon: '📄', type: 'route', name: 'report', accent: 'ocean' },
-  { key: 'report-generate', label: '生成报告', icon: '📝', type: 'generate', accent: 'forest' },
   { key: 'profile', label: '个人中心', icon: '👤', type: 'route', name: 'profile', accent: 'peach' }
 ])
 
@@ -121,9 +120,6 @@ const quickActions = computed(() =>
   quickActionConfigs.value.filter(action => {
     if (action.type === 'route') {
       return canAccessRoute(action.name)
-    }
-    if (action.type === 'generate') {
-      return canAccessRoute('report') && hasRole(['ADMIN', 'AGRICULTURE_DEPT'])
     }
     return true
   })
@@ -179,19 +175,10 @@ const navigateTo = name => {
   router.push({ name }).catch(() => {})
 }
 
-const navigateToReport = query => {
-  router.push({ name: 'report', query }).catch(() => {})
-}
-
 const handleAction = action => {
   if (!action) return
   if (action.type === 'route' && action.name) {
     navigateTo(action.name)
-    return
-  }
-  if (action.type === 'generate') {
-    navigateToReport({ action: 'generate' })
-    return
   }
 }
 

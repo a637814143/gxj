@@ -104,46 +104,46 @@ public class YieldRecordService {
             PdfWriter.getInstance(document, outputStream);
             document.open();
 
-            BaseFont baseFont = BaseFont.createFont("STSongStd-Light", "UniGB-UCS2-H", BaseFont.NOT_EMBEDDED);
+            BaseFont baseFont = BaseFont.createFont("STSong-Light", "UniGB-UCS2-H", BaseFont.NOT_EMBEDDED);
             Font titleFont = new Font(baseFont, 16, Font.BOLD);
             Font headerFont = new Font(baseFont, 11, Font.BOLD);
             Font bodyFont = new Font(baseFont, 10);
 
-            Paragraph title = new Paragraph("云南农作物产量数据导出", titleFont);
+            Paragraph title = new Paragraph(sanitizeForPdf("云南农作物产量数据导出"), titleFont);
             title.setAlignment(Element.ALIGN_CENTER);
             document.add(title);
 
-            document.add(new Paragraph("导出时间：" + DATE_FORMAT.format(LocalDate.now()), bodyFont));
-            document.add(new Paragraph(buildFilterSummary(records, cropId, regionId, startYear, endYear), bodyFont));
-            document.add(new Paragraph("记录总数：" + records.size(), bodyFont));
+            document.add(new Paragraph(sanitizeForPdf("导出时间：" + DATE_FORMAT.format(LocalDate.now())), bodyFont));
+            document.add(new Paragraph(sanitizeForPdf(buildFilterSummary(records, cropId, regionId, startYear, endYear)), bodyFont));
+            document.add(new Paragraph(sanitizeForPdf("记录总数：" + records.size()), bodyFont));
             document.add(new Paragraph(" "));
 
             PdfPTable table = new PdfPTable(10);
             table.setWidthPercentage(100);
             table.setWidths(new float[]{18, 13, 18, 12, 8, 14, 14, 14, 14, 18});
 
-            addHeaderCell(table, "作物", headerFont);
-            addHeaderCell(table, "类别", headerFont);
-            addHeaderCell(table, "地区", headerFont);
-            addHeaderCell(table, "地区级别", headerFont);
-            addHeaderCell(table, "年份", headerFont);
-            addHeaderCell(table, "播种面积(千公顷)", headerFont);
-            addHeaderCell(table, "产量(万吨)", headerFont);
-            addHeaderCell(table, "单产(吨/公顷)", headerFont);
-            addHeaderCell(table, "采集日期", headerFont);
-            addHeaderCell(table, "数据来源", headerFont);
+            addHeaderCell(table, sanitizeForPdf("作物"), headerFont);
+            addHeaderCell(table, sanitizeForPdf("类别"), headerFont);
+            addHeaderCell(table, sanitizeForPdf("地区"), headerFont);
+            addHeaderCell(table, sanitizeForPdf("地区级别"), headerFont);
+            addHeaderCell(table, sanitizeForPdf("年份"), headerFont);
+            addHeaderCell(table, sanitizeForPdf("播种面积(千公顷)"), headerFont);
+            addHeaderCell(table, sanitizeForPdf("产量(万吨)"), headerFont);
+            addHeaderCell(table, sanitizeForPdf("单产(吨/公顷)"), headerFont);
+            addHeaderCell(table, sanitizeForPdf("采集日期"), headerFont);
+            addHeaderCell(table, sanitizeForPdf("数据来源"), headerFont);
 
             for (YieldRecord record : records) {
-                addBodyCell(table, record.getCrop().getName(), bodyFont);
-                addBodyCell(table, nullToEmpty(record.getCrop().getCategory()), bodyFont);
-                addBodyCell(table, record.getRegion().getName(), bodyFont);
-                addBodyCell(table, nullToEmpty(record.getRegion().getLevel()), bodyFont);
+                addBodyCell(table, sanitizeForPdf(record.getCrop().getName()), bodyFont);
+                addBodyCell(table, sanitizeForPdf(nullToEmpty(record.getCrop().getCategory())), bodyFont);
+                addBodyCell(table, sanitizeForPdf(record.getRegion().getName()), bodyFont);
+                addBodyCell(table, sanitizeForPdf(nullToEmpty(record.getRegion().getLevel())), bodyFont);
                 addBodyCell(table, String.valueOf(record.getYear()), bodyFont);
                 addBodyCell(table, formatNumber(record.getSownArea()), bodyFont);
                 addBodyCell(table, formatNumber(record.getProduction()), bodyFont);
                 addBodyCell(table, formatNumber(record.getYieldPerHectare()), bodyFont);
                 addBodyCell(table, formatDate(record.getCollectedAt()), bodyFont);
-                addBodyCell(table, nullToEmpty(record.getDataSource()), bodyFont);
+                addBodyCell(table, sanitizeForPdf(nullToEmpty(record.getDataSource())), bodyFont);
             }
 
             document.add(table);
@@ -222,6 +222,70 @@ public class YieldRecordService {
 
     private String nullToEmpty(String value) {
         return value == null ? "" : value;
+    }
+    
+    private String sanitizeForPdf(String text) {
+        if (text == null || text.isEmpty()) {
+            return text;
+        }
+        // 替换常见的特殊字符为 PDF 友好的版本
+        return text
+            // 数学符号
+            .replace("²", "2")
+            .replace("³", "3")
+            .replace("±", "+/-")
+            .replace("×", "x")
+            .replace("÷", "/")
+            .replace("≈", "~")
+            .replace("≤", "<=")
+            .replace("≥", ">=")
+            .replace("≠", "!=")
+            // 箭头符号
+            .replace("→", "->")
+            .replace("←", "<-")
+            .replace("↑", "^")
+            .replace("↓", "v")
+            // 项目符号和形状
+            .replace("•", "* ")
+            .replace("◦", "o ")
+            .replace("▪", "* ")
+            .replace("■", "* ")
+            .replace("□", "o ")
+            .replace("▲", "^ ")
+            .replace("△", "^ ")
+            .replace("▼", "v ")
+            .replace("►", "> ")
+            .replace("◄", "< ")
+            .replace("◆", "* ")
+            .replace("◇", "o ")
+            .replace("★", "* ")
+            .replace("☆", "* ")
+            .replace("●", "* ")
+            .replace("○", "o ")
+            // 货币符号
+            .replace("€", "EUR ")
+            .replace("£", "GBP ")
+            .replace("¥", "CNY ")
+            .replace("$", "USD ")
+            // 版权和商标
+            .replace("©", "(c) ")
+            .replace("®", "(R) ")
+            .replace("™", "(TM) ")
+            // 其他常用符号
+            .replace("°", " degrees ")
+            .replace("℃", "C ")
+            .replace("℉", "F ")
+            .replace("…", "...")
+            .replace("–", "-")
+            .replace("—", "--")
+            .replace("'", "'")
+            .replace("'", "'")
+            .replace("\u201C", "\"")
+            .replace("\u201D", "\"")
+            .replace("«", "<<")
+            .replace("»", ">>")
+            .replace("¡", "!")
+            .replace("¿", "?");
     }
 
     private YieldRecordResponse mapToResponse(YieldRecord record) {

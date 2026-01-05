@@ -566,8 +566,97 @@ const handleExportExcel = () => {
   }
 }
 
+const sanitizeForPdf = text => {
+  if (!text) return text
+  let str = String(text)
+  
+  // 首先替换已知的特殊符号
+  str = str
+    // 数学符号
+    .replace(/²/g, '2')
+    .replace(/³/g, '3')
+    .replace(/±/g, '+/-')
+    .replace(/×/g, 'x')
+    .replace(/÷/g, '/')
+    .replace(/≈/g, '~')
+    .replace(/≤/g, '<=')
+    .replace(/≥/g, '>=')
+    .replace(/≠/g, '!=')
+    // 箭头符号
+    .replace(/→/g, '->')
+    .replace(/←/g, '<-')
+    .replace(/↑/g, '^')
+    .replace(/↓/g, 'v')
+    // 项目符号和形状
+    .replace(/•/g, '* ')
+    .replace(/◦/g, 'o ')
+    .replace(/▪/g, '* ')
+    .replace(/■/g, '* ')
+    .replace(/□/g, 'o ')
+    .replace(/▲/g, '^ ')
+    .replace(/△/g, '^ ')
+    .replace(/▼/g, 'v ')
+    .replace(/►/g, '> ')
+    .replace(/◄/g, '< ')
+    .replace(/◆/g, '* ')
+    .replace(/◇/g, 'o ')
+    .replace(/★/g, '* ')
+    .replace(/☆/g, '* ')
+    .replace(/●/g, '* ')
+    .replace(/○/g, 'o ')
+    // 货币符号
+    .replace(/€/g, 'EUR ')
+    .replace(/£/g, 'GBP ')
+    .replace(/¥/g, 'CNY ')
+    .replace(/\$/g, 'USD ')
+    // 版权和商标
+    .replace(/©/g, '(c) ')
+    .replace(/®/g, '(R) ')
+    .replace(/™/g, '(TM) ')
+    // 其他常用符号
+    .replace(/°/g, ' degrees ')
+    .replace(/℃/g, 'C ')
+    .replace(/℉/g, 'F ')
+    .replace(/…/g, '...')
+    .replace(/–/g, '-')
+    .replace(/—/g, '--')
+    .replace(/'/g, "'")
+    .replace(/'/g, "'")
+    .replace(/"/g, '"')
+    .replace(/"/g, '"')
+    .replace(/«/g, '<<')
+    .replace(/»/g, '>>')
+    .replace(/¡/g, '!')
+    .replace(/¿/g, '?')
+  
+  // 过滤掉可能导致问题的字符：保留基本的ASCII、常用中文和标点
+  // Unicode范围：
+  // 0x0020-0x007E: 基本ASCII
+  // 0x4E00-0x9FFF: CJK统一汉字
+  // 0x3000-0x303F: CJK符号和标点
+  // 0xFF00-0xFFEF: 全角ASCII、全角标点
+  const result = []
+  for (const char of str) {
+    const code = char.codePointAt(0)
+    if (
+      (code >= 0x0020 && code <= 0x007E) ||  // 基本ASCII
+      (code >= 0x4E00 && code <= 0x9FFF) ||  // CJK统一汉字
+      (code >= 0x3000 && code <= 0x303F) ||  // CJK符号和标点
+      (code >= 0xFF00 && code <= 0xFFEF) ||  // 全角字符
+      code === 0x000A || code === 0x000D     // 换行符
+    ) {
+      result.push(char)
+    } else {
+      // 其他字符替换为空格或问号
+      result.push(' ')
+    }
+  }
+  
+  return result.join('')
+}
+
 const encodePdfText = text => {
-  const value = String(text ?? '')
+  const value = sanitizeForPdf(String(text ?? ''))
   const codePoints = Array.from(value)
   const bytes = [0xfe, 0xff]
   codePoints.forEach(char => {

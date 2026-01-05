@@ -391,8 +391,17 @@
         <el-table-column label="生成时间" min-width="200">
           <template #default="{ row }">{{ formatHistoryDateTime(row.generatedAt) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
+        <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
+            <el-button
+              type="primary"
+              link
+              size="small"
+              :disabled="generatingReportRunId === row.runId"
+              @click="handleGenerateReport(row)"
+            >
+              生成报告
+            </el-button>
             <el-button
               type="danger"
               link
@@ -435,7 +444,9 @@ import {
   fetchRegionCrops,
   fetchRegions,
 } from '@/services/forecast'
+import { generateReport } from '@/services/report'
 import { useAuthStore } from '@/stores/auth'
+import { useRouter } from 'vue-router'
 
 const selectors = reactive({
   regionId: null,
@@ -529,9 +540,12 @@ const historyPagination = reactive({
 })
 const historyLoading = ref(false)
 const deletingRunId = ref(null)
+const generatingReportRunId = ref(null)
 let historyRequestId = 0
 const loading = ref(false)
 const errorMessage = ref('')
+
+const router = useRouter()
 
 const disableSubmit = computed(() => !selectors.regionId || !selectors.cropId || !selectors.modelId)
 
@@ -1170,6 +1184,54 @@ const handleDeleteHistory = async row => {
   } finally {
     if (deletingRunId.value === row.runId) {
       deletingRunId.value = null
+    }
+  }
+}
+
+const handleGenerateReport = async row => {
+  if (!row?.forecastResultId) {
+    ElMessage.warning('该预测记录缺少结果 ID，无法生成报告')
+    return
+  }
+  
+  if (!row?.cropId || !row?.regionId) {
+    ElMessage.warning('该预测记录缺少作物或区域信息，无法生成报告')
+    return
+  }
+
+  generatingReportRunId.value = row.runId
+  
+  try {
+    const nowYear = new Date().getFullYear()
+    const payload = {
+      cropId: row.cropId,
+      regionId: row.regionId,
+      startYear: nowYear - 4,
+      endYear: nowYear,
+      includeForecastComparison: true,
+      forecastResultId: row.forecastResultId,
+      title: `${row.regionName}${row.cropName}产量分析报告`,
+      description: `基于预测结果 #${row.forecastResultId} 自动生成的专题分析`,
+      author: null
+    }
+
+    const { data } = await generateReport(payload)
+    const detail = data?.data ?? data
+    
+    ElMessage.success('报告生成成功，即将跳转到报告中心')
+    
+    // 跳转到报告中心并打开详情
+    setTimeout(() => {
+      router.push({ 
+        name: 'report',
+        query: { reportId: detail?.summary?.id }
+      })
+    }, 1000)
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.message || '生成报告失败')
+  } finally {
+    if (generatingReportRunId.value === row.runId) {
+      generatingReportRunId.value = null
     }
   }
 }

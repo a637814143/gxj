@@ -115,7 +115,9 @@ public class ForecastHistoryServiceImpl implements ForecastHistoryService {
             forecastResultId,
             snapshot.getPeriod(),
             snapshot.getYear(),
+            run.getRegion().getId(),
             run.getRegion().getName(),
+            run.getCrop().getId(),
             run.getCrop().getName(),
             run.getModel().getName(),
             run.getModel().getType().name(),
@@ -125,6 +127,8 @@ public class ForecastHistoryServiceImpl implements ForecastHistoryService {
             snapshot.getPredictedProduction(),
             snapshot.getPredictedYield(),
             snapshot.getSownArea(),
+            null, // averagePrice - 可以后续从价格记录表查询
+            null, // estimatedRevenue - 可以后续计算
             generatedAt
         );
     }

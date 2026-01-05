@@ -2,6 +2,12 @@ import { defineStore } from 'pinia'
 
 const LOCAL_STORAGE_KEY = 'cropyield-auth'
 const SESSION_STORAGE_KEY = 'cropyield-auth-session'
+const SESSION_ID_KEY = 'cropyield-session-id'
+
+// 生成唯一的会话ID
+const generateSessionId = () => {
+  return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+}
 
 const readStorage = key => {
   try {
@@ -81,7 +87,10 @@ export const useAuthStore = defineStore('auth', {
     expiresAt: 0,
     rememberMe: false,
     refreshTimer: null,
-    user: null
+    user: null,
+    isLoggingOut: false,
+    sessionId: null,
+    storageListener: null
   }),
   getters: {
     isAuthenticated: state => Boolean(state.token) && Date.now() < state.expiresAt,
@@ -92,6 +101,13 @@ export const useAuthStore = defineStore('auth', {
       if (this.initialized) {
         return
       }
+      
+      // 生成当前标签页的会话ID
+      this.sessionId = generateSessionId()
+      
+      // 设置storage事件监听，检测其他标签页的登录
+      this.setupStorageListener()
+      
       const stored = deserializeAuthState()
       if (stored && stored.token && stored.expiresAt && stored.expiresAt > Date.now()) {
         this.applyStoredState(stored)
@@ -107,6 +123,30 @@ export const useAuthStore = defineStore('auth', {
       this.initialized = true
       this.scheduleRefresh()
     },
+    
+    setupStorageListener() {
+      // 监听localStorage变化，检测其他标签页的登录
+      this.storageListener = (event) => {
+        // 只处理会话ID的变化
+        if (event.key === SESSION_ID_KEY && event.newValue) {
+          const newSessionId = event.newValue
+          // 如果检测到新的会话ID，且不是当前会话，则强制登出
+          if (newSessionId !== this.sessionId && this.isAuthenticated) {
+            console.warn('检测到其他标签页登录，当前会话将被登出')
+            this.forceLogout('其他标签页有新用户登录，当前会话已失效')
+          }
+        }
+      }
+      window.addEventListener('storage', this.storageListener)
+    },
+    
+    removeStorageListener() {
+      if (this.storageListener) {
+        window.removeEventListener('storage', this.storageListener)
+        this.storageListener = null
+      }
+    },
+    
     applyStoredState(stored) {
       this.token = stored.token
       this.tokenType = stored.tokenType || 'Bearer'
@@ -115,6 +155,7 @@ export const useAuthStore = defineStore('auth', {
       this.rememberMe = Boolean(stored.rememberMe)
       this.user = stored.user || null
     },
+    
     persistState() {
       const payload = {
         token: this.token,
@@ -131,7 +172,13 @@ export const useAuthStore = defineStore('auth', {
         writeSessionStorage(SESSION_STORAGE_KEY, payload)
         removeStorage(LOCAL_STORAGE_KEY)
       }
+      
+      // 保存当前会话ID到localStorage，触发其他标签页的storage事件
+      if (this.sessionId) {
+        window.localStorage.setItem(SESSION_ID_KEY, this.sessionId)
+      }
     },
+    
     clearSession() {
       this.token = null
       this.tokenType = 'Bearer'
@@ -139,13 +186,36 @@ export const useAuthStore = defineStore('auth', {
       this.expiresAt = 0
       this.rememberMe = false
       this.user = null
+      this.isLoggingOut = false
       if (this.refreshTimer) {
         window.clearTimeout(this.refreshTimer)
         this.refreshTimer = null
       }
       removeStorage(LOCAL_STORAGE_KEY)
       removeSessionStorage(SESSION_STORAGE_KEY)
+      window.localStorage.removeItem(SESSION_ID_KEY)
     },
+    
+    beginLogout() {
+      this.isLoggingOut = true
+    },
+    
+    forceLogout(message) {
+      this.clearSession()
+      this.initialized = true
+      
+      // 跳转到登录页并显示提示信息
+      const router = window.$router
+      if (router) {
+        router.push({
+          path: '/login',
+          query: { message: message || '会话已失效，请重新登录' }
+        })
+      } else {
+        window.location.href = '/login'
+      }
+    },
+    
     hasAnyRole(roles) {
       if (!Array.isArray(roles) || roles.length === 0) {
         return true
@@ -155,6 +225,7 @@ export const useAuthStore = defineStore('auth', {
       }
       return roles.some(role => this.user.roles.includes(role))
     },
+    
     async register(payload) {
       const { rememberMe, ...requestBody } = payload
       const client = await getApiClient()
@@ -166,6 +237,7 @@ export const useAuthStore = defineStore('auth', {
       this.applyLoginResponse(response, rememberMe)
       return response
     },
+    
     async login(payload) {
       const { rememberMe, loginMode, ...requestBody } = payload
       const client = await getApiClient()
@@ -183,6 +255,7 @@ export const useAuthStore = defineStore('auth', {
       this.applyLoginResponse(response, rememberMe)
       return response
     },
+    
     applyLoginResponse(response, rememberMe = false) {
       const tokens = response.tokens
       const user = response.user
@@ -198,13 +271,15 @@ export const useAuthStore = defineStore('auth', {
       this.persistState()
       this.scheduleRefresh()
     },
+    
     async fetchCurrentUser() {
       const client = await getApiClient()
-      const { data } = await client.get('/api/auth/me')
+      const { data} = await client.get('/api/auth/me')
       this.user = data?.data || null
       this.persistState()
       return this.user
     },
+    
     async refreshAccessToken() {
       if (!this.refreshToken) {
         throw new Error('缺少刷新令牌')
@@ -223,6 +298,7 @@ export const useAuthStore = defineStore('auth', {
       this.scheduleRefresh()
       return this.token
     },
+    
     scheduleRefresh() {
       if (this.refreshTimer) {
         window.clearTimeout(this.refreshTimer)
@@ -243,7 +319,9 @@ export const useAuthStore = defineStore('auth', {
         }
       }, timeout)
     },
+    
     logout() {
+      this.removeStorageListener()
       this.clearSession()
       this.initialized = true
     }

@@ -29,8 +29,6 @@ const actionConfigs = computed(() => [
   { key: 'dashboard', label: '仪表盘', icon: '📊', type: 'route', name: 'dashboard', accent: 'sunrise' },
   { key: 'forecast', label: '预测中心', icon: '🚀', type: 'route', name: 'forecast', accent: 'sunset' },
   { key: 'report', label: '报告中心', icon: '📄', type: 'route', name: 'report', accent: 'ocean' },
-  { key: 'report-generate', label: '生成报告', icon: '📝', type: 'generate', accent: 'forest' },
-  { key: 'report-history', label: '报告列表', icon: '📚', type: 'focus', accent: 'violet' },
   { key: 'profile', label: '个人中心', icon: '👤', type: 'route', name: 'profile', accent: 'peach' }
 ])
 
@@ -39,36 +37,16 @@ const visibleActions = computed(() =>
     if (action.type === 'route') {
       return canAccessRoute(action.name)
     }
-    if (action.type === 'generate') {
-      return canAccessRoute('report') && hasRole(['ADMIN', 'AGRICULTURE_DEPT'])
-    }
-    if (action.type === 'focus') {
-      return canAccessRoute('report')
-    }
     return true
   })
 )
 
 const isActive = action => action.type === 'route' && action.name === route.name
 
-const navigateToReport = query => {
-  router
-    .push({ name: 'report', query })
-    .catch(() => {})
-}
-
 const handleAction = action => {
   if (!action) return
   if (action.type === 'route' && action.name) {
     router.push({ name: action.name }).catch(() => {})
-    return
-  }
-  if (action.type === 'generate') {
-    navigateToReport({ action: 'generate' })
-    return
-  }
-  if (action.type === 'focus') {
-    navigateToReport({ focus: 'list' })
   }
 }
 </script>

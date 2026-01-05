@@ -10,26 +10,45 @@ import com.gxj.cropyield.modules.dataset.entity.YieldRecord;
 import com.gxj.cropyield.modules.dataset.repository.YieldRecordRepository;
 import com.gxj.cropyield.modules.forecast.entity.ForecastSnapshot;
 import com.gxj.cropyield.modules.forecast.repository.ForecastSnapshotRepository;
+import com.lowagie.text.Document;
+import com.lowagie.text.DocumentException;
+import com.lowagie.text.Element;
+import com.lowagie.text.Font;
+import com.lowagie.text.PageSize;
+import com.lowagie.text.Paragraph;
+import com.lowagie.text.Phrase;
+import com.lowagie.text.pdf.BaseFont;
+import com.lowagie.text.pdf.PdfPCell;
+import com.lowagie.text.pdf.PdfPTable;
+import com.lowagie.text.pdf.PdfWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.DoubleSummaryStatistics;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 /**
  * 驾驶舱统计模块的业务接口，定义驾驶舱统计相关的核心业务操作。
- * <p>核心方法：getSummary、buildProductionTrend、buildCropStructure、buildRegionComparisons、buildRecentRecords、round、buildForecast、safe。</p>
+ * <p>核心方法：getSummary、buildProductionTrend、buildCropStructure、buildRegionComparisons、buildRecentRecords、round、buildForecast、safe、exportForecastDataAsPdf。</p>
  */
 
 @Service
 public class DashboardService {
 
     private static final Logger log = LoggerFactory.getLogger(DashboardService.class);
+    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    private static final String DEFAULT_FONT = "STSong-Light";
 
     private final YieldRecordRepository yieldRecordRepository;
     private final ForecastSnapshotRepository forecastSnapshotRepository;
@@ -227,5 +246,182 @@ public class DashboardService {
 
     private double round(double value) {
         return Math.round(value * 100.0) / 100.0;
+    }
+
+    public byte[] exportForecastDataAsPdf(String cropFilter, String regionFilter, Integer yearFilter) {
+        List<RecentYieldRecord> records = buildRecentRecords();
+        
+        // 应用过滤器
+        if (StringUtils.hasText(cropFilter) && !"ALL".equals(cropFilter)) {
+            records = records.stream()
+                    .filter(r -> cropFilter.equals(r.cropName()))
+                    .toList();
+        }
+        if (StringUtils.hasText(regionFilter) && !"ALL".equals(regionFilter)) {
+            records = records.stream()
+                    .filter(r -> regionFilter.equals(r.regionName()))
+                    .toList();
+        }
+        if (yearFilter != null) {
+            records = records.stream()
+                    .filter(r -> yearFilter.equals(r.year()))
+                    .toList();
+        }
+        
+        try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+            Document document = new Document(PageSize.A4.rotate());
+            PdfWriter.getInstance(document, outputStream);
+            document.open();
+
+            BaseFont baseFont = BaseFont.createFont(DEFAULT_FONT, "UniGB-UCS2-H", BaseFont.NOT_EMBEDDED);
+            Font titleFont = new Font(baseFont, 16, Font.BOLD);
+            Font headerFont = new Font(baseFont, 11, Font.BOLD);
+            Font bodyFont = new Font(baseFont, 10);
+
+            Paragraph title = new Paragraph(sanitizeForPdf("仪表盘预测数据导出"), titleFont);
+            title.setAlignment(Element.ALIGN_CENTER);
+            document.add(title);
+
+            document.add(new Paragraph(sanitizeForPdf("导出时间：" + DATE_FORMATTER.format(LocalDate.now())), bodyFont));
+            document.add(new Paragraph(sanitizeForPdf(buildFilterSummary(cropFilter, regionFilter, yearFilter)), bodyFont));
+            document.add(new Paragraph(sanitizeForPdf("记录总数：" + records.size()), bodyFont));
+            document.add(new Paragraph(" "));
+
+            PdfPTable table = new PdfPTable(7);
+            table.setWidthPercentage(100);
+            table.setWidths(new float[]{8, 18, 15, 14, 14, 14, 14});
+
+            addHeaderCell(table, sanitizeForPdf("年份"), headerFont);
+            addHeaderCell(table, sanitizeForPdf("地区"), headerFont);
+            addHeaderCell(table, sanitizeForPdf("作物"), headerFont);
+            addHeaderCell(table, sanitizeForPdf("播种面积(公顷)"), headerFont);
+            addHeaderCell(table, sanitizeForPdf("总产量(吨)"), headerFont);
+            addHeaderCell(table, sanitizeForPdf("单产(吨/公顷)"), headerFont);
+            addHeaderCell(table, sanitizeForPdf("数据日期"), headerFont);
+
+            for (RecentYieldRecord record : records) {
+                addBodyCell(table, String.valueOf(record.year()), bodyFont);
+                addBodyCell(table, sanitizeForPdf(record.regionName()), bodyFont);
+                addBodyCell(table, sanitizeForPdf(record.cropName()), bodyFont);
+                addBodyCell(table, formatNumber(record.sownArea()), bodyFont);
+                addBodyCell(table, formatNumber(record.production()), bodyFont);
+                addBodyCell(table, formatNumber(record.yieldPerHectare()), bodyFont);
+                addBodyCell(table, formatDate(record.collectedAt()), bodyFont);
+            }
+
+            document.add(table);
+            document.close();
+            return outputStream.toByteArray();
+        } catch (DocumentException | IOException exception) {
+            throw new IllegalStateException("导出 PDF 失败", exception);
+        }
+    }
+
+    private void addHeaderCell(PdfPTable table, String value, Font font) {
+        PdfPCell cell = new PdfPCell(new Phrase(value, font));
+        cell.setHorizontalAlignment(Element.ALIGN_CENTER);
+        cell.setVerticalAlignment(Element.ALIGN_MIDDLE);
+        table.addCell(cell);
+    }
+
+    private void addBodyCell(PdfPTable table, String value, Font font) {
+        PdfPCell cell = new PdfPCell(new Phrase(value, font));
+        cell.setVerticalAlignment(Element.ALIGN_MIDDLE);
+        table.addCell(cell);
+    }
+
+    private String buildFilterSummary(String cropFilter, String regionFilter, Integer yearFilter) {
+        List<String> parts = new ArrayList<>();
+        
+        if (StringUtils.hasText(cropFilter) && !"ALL".equals(cropFilter)) {
+            parts.add("作物：" + cropFilter);
+        } else {
+            parts.add("作物：全部");
+        }
+        
+        if (StringUtils.hasText(regionFilter) && !"ALL".equals(regionFilter)) {
+            parts.add("地区：" + regionFilter);
+        } else {
+            parts.add("地区：全部");
+        }
+        
+        if (yearFilter != null) {
+            parts.add("年份：" + yearFilter);
+        } else {
+            parts.add("年份：全部");
+        }
+        
+        return String.join("，", parts);
+    }
+
+    private String formatNumber(Double value) {
+        if (value == null) {
+            return "-";
+        }
+        return String.format(Locale.CHINA, "%.2f", value);
+    }
+
+    private String formatDate(LocalDate date) {
+        if (date == null) {
+            return "-";
+        }
+        return DATE_FORMATTER.format(date);
+    }
+
+    private String sanitizeForPdf(String text) {
+        if (text == null || text.isEmpty()) {
+            return text;
+        }
+        return text
+            .replace("²", "2")
+            .replace("³", "3")
+            .replace("±", "+/-")
+            .replace("×", "x")
+            .replace("÷", "/")
+            .replace("≈", "~")
+            .replace("≤", "<=")
+            .replace("≥", ">=")
+            .replace("≠", "!=")
+            .replace("→", "->")
+            .replace("←", "<-")
+            .replace("↑", "^")
+            .replace("↓", "v")
+            .replace("•", "* ")
+            .replace("◦", "o ")
+            .replace("▪", "* ")
+            .replace("■", "* ")
+            .replace("□", "o ")
+            .replace("▲", "^ ")
+            .replace("△", "^ ")
+            .replace("▼", "v ")
+            .replace("►", "> ")
+            .replace("◄", "< ")
+            .replace("◆", "* ")
+            .replace("◇", "o ")
+            .replace("★", "* ")
+            .replace("☆", "* ")
+            .replace("●", "* ")
+            .replace("○", "o ")
+            .replace("€", "EUR ")
+            .replace("£", "GBP ")
+            .replace("¥", "CNY ")
+            .replace("$", "USD ")
+            .replace("©", "(c) ")
+            .replace("®", "(R) ")
+            .replace("™", "(TM) ")
+            .replace("°", " degrees ")
+            .replace("℃", "C ")
+            .replace("℉", "F ")
+            .replace("…", "...")
+            .replace("–", "-")
+            .replace("—", "--")
+            .replace("'", "'")
+            .replace("'", "'")
+            .replace("\u201C", "\"")
+            .replace("\u201D", "\"")
+            .replace("«", "<<")
+            .replace("»", ">>")
+            .replace("¡", "!")
+            .replace("¿", "?");
     }
 }

@@ -24,7 +24,6 @@
             <div class="card-title">分析报告列表</div>
             <div class="card-subtitle">追踪各业务主题的报告生成时间与核心摘要</div>
           </div>
-          <el-button v-if="canGenerateReport" type="primary" @click="createReport">生成报告</el-button>
         </div>
       </template>
       <el-empty v-if="!loading && !reports.length" description="暂未生成报告" />
@@ -63,7 +62,6 @@
       <template v-else />
     </el-card>
 
-    <report-generate-dialog v-model="showGenerateDialog" @success="handleGenerateSuccess" />
     <report-detail-drawer
       v-model="showDetailDrawer"
       :report-id="activeReportId"
@@ -77,8 +75,6 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { fetchReportOverview } from '../services/report'
-import { useAuthorization } from '../composables/useAuthorization'
-import ReportGenerateDialog from '../components/report/ReportGenerateDialog.vue'
 import ReportDetailDrawer from '../components/report/ReportDetailDrawer.vue'
 
 const router = useRouter()
@@ -87,7 +83,6 @@ const route = useRoute()
 const reports = ref([])
 const metrics = ref({ totalReports: 0, publishedThisMonth: 0, pendingApproval: 0, autoGenerationEnabled: false })
 const loading = ref(false)
-const showGenerateDialog = ref(false)
 const showDetailDrawer = ref(false)
 const activeReportId = ref(null)
 const activeReportSummary = ref(null)
@@ -96,9 +91,6 @@ const reportPagination = reactive({
   currentPage: 1,
   pageSize: 5,
 })
-
-const { hasRole } = useAuthorization()
-const canGenerateReport = computed(() => hasRole(['ADMIN', 'AGRICULTURE_DEPT']))
 
 const paginatedReports = computed(() => {
   if (!reports.value.length) {
@@ -195,26 +187,6 @@ const scrollToReportList = () => {
   })
 }
 
-const createReport = () => {
-  if (!canGenerateReport.value) {
-    ElMessage.warning('当前账号没有生成报告的权限')
-    return
-  }
-  showGenerateDialog.value = true
-}
-
-const handleGenerateSuccess = detail => {
-  reportPagination.currentPage = 1
-  fetchReports().finally(() => {
-    const summary = detail?.summary ?? null
-    if (summary?.id) {
-      activeReportSummary.value = summary
-      activeReportId.value = summary.id
-      showDetailDrawer.value = true
-    }
-  })
-}
-
 const handleReportPageChange = page => {
   reportPagination.currentPage = page
 }
@@ -230,11 +202,22 @@ const viewReport = report => {
 }
 
 watch(
-  () => route.query.action,
-  action => {
-    if (action === 'generate') {
-      createReport()
-      clearRouteQueryKeys('action')
+  () => route.query.reportId,
+  async reportId => {
+    if (reportId) {
+      const id = Number(reportId)
+      if (!Number.isNaN(id)) {
+        // 先刷新报告列表，确保新生成的报告在列表中
+        await fetchReports()
+        // 从列表中查找对应的报告摘要
+        const report = reports.value.find(r => r.id === id)
+        if (report) {
+          activeReportSummary.value = report
+        }
+        activeReportId.value = id
+        showDetailDrawer.value = true
+      }
+      router.replace({ query: {} }).catch(() => {})
     }
   },
   { immediate: true }

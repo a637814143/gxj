@@ -10,7 +10,9 @@ public record ForecastHistoryResponse(
     Long forecastResultId,
     String period,
     Integer year,
+    Long regionId,
     String regionName,
+    Long cropId,
     String cropName,
     String modelName,
     String modelType,
@@ -20,6 +22,8 @@ public record ForecastHistoryResponse(
     Double predictedProduction,
     Double predictedYield,
     Double sownArea,
+    Double averagePrice,
+    Double estimatedRevenue,
     LocalDateTime generatedAt
 ) {
 }

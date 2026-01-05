@@ -79,7 +79,7 @@ public class ReportServiceImpl implements ReportService {
     private static final MediaType EXCEL_MEDIA_TYPE = MediaType.parseMediaType(
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     );
-    private static final String DEFAULT_FONT = "STSongStd-Light";
+    private static final String DEFAULT_FONT = "STSong-Light";
 
     private static final java.time.format.DateTimeFormatter DATE_FORMATTER = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
@@ -317,32 +317,32 @@ public class ReportServiceImpl implements ReportService {
             Font headerFont = new Font(baseFont, 12, Font.BOLD);
             Font bodyFont = new Font(baseFont, 10);
 
-            Paragraph title = new Paragraph("报告导出：" + detail.summary().title(), titleFont);
+            Paragraph title = new Paragraph(sanitizeForPdf("报告导出：" + detail.summary().title()), titleFont);
             title.setAlignment(Element.ALIGN_CENTER);
             document.add(title);
-            document.add(new Paragraph("导出时间：" + DATE_FORMATTER.format(LocalDate.now()), bodyFont));
-            document.add(new Paragraph("作者：" + safeText(detail.summary().author()), bodyFont));
-            document.add(new Paragraph("覆盖周期：" + safeText(detail.summary().coveragePeriod()), bodyFont));
-            document.add(new Paragraph("状态：" + safeText(detail.summary().status()), bodyFont));
+            document.add(new Paragraph(sanitizeForPdf("导出时间：" + DATE_FORMATTER.format(LocalDate.now())), bodyFont));
+            document.add(new Paragraph(sanitizeForPdf("作者：" + safeText(detail.summary().author())), bodyFont));
+            document.add(new Paragraph(sanitizeForPdf("覆盖周期：" + safeText(detail.summary().coveragePeriod())), bodyFont));
+            document.add(new Paragraph(sanitizeForPdf("状态：" + safeText(detail.summary().status())), bodyFont));
             if (detail.summary().insights() != null) {
-                document.add(new Paragraph("洞察：" + detail.summary().insights(), bodyFont));
+                document.add(new Paragraph(sanitizeForPdf("洞察：" + detail.summary().insights()), bodyFont));
             }
             document.add(new Paragraph(" "));
 
             for (ReportSectionResponse section : detail.sections()) {
-                Paragraph sectionTitle = new Paragraph(section.title(), headerFont);
+                Paragraph sectionTitle = new Paragraph(sanitizeForPdf(section.title()), headerFont);
                 sectionTitle.setSpacingBefore(6f);
                 document.add(sectionTitle);
                 if (StringUtils.hasText(section.description())) {
-                    document.add(new Paragraph(section.description(), bodyFont));
+                    document.add(new Paragraph(sanitizeForPdf(section.description()), bodyFont));
                 }
 
                 if ("OVERVIEW".equalsIgnoreCase(section.type())) {
                     PdfPTable metricTable = new PdfPTable(3);
                     metricTable.setWidthPercentage(100);
-                    addHeaderCell(metricTable, "指标", headerFont);
-                    addHeaderCell(metricTable, "数值", headerFont);
-                    addHeaderCell(metricTable, "单位", headerFont);
+                    addHeaderCell(metricTable, sanitizeForPdf("指标"), headerFont);
+                    addHeaderCell(metricTable, sanitizeForPdf("数值"), headerFont);
+                    addHeaderCell(metricTable, sanitizeForPdf("单位"), headerFont);
                     JsonNode metrics = section.data() != null ? section.data().get("metrics") : null;
                     if (metrics != null && metrics.isArray()) {
                         metrics.forEach(node -> {
@@ -355,18 +355,18 @@ public class ReportServiceImpl implements ReportService {
 
                     JsonNode highlights = section.data() != null ? section.data().get("highlights") : null;
                     if (highlights != null && highlights.isArray() && highlights.size() > 0) {
-                        document.add(new Paragraph("重点洞察：", bodyFont));
+                        document.add(new Paragraph(sanitizeForPdf("重点洞察："), bodyFont));
                         highlights.forEach(node -> {
-                            document.add(new Paragraph("• " + node.asText(), bodyFont));
+                            document.add(new Paragraph(sanitizeForPdf("• " + node.asText()), bodyFont));
                         });
                     }
                 } else if ("YIELD_TREND".equalsIgnoreCase(section.type())) {
                     PdfPTable table = new PdfPTable(4);
                     table.setWidthPercentage(100);
-                    addHeaderCell(table, "年份", headerFont);
-                    addHeaderCell(table, "播种面积(千公顷)", headerFont);
-                    addHeaderCell(table, "总产量(万吨)", headerFont);
-                    addHeaderCell(table, "单产(吨/公顷)", headerFont);
+                    addHeaderCell(table, sanitizeForPdf("年份"), headerFont);
+                    addHeaderCell(table, sanitizeForPdf("播种面积(千公顷)"), headerFont);
+                    addHeaderCell(table, sanitizeForPdf("总产量(万吨)"), headerFont);
+                    addHeaderCell(table, sanitizeForPdf("单产(吨/公顷)"), headerFont);
                     JsonNode series = section.data() != null ? section.data().get("series") : null;
                     if (series != null && series.isArray()) {
                         series.forEach(node -> {
@@ -377,6 +377,67 @@ public class ReportServiceImpl implements ReportService {
                         });
                     }
                     document.add(table);
+                } else if ("FORECAST_COMPARISON".equalsIgnoreCase(section.type())) {
+                    PdfPTable table = new PdfPTable(3);
+                    table.setWidthPercentage(100);
+                    addHeaderCell(table, sanitizeForPdf("指标"), headerFont);
+                    addHeaderCell(table, sanitizeForPdf("数值"), headerFont);
+                    addHeaderCell(table, sanitizeForPdf("单位"), headerFont);
+                    JsonNode data = section.data() != null ? section.data() : objectMapper.createObjectNode();
+                    addBodyCell(table, sanitizeForPdf("预测年份"), bodyFont);
+                    addBodyCell(table, formatNullableNumber(data.get("forecastYear")), bodyFont);
+                    addBodyCell(table, "", bodyFont);
+
+                    addBodyCell(table, sanitizeForPdf("预测单产"), bodyFont);
+                    addBodyCell(table, formatNullableNumber(data.get("predictedYield")), bodyFont);
+                    addBodyCell(table, sanitizeForPdf("吨/公顷"), bodyFont);
+
+                    addBodyCell(table, sanitizeForPdf("预测总产量"), bodyFont);
+                    addBodyCell(table, formatNullableNumber(data.get("predictedProduction")), bodyFont);
+                    addBodyCell(table, sanitizeForPdf("万吨"), bodyFont);
+
+                    String measurementLabel = safeText(data.get("measurementLabel"));
+                    String measurementUnit = safeText(data.get("measurementUnit"));
+                    addBodyCell(table, StringUtils.hasText(measurementLabel) ? measurementLabel : sanitizeForPdf("测量值"), bodyFont);
+                    addBodyCell(table, formatNullableNumber(data.get("measurementValue")), bodyFont);
+                    addBodyCell(table, measurementUnit, bodyFont);
+
+                    addBodyCell(table, sanitizeForPdf("实际单产"), bodyFont);
+                    addBodyCell(table, formatNullableNumber(data.get("actualYield")), bodyFont);
+                    addBodyCell(table, sanitizeForPdf("吨/公顷"), bodyFont);
+
+                    addBodyCell(table, sanitizeForPdf("预测与实际差值"), bodyFont);
+                    addBodyCell(table, formatNullableNumber(data.get("difference")), bodyFont);
+                    addBodyCell(table, sanitizeForPdf("吨/公顷"), bodyFont);
+
+                    addBodyCell(table, sanitizeForPdf("模型评价"), bodyFont);
+                    addBodyCell(table, safeText(data.get("evaluation")), bodyFont);
+                    addBodyCell(table, "", bodyFont);
+
+                    document.add(table);
+
+                    JsonNode task = data.get("task");
+                    if (task != null && task.isObject()) {
+                        Paragraph taskTitle = new Paragraph(sanitizeForPdf("任务信息"), headerFont);
+                        taskTitle.setSpacingBefore(6f);
+                        document.add(taskTitle);
+
+                        PdfPTable taskTable = new PdfPTable(2);
+                        taskTable.setWidthPercentage(100);
+                        addHeaderCell(taskTable, sanitizeForPdf("字段"), headerFont);
+                        addHeaderCell(taskTable, sanitizeForPdf("值"), headerFont);
+                        addBodyCell(taskTable, sanitizeForPdf("任务ID"), bodyFont);
+                        addBodyCell(taskTable, safeText(task.get("taskId")), bodyFont);
+                        addBodyCell(taskTable, sanitizeForPdf("模型"), bodyFont);
+                        addBodyCell(taskTable, safeText(task.get("model")), bodyFont);
+                        addBodyCell(taskTable, sanitizeForPdf("模型类型"), bodyFont);
+                        addBodyCell(taskTable, safeText(task.get("modelType")), bodyFont);
+                        addBodyCell(taskTable, sanitizeForPdf("区域"), bodyFont);
+                        addBodyCell(taskTable, safeText(task.get("region")), bodyFont);
+                        addBodyCell(taskTable, sanitizeForPdf("作物"), bodyFont);
+                        addBodyCell(taskTable, safeText(task.get("crop")), bodyFont);
+                        document.add(taskTable);
+                    }
                 } else {
                     document.add(new Paragraph(toPrettyJson(section.data()), bodyFont));
                 }
@@ -395,70 +456,228 @@ public class ReportServiceImpl implements ReportService {
         try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
             Sheet sheet = workbook.createSheet("报告详情");
             CreationHelper creationHelper = workbook.getCreationHelper();
+            
+            // 创建样式
+            CellStyle titleStyle = workbook.createCellStyle();
+            org.apache.poi.ss.usermodel.Font titleFont = workbook.createFont();
+            titleFont.setBold(true);
+            titleFont.setFontHeightInPoints((short) 16);
+            titleStyle.setFont(titleFont);
+            titleStyle.setAlignment(org.apache.poi.ss.usermodel.HorizontalAlignment.CENTER);
+            
+            CellStyle headerStyle = workbook.createCellStyle();
+            org.apache.poi.ss.usermodel.Font headerFont = workbook.createFont();
+            headerFont.setBold(true);
+            headerFont.setFontHeightInPoints((short) 12);
+            headerStyle.setFont(headerFont);
+            headerStyle.setFillForegroundColor(org.apache.poi.ss.usermodel.IndexedColors.GREY_25_PERCENT.getIndex());
+            headerStyle.setFillPattern(org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND);
+            headerStyle.setAlignment(org.apache.poi.ss.usermodel.HorizontalAlignment.CENTER);
+            headerStyle.setVerticalAlignment(org.apache.poi.ss.usermodel.VerticalAlignment.CENTER);
+            headerStyle.setBorderBottom(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+            headerStyle.setBorderTop(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+            headerStyle.setBorderLeft(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+            headerStyle.setBorderRight(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+            
+            CellStyle sectionHeaderStyle = workbook.createCellStyle();
+            org.apache.poi.ss.usermodel.Font sectionFont = workbook.createFont();
+            sectionFont.setBold(true);
+            sectionFont.setFontHeightInPoints((short) 14);
+            sectionHeaderStyle.setFont(sectionFont);
+            sectionHeaderStyle.setFillForegroundColor(org.apache.poi.ss.usermodel.IndexedColors.GREY_25_PERCENT.getIndex());
+            sectionHeaderStyle.setFillPattern(org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND);
+            
             CellStyle dateStyle = workbook.createCellStyle();
             dateStyle.setDataFormat(creationHelper.createDataFormat().getFormat("yyyy-mm-dd"));
+            
+            CellStyle numberStyle = workbook.createCellStyle();
+            numberStyle.setDataFormat(creationHelper.createDataFormat().getFormat("0.00"));
 
             int rowIndex = 0;
+            
+            // 标题行
+            Row titleRow = sheet.createRow(rowIndex++);
+            Cell titleCell = titleRow.createCell(0);
+            titleCell.setCellValue(detail.summary().title());
+            titleCell.setCellStyle(titleStyle);
+            sheet.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(0, 0, 0, 5));
+            
+            rowIndex++; // 空行
+            
+            // 报告摘要信息
             rowIndex = writeSummaryRows(detail, sheet, dateStyle, rowIndex);
-            rowIndex += 1;
+            rowIndex += 1; // 空行
 
             for (ReportSectionResponse section : detail.sections()) {
-                Row sectionHeader = sheet.createRow(rowIndex++);
-                sectionHeader.createCell(0).setCellValue(section.title());
-                sectionHeader.createCell(1).setCellValue(section.type());
+                // 章节标题
+                Row sectionTitleRow = sheet.createRow(rowIndex++);
+                Cell sectionTitleCell = sectionTitleRow.createCell(0);
+                sectionTitleCell.setCellValue(section.title() + " (" + formatSectionType(section.type()) + ")");
+                sectionTitleCell.setCellStyle(sectionHeaderStyle);
+                sheet.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(
+                    rowIndex - 1, rowIndex - 1, 0, 5));
+                
                 if (StringUtils.hasText(section.description())) {
-                    sectionHeader.createCell(2).setCellValue(section.description());
+                    Row descRow = sheet.createRow(rowIndex++);
+                    descRow.createCell(0).setCellValue(section.description());
+                    sheet.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(
+                        rowIndex - 1, rowIndex - 1, 0, 5));
                 }
 
                 if ("OVERVIEW".equalsIgnoreCase(section.type())) {
                     Row headerRow = sheet.createRow(rowIndex++);
-                    headerRow.createCell(0).setCellValue("指标");
-                    headerRow.createCell(1).setCellValue("数值");
-                    headerRow.createCell(2).setCellValue("单位");
+                    Cell h1 = headerRow.createCell(0);
+                    h1.setCellValue("指标");
+                    h1.setCellStyle(headerStyle);
+                    Cell h2 = headerRow.createCell(1);
+                    h2.setCellValue("数值");
+                    h2.setCellStyle(headerStyle);
+                    Cell h3 = headerRow.createCell(2);
+                    h3.setCellValue("单位");
+                    h3.setCellStyle(headerStyle);
+                    
                     JsonNode metrics = section.data() != null ? section.data().get("metrics") : null;
                     if (metrics != null && metrics.isArray()) {
                         for (JsonNode metric : metrics) {
                             Row row = sheet.createRow(rowIndex++);
                             row.createCell(0).setCellValue(safeText(metric.get("label")));
-                            setNumeric(row, 1, metric.get("value"));
+                            setNumericWithStyle(row, 1, metric.get("value"), numberStyle);
                             row.createCell(2).setCellValue(safeText(metric.get("unit")));
                         }
                     }
+                    
                     JsonNode highlights = section.data() != null ? section.data().get("highlights") : null;
                     if (highlights != null && highlights.isArray() && highlights.size() > 0) {
+                        rowIndex++; // 空行
                         Row highlightHeader = sheet.createRow(rowIndex++);
-                        highlightHeader.createCell(0).setCellValue("重点洞察");
+                        Cell highlightCell = highlightHeader.createCell(0);
+                        highlightCell.setCellValue("重点洞察");
+                        highlightCell.setCellStyle(headerStyle);
+                        sheet.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(
+                            rowIndex - 1, rowIndex - 1, 0, 2));
+                        
                         for (JsonNode node : highlights) {
-                            sheet.createRow(rowIndex++)
-                                .createCell(0)
-                                .setCellValue(node.asText());
+                            Row row = sheet.createRow(rowIndex++);
+                            Cell cell = row.createCell(0);
+                            cell.setCellValue("• " + node.asText());
+                            sheet.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(
+                                rowIndex - 1, rowIndex - 1, 0, 2));
                         }
                     }
                 } else if ("YIELD_TREND".equalsIgnoreCase(section.type())) {
                     Row headerRow = sheet.createRow(rowIndex++);
-                    headerRow.createCell(0).setCellValue("年份");
-                    headerRow.createCell(1).setCellValue("播种面积(千公顷)");
-                    headerRow.createCell(2).setCellValue("总产量(万吨)");
-                    headerRow.createCell(3).setCellValue("单产(吨/公顷)");
+                    String[] headers = {"年份", "播种面积(千公顷)", "总产量(万吨)", "单产(吨/公顷)"};
+                    for (int i = 0; i < headers.length; i++) {
+                        Cell cell = headerRow.createCell(i);
+                        cell.setCellValue(headers[i]);
+                        cell.setCellStyle(headerStyle);
+                    }
+                    
                     JsonNode series = section.data() != null ? section.data().get("series") : null;
                     if (series != null && series.isArray()) {
                         for (JsonNode node : series) {
                             Row row = sheet.createRow(rowIndex++);
                             setNumeric(row, 0, node.get("year"));
-                            setNumeric(row, 1, node.get("sownArea"));
-                            setNumeric(row, 2, node.get("production"));
-                            setNumeric(row, 3, node.get("yieldPerHectare"));
+                            setNumericWithStyle(row, 1, node.get("sownArea"), numberStyle);
+                            setNumericWithStyle(row, 2, node.get("production"), numberStyle);
+                            setNumericWithStyle(row, 3, node.get("yieldPerHectare"), numberStyle);
+                        }
+                    }
+                } else if ("FORECAST_COMPARISON".equalsIgnoreCase(section.type())) {
+                    Row headerRow = sheet.createRow(rowIndex++);
+                    String[] headers = {"指标", "数值", "单位"};
+                    for (int i = 0; i < headers.length; i++) {
+                        Cell cell = headerRow.createCell(i);
+                        cell.setCellValue(headers[i]);
+                        cell.setCellStyle(headerStyle);
+                    }
+                    
+                    JsonNode data = section.data() != null ? section.data() : objectMapper.createObjectNode();
+
+                    Row forecastYearRow = sheet.createRow(rowIndex++);
+                    forecastYearRow.createCell(0).setCellValue("预测年份");
+                    setNumeric(forecastYearRow, 1, data.get("forecastYear"));
+                    forecastYearRow.createCell(2).setCellValue("");
+
+                    Row predictedYieldRow = sheet.createRow(rowIndex++);
+                    predictedYieldRow.createCell(0).setCellValue("预测单产");
+                    setNumericWithStyle(predictedYieldRow, 1, data.get("predictedYield"), numberStyle);
+                    predictedYieldRow.createCell(2).setCellValue("吨/公顷");
+
+                    Row predictedProductionRow = sheet.createRow(rowIndex++);
+                    predictedProductionRow.createCell(0).setCellValue("预测总产量");
+                    setNumericWithStyle(predictedProductionRow, 1, data.get("predictedProduction"), numberStyle);
+                    predictedProductionRow.createCell(2).setCellValue("万吨");
+
+                    String measurementLabel = safeText(data.get("measurementLabel"));
+                    Row measurementRow = sheet.createRow(rowIndex++);
+                    measurementRow.createCell(0).setCellValue(StringUtils.hasText(measurementLabel) ? measurementLabel : "测量值");
+                    setNumericWithStyle(measurementRow, 1, data.get("measurementValue"), numberStyle);
+                    measurementRow.createCell(2).setCellValue(safeText(data.get("measurementUnit")));
+
+                    Row actualYieldRow = sheet.createRow(rowIndex++);
+                    actualYieldRow.createCell(0).setCellValue("实际单产");
+                    setNumericWithStyle(actualYieldRow, 1, data.get("actualYield"), numberStyle);
+                    actualYieldRow.createCell(2).setCellValue("吨/公顷");
+
+                    Row differenceRow = sheet.createRow(rowIndex++);
+                    differenceRow.createCell(0).setCellValue("预测与实际差值");
+                    setNumericWithStyle(differenceRow, 1, data.get("difference"), numberStyle);
+                    differenceRow.createCell(2).setCellValue("吨/公顷");
+
+                    Row evaluationRow = sheet.createRow(rowIndex++);
+                    evaluationRow.createCell(0).setCellValue("模型评价");
+                    Cell evalCell = evaluationRow.createCell(1);
+                    evalCell.setCellValue(safeText(data.get("evaluation")));
+                    sheet.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(
+                        rowIndex - 1, rowIndex - 1, 1, 2));
+
+                    JsonNode task = data.get("task");
+                    if (task != null && task.isObject()) {
+                        rowIndex += 1; // 空行
+                        Row taskHeader = sheet.createRow(rowIndex++);
+                        Cell taskHeaderCell = taskHeader.createCell(0);
+                        taskHeaderCell.setCellValue("任务信息");
+                        taskHeaderCell.setCellStyle(headerStyle);
+                        Cell taskHeaderCell2 = taskHeader.createCell(1);
+                        taskHeaderCell2.setCellValue("值");
+                        taskHeaderCell2.setCellStyle(headerStyle);
+
+                        String[][] taskData = {
+                            {"任务ID", safeText(task.get("taskId"))},
+                            {"模型", safeText(task.get("model"))},
+                            {"模型类型", safeText(task.get("modelType"))},
+                            {"区域", safeText(task.get("region"))},
+                            {"作物", safeText(task.get("crop"))}
+                        };
+                        
+                        for (String[] pair : taskData) {
+                            Row row = sheet.createRow(rowIndex++);
+                            row.createCell(0).setCellValue(pair[0]);
+                            row.createCell(1).setCellValue(pair[1]);
                         }
                     }
                 } else {
-                    sheet.createRow(rowIndex++).createCell(0).setCellValue(toPrettyJson(section.data()));
+                    Row dataRow = sheet.createRow(rowIndex++);
+                    Cell dataCell = dataRow.createCell(0);
+                    dataCell.setCellValue(toPrettyJson(section.data()));
+                    sheet.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(
+                        rowIndex - 1, rowIndex - 1, 0, 5));
                 }
 
-                rowIndex += 1;
+                rowIndex += 1; // 章节间空行
             }
 
+            // 自动调整列宽
             for (int i = 0; i < 6; i++) {
                 sheet.autoSizeColumn(i);
+                // 设置最小和最大列宽
+                int currentWidth = sheet.getColumnWidth(i);
+                if (currentWidth < 3000) {
+                    sheet.setColumnWidth(i, 3000);
+                } else if (currentWidth > 15000) {
+                    sheet.setColumnWidth(i, 15000);
+                }
             }
 
             workbook.write(outputStream);
@@ -466,6 +685,29 @@ public class ReportServiceImpl implements ReportService {
         } catch (IOException exception) {
             throw new IllegalStateException("导出 Excel 失败", exception);
         }
+    }
+    
+    private void setNumericWithStyle(Row row, int columnIndex, JsonNode value, CellStyle numberStyle) {
+        if (value == null || value.isNull()) {
+            row.createCell(columnIndex).setBlank();
+            return;
+        }
+        if (value.isNumber()) {
+            Cell cell = row.createCell(columnIndex);
+            cell.setCellValue(value.asDouble());
+            cell.setCellStyle(numberStyle);
+            return;
+        }
+        row.createCell(columnIndex).setCellValue(value.asText());
+    }
+    
+    private String formatSectionType(String type) {
+        return switch (type) {
+            case "OVERVIEW" -> "指标概览";
+            case "YIELD_TREND" -> "产量趋势";
+            case "FORECAST_COMPARISON" -> "预测对比";
+            default -> type;
+        };
     }
 
     private ReportSummaryResponse toSummary(Report report) {
@@ -586,11 +828,228 @@ public class ReportServiceImpl implements ReportService {
     }
 
     private String safeText(JsonNode node) {
-        return node == null || node.isNull() ? "" : node.asText();
+        if (node == null || node.isNull()) {
+            return "";
+        }
+        return sanitizeForPdf(node.asText());
     }
 
     private String safeText(String value) {
-        return value == null ? "" : value;
+        if (value == null) {
+            return "";
+        }
+        return sanitizeForPdf(value);
+    }
+    
+    private String sanitizeForPdf(String text) {
+        if (text == null || text.isEmpty()) {
+            return text;
+        }
+        // 替换常见的特殊字符为 PDF 友好的版本
+        return text
+            // 数学符号
+            .replace("²", "2")  // 上标2
+            .replace("³", "3")  // 上标3
+            .replace("±", "+/-")  // 正负号
+            .replace("×", "x")  // 乘号
+            .replace("÷", "/")  // 除号
+            .replace("≈", "~")  // 约等于
+            .replace("≤", "<=")  // 小于等于
+            .replace("≥", ">=")  // 大于等于
+            .replace("≠", "!=")  // 不等于
+            .replace("≡", "===")  // 恒等于
+            // 箭头符号
+            .replace("→", "->")  // 箭头
+            .replace("←", "<-")  // 左箭头
+            .replace("↑", "^")  // 上箭头
+            .replace("↓", "v")  // 下箭头
+            .replace("↔", "<->")  // 双向箭头
+            .replace("⇒", "=>")  // 蕴含
+            .replace("⇔", "<=>")  // 等价
+            // 希腊字母
+            .replace("α", "alpha")
+            .replace("β", "beta")
+            .replace("γ", "gamma")
+            .replace("δ", "delta")
+            .replace("ε", "epsilon")
+            .replace("ζ", "zeta")
+            .replace("η", "eta")
+            .replace("θ", "theta")
+            .replace("ι", "iota")
+            .replace("κ", "kappa")
+            .replace("λ", "lambda")
+            .replace("μ", "mu")
+            .replace("ν", "nu")
+            .replace("ξ", "xi")
+            .replace("π", "pi")
+            .replace("ρ", "rho")
+            .replace("σ", "sigma")
+            .replace("τ", "tau")
+            .replace("υ", "upsilon")
+            .replace("φ", "phi")
+            .replace("χ", "chi")
+            .replace("ψ", "psi")
+            .replace("ω", "omega")
+            .replace("Α", "Alpha")
+            .replace("Β", "Beta")
+            .replace("Γ", "Gamma")
+            .replace("Δ", "Delta")
+            .replace("Ε", "Epsilon")
+            .replace("Ζ", "Zeta")
+            .replace("Η", "Eta")
+            .replace("Θ", "Theta")
+            .replace("Ι", "Iota")
+            .replace("Κ", "Kappa")
+            .replace("Λ", "Lambda")
+            .replace("Μ", "Mu")
+            .replace("Ν", "Nu")
+            .replace("Ξ", "Xi")
+            .replace("Π", "Pi")
+            .replace("Ρ", "Rho")
+            .replace("Σ", "Sigma")
+            .replace("Τ", "Tau")
+            .replace("Υ", "Upsilon")
+            .replace("Φ", "Phi")
+            .replace("Χ", "Chi")
+            .replace("Ψ", "Psi")
+            .replace("Ω", "Omega")
+            // 项目符号和形状
+            .replace("•", "* ")  // 实心圆点
+            .replace("◦", "o ")  // 空心圆
+            .replace("▪", "* ")  // 实心方块
+            .replace("▫", "o ")  // 空心方块
+            .replace("■", "* ")  // 大实心方块
+            .replace("□", "o ")  // 大空心方块
+            .replace("▲", "^ ")  // 实心上三角
+            .replace("△", "^ ")  // 空心上三角
+            .replace("▼", "v ")  // 实心下三角
+            .replace("▽", "v ")  // 空心下三角
+            .replace("►", "> ")  // 实心右三角
+            .replace("▻", "> ")  // 空心右三角
+            .replace("◄", "< ")  // 实心左三角
+            .replace("◅", "< ")  // 空心左三角
+            .replace("◆", "* ")  // 实心菱形 - 这是你PDF中的符号
+            .replace("◇", "o ")  // 空心菱形
+            .replace("★", "* ")  // 实心星
+            .replace("☆", "* ")  // 空心星
+            .replace("●", "* ")  // 大实心圆
+            .replace("○", "o ")  // 大空心圆
+            .replace("◉", "* ")  // 双圆
+            .replace("◎", "o ")  // 靶心
+            // 货币符号
+            .replace("€", "EUR ")
+            .replace("£", "GBP ")
+            .replace("¥", "CNY ")
+            .replace("$", "USD ")
+            .replace("¢", "cent ")
+            // 版权和商标
+            .replace("©", "(c) ")
+            .replace("®", "(R) ")
+            .replace("™", "(TM) ")
+            // 其他常用符号
+            .replace("°", " degrees ")
+            .replace("℃", "C ")
+            .replace("℉", "F ")
+            .replace("§", "section ")
+            .replace("¶", "paragraph ")
+            .replace("†", "+ ")
+            .replace("‡", "++ ")
+            .replace("‰", " per mille ")
+            .replace("‱", " per ten thousand ")
+            .replace("′", "' ")
+            .replace("″", "\" ")
+            .replace("‴", "''' ")
+            .replace("№", "No. ")
+            .replace("℡", "Tel ")
+            // 数学运算符
+            .replace("√", "sqrt")
+            .replace("∛", "cbrt")
+            .replace("∜", "4thrt")
+            .replace("∞", "infinity")
+            .replace("∫", "integral")
+            .replace("∂", "partial")
+            .replace("∆", "delta")
+            .replace("∇", "nabla")
+            // 集合符号
+            .replace("∈", " in ")
+            .replace("∉", " not in ")
+            .replace("∩", " intersect ")
+            .replace("∪", " union ")
+            .replace("⊂", " subset ")
+            .replace("⊃", " superset ")
+            .replace("⊆", " subset or equal ")
+            .replace("⊇", " superset or equal ")
+            .replace("∅", " empty set ")
+            // 逻辑符号
+            .replace("∀", " for all ")
+            .replace("∃", " exists ")
+            .replace("∄", " not exists ")
+            .replace("∧", " and ")
+            .replace("∨", " or ")
+            .replace("¬", " not ")
+            .replace("∴", " therefore ")
+            .replace("∵", " because ")
+            // 扑克牌符号
+            .replace("♠", "spade ")
+            .replace("♣", "club ")
+            .replace("♥", "heart ")
+            .replace("♦", "diamond ")
+            // 音乐符号
+            .replace("♩", "quarter note ")
+            .replace("♪", "eighth note ")
+            .replace("♫", "beamed eighth notes ")
+            .replace("♬", "beamed sixteenth notes ")
+            // 天气符号
+            .replace("☀", "sun ")
+            .replace("☁", "cloud ")
+            .replace("☂", "umbrella ")
+            .replace("☃", "snowman ")
+            .replace("☄", "comet ")
+            // 其他
+            .replace("✓", "check ")
+            .replace("✔", "check ")
+            .replace("✗", "x ")
+            .replace("✘", "x ")
+            .replace("…", "...")
+            .replace("–", "-")  // en dash
+            .replace("—", "--")  // em dash
+            .replace("'", "'")  // left single quote
+            .replace("'", "'")  // right single quote
+            .replace("\u201C", "\"")  // left double quote
+            .replace("\u201D", "\"")  // right double quote
+            .replace("„", "\"")  // double low quote
+            .replace("‚", "'")  // single low quote
+            .replace("«", "<<")  // left guillemet
+            .replace("»", ">>")  // right guillemet
+            .replace("‹", "<")  // left single guillemet
+            .replace("›", ">")  // right single guillemet
+            .replace("¡", "!")  // inverted exclamation
+            .replace("¿", "?")  // inverted question
+            .replace("‾", "~")  // overline
+            .replace("‿", "_")  // undertie
+            .replace("⁀", "^")  // character tie
+            .replace("⁄", "/")  // fraction slash
+            .replace("⁊", "&")  // tironian et
+            .replace("⁌", "<<")  // left-pointing angle bracket
+            .replace("⁍", ">>")  // right-pointing angle bracket
+            .replace("⁎", "*")  // low asterisk
+            .replace("⁏", ";")  // reversed semicolon
+            .replace("⁐", ":")  // close up
+            .replace("⁑", "**")  // two asterisks
+            .replace("⁒", "***")  // three asterisks
+            .replace("⁓", "~")  // swung dash
+            .replace("⁔", ":")  // inverted undertie
+            .replace("⁕", "*")  // flower punctuation mark
+            .replace("⁖", "...")  // three dot punctuation
+            .replace("⁗", "''''")  // quadruple prime
+            .replace("⁘", "****")  // four dot punctuation
+            .replace("⁙", "*****")  // five dot punctuation
+            .replace("⁚", ":")  // two dot punctuation
+            .replace("⁛", "***")  // three dot leader
+            .replace("⁜", "****")  // four dot leader
+            .replace("⁝", ":")  // tricolon
+            .replace("⁞", ":")  // vertical four dots
+            .trim();  // 移除首尾空格
     }
 
     private String buildFilename(String title, String extension) {
