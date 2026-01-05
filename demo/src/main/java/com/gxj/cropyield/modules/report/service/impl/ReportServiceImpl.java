@@ -377,6 +377,67 @@ public class ReportServiceImpl implements ReportService {
                         });
                     }
                     document.add(table);
+                } else if ("FORECAST_COMPARISON".equalsIgnoreCase(section.type())) {
+                    PdfPTable table = new PdfPTable(3);
+                    table.setWidthPercentage(100);
+                    addHeaderCell(table, "指标", headerFont);
+                    addHeaderCell(table, "数值", headerFont);
+                    addHeaderCell(table, "单位", headerFont);
+                    JsonNode data = section.data() != null ? section.data() : objectMapper.createObjectNode();
+                    addBodyCell(table, "预测年份", bodyFont);
+                    addBodyCell(table, formatNullableNumber(data.get("forecastYear")), bodyFont);
+                    addBodyCell(table, "", bodyFont);
+
+                    addBodyCell(table, "预测单产", bodyFont);
+                    addBodyCell(table, formatNullableNumber(data.get("predictedYield")), bodyFont);
+                    addBodyCell(table, "吨/公顷", bodyFont);
+
+                    addBodyCell(table, "预测总产量", bodyFont);
+                    addBodyCell(table, formatNullableNumber(data.get("predictedProduction")), bodyFont);
+                    addBodyCell(table, "万吨", bodyFont);
+
+                    String measurementLabel = safeText(data.get("measurementLabel"));
+                    String measurementUnit = safeText(data.get("measurementUnit"));
+                    addBodyCell(table, StringUtils.hasText(measurementLabel) ? measurementLabel : "测量值", bodyFont);
+                    addBodyCell(table, formatNullableNumber(data.get("measurementValue")), bodyFont);
+                    addBodyCell(table, measurementUnit, bodyFont);
+
+                    addBodyCell(table, "实际单产", bodyFont);
+                    addBodyCell(table, formatNullableNumber(data.get("actualYield")), bodyFont);
+                    addBodyCell(table, "吨/公顷", bodyFont);
+
+                    addBodyCell(table, "预测与实际差值", bodyFont);
+                    addBodyCell(table, formatNullableNumber(data.get("difference")), bodyFont);
+                    addBodyCell(table, "吨/公顷", bodyFont);
+
+                    addBodyCell(table, "模型评价", bodyFont);
+                    addBodyCell(table, safeText(data.get("evaluation")), bodyFont);
+                    addBodyCell(table, "", bodyFont);
+
+                    document.add(table);
+
+                    JsonNode task = data.get("task");
+                    if (task != null && task.isObject()) {
+                        Paragraph taskTitle = new Paragraph("任务信息", headerFont);
+                        taskTitle.setSpacingBefore(6f);
+                        document.add(taskTitle);
+
+                        PdfPTable taskTable = new PdfPTable(2);
+                        taskTable.setWidthPercentage(100);
+                        addHeaderCell(taskTable, "字段", headerFont);
+                        addHeaderCell(taskTable, "值", headerFont);
+                        addBodyCell(taskTable, "任务ID", bodyFont);
+                        addBodyCell(taskTable, safeText(task.get("taskId")), bodyFont);
+                        addBodyCell(taskTable, "模型", bodyFont);
+                        addBodyCell(taskTable, safeText(task.get("model")), bodyFont);
+                        addBodyCell(taskTable, "模型类型", bodyFont);
+                        addBodyCell(taskTable, safeText(task.get("modelType")), bodyFont);
+                        addBodyCell(taskTable, "区域", bodyFont);
+                        addBodyCell(taskTable, safeText(task.get("region")), bodyFont);
+                        addBodyCell(taskTable, "作物", bodyFont);
+                        addBodyCell(taskTable, safeText(task.get("crop")), bodyFont);
+                        document.add(taskTable);
+                    }
                 } else {
                     document.add(new Paragraph(toPrettyJson(section.data()), bodyFont));
                 }
@@ -449,6 +510,74 @@ public class ReportServiceImpl implements ReportService {
                             setNumeric(row, 2, node.get("production"));
                             setNumeric(row, 3, node.get("yieldPerHectare"));
                         }
+                    }
+                } else if ("FORECAST_COMPARISON".equalsIgnoreCase(section.type())) {
+                    Row headerRow = sheet.createRow(rowIndex++);
+                    headerRow.createCell(0).setCellValue("指标");
+                    headerRow.createCell(1).setCellValue("数值");
+                    headerRow.createCell(2).setCellValue("单位");
+                    JsonNode data = section.data() != null ? section.data() : objectMapper.createObjectNode();
+
+                    Row forecastYearRow = sheet.createRow(rowIndex++);
+                    forecastYearRow.createCell(0).setCellValue("预测年份");
+                    setNumeric(forecastYearRow, 1, data.get("forecastYear"));
+
+                    Row predictedYieldRow = sheet.createRow(rowIndex++);
+                    predictedYieldRow.createCell(0).setCellValue("预测单产");
+                    setNumeric(predictedYieldRow, 1, data.get("predictedYield"));
+                    predictedYieldRow.createCell(2).setCellValue("吨/公顷");
+
+                    Row predictedProductionRow = sheet.createRow(rowIndex++);
+                    predictedProductionRow.createCell(0).setCellValue("预测总产量");
+                    setNumeric(predictedProductionRow, 1, data.get("predictedProduction"));
+                    predictedProductionRow.createCell(2).setCellValue("万吨");
+
+                    String measurementLabel = safeText(data.get("measurementLabel"));
+                    Row measurementRow = sheet.createRow(rowIndex++);
+                    measurementRow.createCell(0).setCellValue(StringUtils.hasText(measurementLabel) ? measurementLabel : "测量值");
+                    setNumeric(measurementRow, 1, data.get("measurementValue"));
+                    measurementRow.createCell(2).setCellValue(safeText(data.get("measurementUnit")));
+
+                    Row actualYieldRow = sheet.createRow(rowIndex++);
+                    actualYieldRow.createCell(0).setCellValue("实际单产");
+                    setNumeric(actualYieldRow, 1, data.get("actualYield"));
+                    actualYieldRow.createCell(2).setCellValue("吨/公顷");
+
+                    Row differenceRow = sheet.createRow(rowIndex++);
+                    differenceRow.createCell(0).setCellValue("预测与实际差值");
+                    setNumeric(differenceRow, 1, data.get("difference"));
+                    differenceRow.createCell(2).setCellValue("吨/公顷");
+
+                    Row evaluationRow = sheet.createRow(rowIndex++);
+                    evaluationRow.createCell(0).setCellValue("模型评价");
+                    evaluationRow.createCell(1).setCellValue(safeText(data.get("evaluation")));
+
+                    JsonNode task = data.get("task");
+                    if (task != null && task.isObject()) {
+                        rowIndex += 1;
+                        Row taskHeader = sheet.createRow(rowIndex++);
+                        taskHeader.createCell(0).setCellValue("任务信息");
+                        taskHeader.createCell(1).setCellValue("值");
+
+                        Row taskIdRow = sheet.createRow(rowIndex++);
+                        taskIdRow.createCell(0).setCellValue("任务ID");
+                        taskIdRow.createCell(1).setCellValue(safeText(task.get("taskId")));
+
+                        Row modelRow = sheet.createRow(rowIndex++);
+                        modelRow.createCell(0).setCellValue("模型");
+                        modelRow.createCell(1).setCellValue(safeText(task.get("model")));
+
+                        Row modelTypeRow = sheet.createRow(rowIndex++);
+                        modelTypeRow.createCell(0).setCellValue("模型类型");
+                        modelTypeRow.createCell(1).setCellValue(safeText(task.get("modelType")));
+
+                        Row regionRow = sheet.createRow(rowIndex++);
+                        regionRow.createCell(0).setCellValue("区域");
+                        regionRow.createCell(1).setCellValue(safeText(task.get("region")));
+
+                        Row cropRow = sheet.createRow(rowIndex++);
+                        cropRow.createCell(0).setCellValue("作物");
+                        cropRow.createCell(1).setCellValue(safeText(task.get("crop")));
                     }
                 } else {
                     sheet.createRow(rowIndex++).createCell(0).setCellValue(toPrettyJson(section.data()));
