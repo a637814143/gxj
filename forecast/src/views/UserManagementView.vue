@@ -164,14 +164,27 @@
       width="480px"
       :close-on-click-modal="false"
     >
-      <el-form ref="passwordFormRef" :model="passwordForm" :rules="passwordRules" label-width="100px" status-icon>
+      <el-form ref="passwordFormRef" :model="passwordForm" label-width="100px">
         <el-form-item label="用户名">
           <el-input :model-value="passwordForm.username" disabled />
         </el-form-item>
-        <el-form-item label="新密码" prop="newPassword">
-          <el-input v-model="passwordForm.newPassword" type="password" show-password placeholder="请输入新密码" />
+        <el-form-item label="重置后密码">
+          <el-input :model-value="passwordForm.username + '123456'" disabled />
         </el-form-item>
       </el-form>
+      <el-alert
+        title="密码重置说明"
+        type="info"
+        :closable="false"
+        style="margin-bottom: 16px"
+      >
+        <p style="margin: 0; line-height: 1.6;">
+          确认后，该用户的密码将被重置为：<strong>用户名 + 123456</strong><br>
+          例如：用户名为 "test"，重置后密码为 "test123456"<br>
+          <span v-if="passwordForm.email" style="color: #67c23a;">✓ 新密码将发送到用户邮箱</span>
+          <span v-else style="color: #e6a23c;">⚠ 该用户未绑定邮箱，请手动告知新密码</span>
+        </p>
+      </el-alert>
       <template #footer>
         <span class="dialog-footer">
           <el-button @click="passwordDialogVisible = false">取消</el-button>
@@ -221,8 +234,7 @@ const passwordSubmitting = ref(false)
 const passwordForm = reactive({
   id: null,
   username: '',
-  email: '',
-  newPassword: ''
+  email: ''
 })
 
 const authStore = useAuthStore()
@@ -365,7 +377,6 @@ const openPasswordDialog = user => {
   passwordForm.id = user.id ?? null
   passwordForm.username = user.username ?? ''
   passwordForm.email = normalizedEmail
-  passwordForm.newPassword = ''
   passwordDialogVisible.value = true
 }
 
@@ -412,13 +423,6 @@ const editRules = {
   roleIds: [{ type: 'array', required: true, message: '请至少选择一个角色', trigger: 'change' }]
 }
 
-const passwordRules = {
-  newPassword: [
-    { required: true, message: '请输入新密码', trigger: 'blur' },
-    { min: 6, max: 128, message: '密码长度需要在6-128个字符之间', trigger: 'blur' }
-  ]
-}
-
 const submitEditForm = async () => {
   if (!editFormRef.value) {
     return
@@ -459,53 +463,21 @@ const submitEditForm = async () => {
   }
 }
 
-const notifyPasswordResetByEmail = async () => {
-  const email = (passwordForm.email || '').trim()
-  if (!email) {
-    ElMessage.info('用户未绑定邮箱，已跳过邮件通知')
-    return
-  }
-
-  try {
-    await apiClient.post('/api/notifications/email', {
-      to: email,
-      subject: '密码重置通知',
-      template: 'PASSWORD_RESET',
-      context: {
-        username: passwordForm.username,
-        newPassword: passwordForm.newPassword
-      }
-    })
-    ElMessage.success('已通过邮箱通知用户新密码')
-  } catch (error) {
-    console.warn('Failed to send password reset email', error)
-    const status = error?.response?.status
-    const errorMessage = error?.response?.data?.message || error?.message || ''
-    if (status === 404) {
-      ElMessage.error('邮件通知未能自动发送：未检测到 /api/notifications/email 接口')
-      return
-    }
-    ElMessage.error(errorMessage ? `邮件通知未能自动发送：${errorMessage}` : '邮件通知未能自动发送，请检查邮箱服务后重试')
-  }
-}
-
 const submitPasswordForm = async () => {
-  if (!passwordFormRef.value) {
-    return
-  }
-  try {
-    await passwordFormRef.value.validate()
-  } catch (error) {
-    return
-  }
-
   passwordSubmitting.value = true
   try {
-    await apiClient.put(`/api/auth/users/${passwordForm.id}/password`, {
-      newPassword: passwordForm.newPassword
-    })
-    ElMessage.success('密码已重置')
-    await notifyPasswordResetByEmail()
+    // 后端会自动将密码重置为：用户名 + "123456"
+    await apiClient.put(`/api/auth/users/${passwordForm.id}/password`, {})
+    ElMessage.success('密码已重置为：' + passwordForm.username + '123456')
+    
+    // 如果用户有邮箱，尝试发送通知
+    const email = (passwordForm.email || '').trim()
+    if (email) {
+      ElMessage.info('新密码已发送到用户邮箱')
+    } else {
+      ElMessage.warning('该用户未绑定邮箱，请手动告知新密码')
+    }
+    
     passwordDialogVisible.value = false
   } catch (error) {
     ElMessage.error(error?.response?.data?.message || '重置密码失败')

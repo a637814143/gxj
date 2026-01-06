@@ -105,9 +105,24 @@
         </div>
       </template>
       <div class="chart-body">
-        <el-skeleton v-if="loading" animated :rows="6" />
-        <BaseChart v-else-if="hasChartData" :option="chartOption" :height="360" />
-        <el-empty v-else description="暂无预测记录，请先在预测中心生成数据" />
+        <el-skeleton v-if="loading" animated :rows="8" />
+        <div v-else-if="!records.length" class="empty-state">
+          <div class="empty-icon">📊</div>
+          <div class="empty-title">暂无预测记录</div>
+          <div class="empty-desc">请先在预测中心生成预测数据，然后刷新此页面</div>
+          <el-button type="primary" @click="loadVisualizationData" style="margin-top: 16px;">
+            刷新数据
+          </el-button>
+        </div>
+        <div v-else-if="!filteredRecords.length" class="empty-state">
+          <div class="empty-icon">🔍</div>
+          <div class="empty-title">没有符合条件的记录</div>
+          <div class="empty-desc">请调整筛选条件（地区、作物、模型）后重试</div>
+          <el-button @click="resetFilters" style="margin-top: 16px;">
+            重置筛选条件
+          </el-button>
+        </div>
+        <BaseChart v-else :option="chartOption" :height="360" />
       </div>
     </el-card>
 
@@ -130,15 +145,24 @@
           </div>
         </div>
       </template>
-      <el-table :data="pagedRecords" border :header-cell-style="tableHeaderStyle" empty-text="暂无预测记录">
-        <el-table-column prop="periodLabel" label="预测期" min-width="120" />
+      <el-table :data="pagedRecords" border :header-cell-style="tableHeaderStyle" empty-text="暂无预测记录" stripe>
+        <el-table-column prop="periodLabel" label="预测期" min-width="120" fixed />
         <el-table-column prop="regionName" label="地区" min-width="140" />
         <el-table-column prop="cropName" label="作物" min-width="140" />
-        <el-table-column prop="modelName" label="模型" min-width="160">
-          <template #default="{ row }">{{ row.modelName }} ({{ row.modelType || '未知类型' }})</template>
+        <el-table-column prop="modelName" label="模型" min-width="180">
+          <template #default="{ row }">
+            <div>{{ row.modelName }}</div>
+            <el-tag v-if="row.modelType" size="small" type="info" style="margin-top: 4px;">
+              {{ row.modelType }}
+            </el-tag>
+          </template>
         </el-table-column>
-        <el-table-column label="指标值" min-width="150">
-          <template #default="{ row }">{{ formatNumber(metricAccessor(row)) }} {{ metricUnit }}</template>
+        <el-table-column label="指标值" min-width="150" align="right">
+          <template #default="{ row }">
+            <span style="font-weight: 600; color: #0f766e;">
+              {{ formatNumber(metricAccessor(row)) }} {{ metricUnit }}
+            </span>
+          </template>
         </el-table-column>
         <el-table-column prop="generatedAt" label="生成时间" min-width="180">
           <template #default="{ row }">{{ formatDateTime(row.generatedAt) }}</template>
@@ -178,8 +202,6 @@ const pageSize = 8
 const metricOptions = [
   { value: 'predictedProduction', label: '推算总产量', unit: '吨' },
   { value: 'predictedYield', label: '推算单产', unit: '吨/公顷' },
-  { value: 'measurementValue', label: '指标预测值', unit: '' },
-  { value: 'estimatedRevenue', label: '预计收益', unit: '万元' },
 ]
 
 const chartTypeOptions = [
@@ -276,7 +298,7 @@ const chartData = computed(() => {
   }
   const categories = []
   const categorySet = new Set()
-  const groupingKey = grouping.value === 'crop' ? 'cropName' : grouping.value === 'model' ? 'modelName' : 'regionName'
+  
   const grouped = new Map()
   filteredRecords.value.forEach(record => {
     const category = record.periodLabel || formatDateTime(record.generatedAt)
@@ -284,7 +306,43 @@ const chartData = computed(() => {
       categorySet.add(category)
       categories.push(category)
     }
-    const groupLabel = record[groupingKey] || '未分组'
+    
+    // 智能构建图例标签：根据选择的数量决定显示哪些维度
+    const hasMultipleRegions = selectedRegions.value.length > 1
+    const hasMultipleCrops = selectedCrops.value.length > 1
+    const hasMultipleModels = selectedModels.value.length > 1
+    
+    let groupLabel = ''
+    
+    if (grouping.value === 'region') {
+      // 按地区分组
+      groupLabel = record.regionName || '未知地区'
+      if (hasMultipleCrops) {
+        groupLabel += ` · ${record.cropName || '未知作物'}`
+      }
+      if (hasMultipleModels) {
+        groupLabel += ` · ${record.modelName || '未知模型'}`
+      }
+    } else if (grouping.value === 'crop') {
+      // 按作物分组
+      groupLabel = record.cropName || '未知作物'
+      if (hasMultipleRegions) {
+        groupLabel += ` · ${record.regionName || '未知地区'}`
+      }
+      if (hasMultipleModels) {
+        groupLabel += ` · ${record.modelName || '未知模型'}`
+      }
+    } else {
+      // 按模型分组
+      groupLabel = record.modelName || '未知模型'
+      if (hasMultipleCrops) {
+        groupLabel += ` · ${record.cropName || '未知作物'}`
+      }
+      if (hasMultipleRegions) {
+        groupLabel += ` · ${record.regionName || '未知地区'}`
+      }
+    }
+    
     const value = metricAccessor(record)
     if (value === null || value === undefined || Number.isNaN(Number(value))) {
       return
@@ -300,6 +358,7 @@ const chartData = computed(() => {
     cell.total += Number(value)
     cell.count += 1
   })
+  
   const series = Array.from(grouped.entries()).map(([name, bucket]) => {
     const data = categories.map(category => {
       const cell = bucket.get(category)
@@ -319,20 +378,71 @@ const chartOption = computed(() => {
   }
   const seriesType = chartType.value === 'bar' ? 'bar' : 'line'
   const enableArea = chartType.value === 'area'
+  
+  // 计算数据范围以优化Y轴显示
+  const allValues = chartData.value.series.flatMap(s => s.data.filter(v => v !== null))
+  const minValue = allValues.length > 0 ? Math.min(...allValues) : 0
+  const maxValue = allValues.length > 0 ? Math.max(...allValues) : 100
+  const range = maxValue - minValue
+  const yAxisMin = range > 0 ? Math.floor(minValue - range * 0.1) : 0
+  const yAxisMax = range > 0 ? Math.ceil(maxValue + range * 0.1) : 100
+  
   return {
-    tooltip: { trigger: 'axis' },
-    legend: { data: chartData.value.series.map(item => item.name) },
+    tooltip: {
+      trigger: 'axis',
+      formatter: params => {
+        if (!params || !params.length) return ''
+        let result = `<div style="font-weight: 600; margin-bottom: 4px;">${params[0].axisValue}</div>`
+        params.forEach(param => {
+          const value = param.value !== null && param.value !== undefined 
+            ? formatNumber(param.value) + ' ' + metricUnit.value
+            : '--'
+          result += `<div style="display: flex; align-items: center; gap: 8px;">
+            <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: ${param.color};"></span>
+            <span>${param.seriesName}:</span>
+            <span style="font-weight: 600;">${value}</span>
+          </div>`
+        })
+        return result
+      }
+    },
+    legend: {
+      data: chartData.value.series.map(item => item.name),
+      top: 0,
+      left: 'center',
+      type: chartData.value.series.length > 6 ? 'scroll' : 'plain',
+      pageButtonPosition: 'end',
+      textStyle: {
+        fontSize: 12
+      }
+    },
     grid: { top: 48, left: 60, right: 24, bottom: 40 },
     xAxis: {
       type: 'category',
       boundaryGap: chartType.value === 'bar',
       data: chartData.value.categories,
+      axisLabel: {
+        rotate: chartData.value.categories.length > 10 ? 45 : 0,
+        interval: chartData.value.categories.length > 20 ? 'auto' : 0
+      }
     },
     yAxis: {
       type: 'value',
       name: metricUnit.value,
+      min: yAxisMin,
+      max: yAxisMax,
       axisLabel: {
-        formatter: value => (value == null ? '' : Number(value).toFixed(2)),
+        formatter: value => {
+          if (value == null) return ''
+          // 智能格式化：大数字用K/M表示
+          if (Math.abs(value) >= 1000000) {
+            return (value / 1000000).toFixed(1) + 'M'
+          }
+          if (Math.abs(value) >= 1000) {
+            return (value / 1000).toFixed(1) + 'K'
+          }
+          return value.toFixed(0)
+        },
       },
     },
     series: chartData.value.series.map(item => ({
@@ -340,8 +450,12 @@ const chartOption = computed(() => {
       type: seriesType,
       smooth: seriesType === 'line',
       showSymbol: seriesType === 'line',
+      symbolSize: 6,
       areaStyle: enableArea ? { opacity: 0.18 } : undefined,
       data: item.data,
+      emphasis: {
+        focus: 'series'
+      }
     })),
   }
 })
@@ -361,7 +475,34 @@ const chartSubtitle = computed(() => {
   if (!filteredRecords.value.length) {
     return '请选择预测条件查看可视化结果'
   }
-  return `共 ${filteredRecords.value.length} 条记录，按${groupingOptions.find(item => item.value === grouping.value)?.label || '维度'}统计`
+  const groupLabel = groupingOptions.find(item => item.value === grouping.value)?.label || '维度'
+  let subtitle = `共 ${filteredRecords.value.length} 条记录，${groupLabel}统计`
+  
+  // 构建图例格式说明
+  const hasMultipleRegions = selectedRegions.value.length > 1
+  const hasMultipleCrops = selectedCrops.value.length > 1
+  const hasMultipleModels = selectedModels.value.length > 1
+  
+  const parts = []
+  if (grouping.value === 'region') {
+    parts.push('地区')
+    if (hasMultipleCrops) parts.push('作物')
+    if (hasMultipleModels) parts.push('模型')
+  } else if (grouping.value === 'crop') {
+    parts.push('作物')
+    if (hasMultipleRegions) parts.push('地区')
+    if (hasMultipleModels) parts.push('模型')
+  } else {
+    parts.push('模型')
+    if (hasMultipleCrops) parts.push('作物')
+    if (hasMultipleRegions) parts.push('地区')
+  }
+  
+  if (parts.length > 1) {
+    subtitle += `（图例：${parts.join(' · ')}）`
+  }
+  
+  return subtitle
 })
 
 const insightCards = computed(() => {
@@ -458,11 +599,21 @@ const loadVisualizationData = async () => {
     }
     records.value = normalized.sort((a, b) => parseTime(b.generatedAt) - parseTime(a.generatedAt))
     tablePage.value = 1
+    if (records.value.length > 0) {
+      ElMessage.success(`已加载 ${records.value.length} 条预测记录`)
+    }
   } catch (error) {
     ElMessage.error(error?.response?.data?.message || '加载预测记录失败')
   } finally {
     loading.value = false
   }
+}
+
+const resetFilters = () => {
+  selectedRegions.value = regionOptions.value.map(o => o.value)
+  selectedCrops.value = cropOptions.value.map(o => o.value)
+  selectedModels.value = modelOptions.value.map(o => o.value)
+  ElMessage.info('已重置筛选条件')
 }
 
 const syncSelection = (options, targetRef) => {
@@ -615,6 +766,36 @@ onMounted(() => {
 
 .chart-body {
   min-height: 320px;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 320px;
+  padding: 40px 20px;
+}
+
+.empty-icon {
+  font-size: 64px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.empty-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 8px;
+}
+
+.empty-desc {
+  font-size: 14px;
+  color: #6b7280;
+  text-align: center;
+  max-width: 400px;
+  line-height: 1.6;
 }
 
 .insight-row {
