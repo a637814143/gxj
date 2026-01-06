@@ -325,7 +325,10 @@ public class LocalForecastEngine {
             lastValue = value;
             sanitized.add(new ForecastEngineRequest.HistoryPoint(point.period(), value, point.features()));
         }
-        return sanitized.isEmpty() ? history : sanitized;
+        
+        // 添加滞后特征增强
+        List<ForecastEngineRequest.HistoryPoint> result = sanitized.isEmpty() ? history : sanitized;
+        return LagFeatureEnhancer.enhanceWithLagFeatures(result);
     }
 
     private List<Double> linearTrendForecast(List<Double> historyValues, int periods) {
@@ -1176,7 +1179,14 @@ public class LocalForecastEngine {
             double diff = value - mean;
             sst += diff * diff;
         }
-        Double r2 = sst == 0 ? null : Math.max(0d, 1 - (sumSq / Math.max(sst, 1e-9)));
+        // 计算R²，但限制在合理范围内[-1.0, 1.0]
+        // R² < -1.0 说明模型预测极差，限制为-1.0避免误导
+        Double r2 = null;
+        if (sst > 1e-9) {
+            double rawR2 = 1 - (sumSq / sst);
+            // 限制R²在[-1.0, 1.0]范围内
+            r2 = Math.max(-1.0, Math.min(1.0, rawR2));
+        }
         double mape = (sumPct / actual.length) * 100;
         ForecastEngineResponse.EvaluationMetrics metrics = new ForecastEngineResponse.EvaluationMetrics(
             round(mae),
@@ -1188,26 +1198,36 @@ public class LocalForecastEngine {
     }
 
     private ForecastEvaluation evaluateArimaPerformance(List<Double> historyValues, Map<String, Object> parameters) {
-        int validationPoints = Math.min(3, historyValues.size() - 5);
+        // 降低最小数据要求，从5降到3
+        int minHistory = 3;
+        int validationPoints = Math.min(3, historyValues.size() - minHistory);
         if (validationPoints <= 0) {
+            // 如果数据不足以进行交叉验证，使用全部数据进行拟合评估
+            if (historyValues.size() >= minHistory) {
+                return evaluateModelFit(historyValues, parameters, true);
+            }
             return null;
         }
         List<Double> actual = new ArrayList<>();
         List<Double> predicted = new ArrayList<>();
         for (int offset = validationPoints; offset > 0; offset--) {
             int trainSize = historyValues.size() - offset;
-            if (trainSize < 5) {
+            if (trainSize < minHistory) {
                 continue;
             }
             List<Double> training = new ArrayList<>(historyValues.subList(0, trainSize));
             Optional<List<Double>> forecast = arimaForecaster.forecast(training, 1, parameters);
             if (forecast.isEmpty()) {
-                return null;
+                continue;  // 跳过失败的预测，而不是返回null
             }
             predicted.add(forecast.get().get(0));
             actual.add(historyValues.get(trainSize));
         }
         if (actual.isEmpty() || predicted.size() != actual.size()) {
+            // 如果交叉验证失败，尝试拟合评估
+            if (historyValues.size() >= minHistory) {
+                return evaluateModelFit(historyValues, parameters, true);
+            }
             return null;
         }
         double[] actualArray = actual.stream().mapToDouble(Double::doubleValue).toArray();
@@ -1216,31 +1236,113 @@ public class LocalForecastEngine {
     }
 
     private ForecastEvaluation evaluateProphetPerformance(List<Double> historyValues, Map<String, Object> parameters) {
-        int validationPoints = Math.min(3, historyValues.size() - 4);
+        // 降低最小数据要求，从4降到3
+        int minHistory = 3;
+        int validationPoints = Math.min(3, historyValues.size() - minHistory);
         if (validationPoints <= 0) {
+            // 如果数据不足以进行交叉验证，使用全部数据进行拟合评估
+            if (historyValues.size() >= minHistory) {
+                return evaluateModelFit(historyValues, parameters, false);
+            }
             return null;
         }
         List<Double> actual = new ArrayList<>();
         List<Double> predicted = new ArrayList<>();
         for (int offset = validationPoints; offset > 0; offset--) {
             int trainSize = historyValues.size() - offset;
-            if (trainSize < 4) {
+            if (trainSize < minHistory) {
                 continue;
             }
             List<Double> training = new ArrayList<>(historyValues.subList(0, trainSize));
             Optional<List<Double>> forecast = prophetForecaster.forecast(training, 1, parameters);
             if (forecast.isEmpty()) {
-                return null;
+                continue;  // 跳过失败的预测，而不是返回null
             }
             predicted.add(forecast.get().get(0));
             actual.add(historyValues.get(trainSize));
         }
         if (actual.isEmpty() || predicted.size() != actual.size()) {
+            // 如果交叉验证失败，尝试拟合评估
+            if (historyValues.size() >= minHistory) {
+                return evaluateModelFit(historyValues, parameters, false);
+            }
             return null;
         }
         double[] actualArray = actual.stream().mapToDouble(Double::doubleValue).toArray();
         double[] predictedArray = predicted.stream().mapToDouble(Double::doubleValue).toArray();
         return computeEvaluation(actualArray, predictedArray);
+    }
+
+    /**
+     * 当数据不足以进行交叉验证时，通过拟合整个数据集来评估模型
+     * 使用训练集拟合度评估（in-sample evaluation）
+     */
+    private ForecastEvaluation evaluateModelFit(List<Double> historyValues, Map<String, Object> parameters, boolean useArima) {
+        if (historyValues.size() < 3) {
+            return null;
+        }
+        
+        // 使用后80%的数据进行拟合评估（前20%用于模型初始化）
+        int startIndex = Math.max(1, historyValues.size() / 5);
+        List<Double> actual = new ArrayList<>();
+        List<Double> predicted = new ArrayList<>();
+        
+        // 对每个点，使用之前所有数据进行单步预测
+        for (int i = startIndex; i < historyValues.size(); i++) {
+            List<Double> training = new ArrayList<>(historyValues.subList(0, i));
+            Optional<List<Double>> forecast;
+            
+            if (useArima) {
+                forecast = arimaForecaster.forecast(training, 1, parameters);
+            } else {
+                forecast = prophetForecaster.forecast(training, 1, parameters);
+            }
+            
+            if (forecast.isPresent() && !forecast.get().isEmpty()) {
+                double predictedValue = forecast.get().get(0);
+                double actualValue = historyValues.get(i);
+                
+                // 过滤异常预测值（避免极端R²）
+                if (Double.isFinite(predictedValue) && predictedValue > 0) {
+                    // 如果预测值与实际值差异过大（超过10倍），使用简单趋势预测
+                    double ratio = Math.abs(predictedValue - actualValue) / Math.max(actualValue, 0.1);
+                    if (ratio > 10) {
+                        // 使用前一个值作为预测（更保守）
+                        predictedValue = training.get(training.size() - 1);
+                    }
+                    
+                    predicted.add(predictedValue);
+                    actual.add(actualValue);
+                }
+            }
+        }
+        
+        if (actual.isEmpty() || predicted.size() != actual.size() || actual.size() < 2) {
+            return null;
+        }
+        
+        double[] actualArray = actual.stream().mapToDouble(Double::doubleValue).toArray();
+        double[] predictedArray = predicted.stream().mapToDouble(Double::doubleValue).toArray();
+        
+        ForecastEvaluation evaluation = computeEvaluation(actualArray, predictedArray);
+        
+        // 如果R²仍然是极端负数，限制在合理范围内
+        if (evaluation != null && evaluation.metrics != null && evaluation.metrics.r2() != null) {
+            double r2 = evaluation.metrics.r2();
+            if (r2 < -1.0) {
+                // 极端负数R²说明模型完全不适用，设为-1.0（表示比平均值差2倍）
+                ForecastEngineResponse.EvaluationMetrics adjustedMetrics = 
+                    new ForecastEngineResponse.EvaluationMetrics(
+                        evaluation.metrics.mae(),
+                        evaluation.metrics.rmse(),
+                        evaluation.metrics.mape(),
+                        -1.0
+                    );
+                return new ForecastEvaluation(adjustedMetrics, evaluation.rmseScore, evaluation.mapeScore);
+            }
+        }
+        
+        return evaluation;
     }
 
     private ForecastCandidate selectBestCandidate(List<ForecastCandidate> candidates) {

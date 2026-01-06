@@ -15,3 +15,5 @@ export const exportReport = (reportId, format = 'pdf') =>
     params: { format },
     responseType: 'blob'
   })
+
+export const deleteReport = reportId => apiClient.delete(`/api/report/${reportId}`)

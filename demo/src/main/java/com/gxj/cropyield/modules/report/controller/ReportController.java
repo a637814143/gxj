@@ -14,6 +14,7 @@ import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -67,5 +68,11 @@ public class ReportController {
             .contentType(result.mediaType())
             .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
             .body(new ByteArrayResource(result.data()));
+    }
+
+    @DeleteMapping("/{id}")
+    public ApiResponse<Void> deleteReport(@PathVariable Long id) {
+        reportService.deleteReport(id);
+        return new ApiResponse<>(200, "报告删除成功", null);
     }
 }

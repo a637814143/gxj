@@ -99,7 +99,11 @@ const normalizeSeries = series => {
 }
 
 export const executeForecast = async payload => {
-  const { data } = await apiClient.post('/api/forecast/predict', payload)
+  // LSTM模型训练时间较长，使用更长的超时时间
+  const isLSTM = payload?.modelCode === 'LSTM'
+  const timeout = isLSTM ? 60000 : 15000  // LSTM: 60秒，其他: 15秒
+  
+  const { data } = await apiClient.post('/api/forecast/predict', payload, { timeout })
   const response = data?.data ?? data ?? {}
 
   return {

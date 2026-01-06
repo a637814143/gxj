@@ -42,7 +42,20 @@
               <span>覆盖周期：{{ report.coveragePeriod || '未填写' }}</span>
             </div>
             <p v-if="report.insights" class="report-insight">洞察：{{ report.insights }}</p>
-            <el-link type="primary" @click="viewReport(report)">查看详情</el-link>
+            <div class="report-actions">
+              <el-link type="primary" @click="viewReport(report)">查看详情</el-link>
+              <el-popconfirm
+                v-if="canDeleteReport"
+                title="确定要删除这份报告吗？"
+                confirm-button-text="确定"
+                cancel-button-text="取消"
+                @confirm="handleDeleteReport(report.id)"
+              >
+                <template #reference>
+                  <el-link type="danger" :loading="deletingReportId === report.id">删除</el-link>
+                </template>
+              </el-popconfirm>
+            </div>
           </el-card>
         </el-timeline-item>
       </el-timeline>
@@ -66,6 +79,8 @@
       v-model="showDetailDrawer"
       :report-id="activeReportId"
       :summary="activeReportSummary"
+      :can-delete="canDeleteReport"
+      @delete="handleDeleteFromDrawer"
     />
   </div>
 </template>
@@ -74,11 +89,13 @@
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
-import { fetchReportOverview } from '../services/report'
+import { fetchReportOverview, deleteReport } from '../services/report'
+import { useAuthStore } from '../stores/auth'
 import ReportDetailDrawer from '../components/report/ReportDetailDrawer.vue'
 
 const router = useRouter()
 const route = useRoute()
+const authStore = useAuthStore()
 
 const reports = ref([])
 const metrics = ref({ totalReports: 0, publishedThisMonth: 0, pendingApproval: 0, autoGenerationEnabled: false })
@@ -87,9 +104,20 @@ const showDetailDrawer = ref(false)
 const activeReportId = ref(null)
 const activeReportSummary = ref(null)
 const reportListCard = ref(null)
+const deletingReportId = ref(null)
 const reportPagination = reactive({
   currentPage: 1,
   pageSize: 5,
+})
+
+// 检查用户是否有删除权限（ADMIN 或 AGRICULTURE_DEPT）
+const canDeleteReport = computed(() => {
+  const roles = authStore.user?.roles
+  if (!roles) return false
+  if (Array.isArray(roles)) {
+    return roles.includes('ADMIN') || roles.includes('AGRICULTURE_DEPT')
+  }
+  return roles === 'ADMIN' || roles === 'AGRICULTURE_DEPT'
 })
 
 const paginatedReports = computed(() => {
@@ -159,6 +187,27 @@ const fetchReports = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const handleDeleteReport = async (reportId) => {
+  if (!reportId) return
+  
+  deletingReportId.value = reportId
+  try {
+    await deleteReport(reportId)
+    ElMessage.success('报告删除成功')
+    // 刷新报告列表
+    await fetchReports()
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.message || '删除报告失败')
+  } finally {
+    deletingReportId.value = null
+  }
+}
+
+const handleDeleteFromDrawer = async (reportId) => {
+  showDetailDrawer.value = false
+  await handleDeleteReport(reportId)
 }
 
 onMounted(() => {
@@ -395,6 +444,12 @@ watch(
   margin: 0 0 12px;
   font-size: 13px;
   color: #3b4a6b;
+}
+
+.report-actions {
+  display: flex;
+  gap: 16px;
+  align-items: center;
 }
 
 @media (max-width: 768px) {

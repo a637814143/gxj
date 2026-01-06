@@ -24,6 +24,17 @@
           <el-button type="primary" size="small" :loading="exporting" @click="handleExport">
             导出
           </el-button>
+          <el-popconfirm
+            v-if="canDelete"
+            title="确定要删除这份报告吗？"
+            confirm-button-text="确定"
+            cancel-button-text="取消"
+            @confirm="handleDelete"
+          >
+            <template #reference>
+              <el-button type="danger" size="small">删除</el-button>
+            </template>
+          </el-popconfirm>
         </div>
       </div>
     </template>
@@ -142,10 +153,11 @@ import { exportReport as exportReportApi, fetchReportDetail } from '../../servic
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
   reportId: { type: [Number, String], default: null },
-  summary: { type: Object, default: null }
+  summary: { type: Object, default: null },
+  canDelete: { type: Boolean, default: false }
 })
 
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits(['update:modelValue', 'delete'])
 
 const loading = ref(false)
 const errorMessage = ref('')
@@ -331,6 +343,14 @@ watch(
 
 const handleClose = () => {
   emit('update:modelValue', false)
+}
+
+const handleDelete = () => {
+  if (!props.reportId) {
+    ElMessage.warning('无法删除报告')
+    return
+  }
+  emit('delete', props.reportId)
 }
 </script>
 

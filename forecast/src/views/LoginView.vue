@@ -189,10 +189,13 @@ const { t } = useI18n()
 
 const loginMode = ref(route.query.mode === 'user' ? 'user' : 'admin')
 
-const loginBackgroundImage = new URL('../../beijin.jpg', import.meta.url).href
+const loginBackgroundImage = new URL('../assets/background.jpg', import.meta.url).href
 
 const loginPageStyle = computed(() => ({
-  backgroundImage: `linear-gradient(135deg, rgba(11, 61, 46, 0.85), rgba(30, 111, 92, 0.85)), url(${loginBackgroundImage})`
+  backgroundImage: `linear-gradient(135deg, rgba(11, 61, 46, 0.75), rgba(30, 111, 92, 0.75)), url(${loginBackgroundImage})`,
+  backgroundSize: 'cover',
+  backgroundPosition: 'center',
+  backgroundRepeat: 'no-repeat'
 }))
 
 const form = reactive({
@@ -504,19 +507,34 @@ const switchToMode = mode => {
   align-items: center;
   justify-content: center;
   background-color: #0b3d2e;
-  background-size: 100% 100%, cover;
-  background-position: center, center;
-  background-repeat: no-repeat, no-repeat;
   padding: 24px;
+  position: relative;
+  overflow: hidden;
+}
+
+.login-page::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  z-index: 0;
 }
 
 .login-card {
   width: 100%;
   max-width: 420px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(10px);
   border-radius: 16px;
-  box-shadow: 0 24px 48px rgba(11, 61, 46, 0.25);
+  box-shadow: 0 24px 48px rgba(11, 61, 46, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.1);
   padding: 32px;
+  position: relative;
+  z-index: 1;
 }
 
 .login-toggle {

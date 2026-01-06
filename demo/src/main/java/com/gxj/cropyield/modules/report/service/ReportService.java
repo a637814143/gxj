@@ -21,4 +21,6 @@ public interface ReportService {
     ReportDetailResponse getDetail(Long id);
 
     ReportExportResult export(Long id, String format);
+
+    void deleteReport(Long id);
 }

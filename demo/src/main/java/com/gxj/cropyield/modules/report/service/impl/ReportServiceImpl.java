@@ -297,6 +297,14 @@ public class ReportServiceImpl implements ReportService {
         };
     }
 
+    @Override
+    @Transactional
+    public void deleteReport(Long id) {
+        Report report = reportRepository.findById(id)
+            .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "报告不存在"));
+        reportRepository.delete(report);
+    }
+
     private ReportDetailResponse toDetail(Report report) {
         List<ReportSectionResponse> sections = report.getSections().stream()
             .sorted(Comparator.comparing(ReportSection::getSortOrder, Comparator.nullsLast(Integer::compareTo))

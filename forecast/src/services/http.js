@@ -18,7 +18,7 @@ const resolveBaseURL = () => {
 
 const apiClient = axios.create({
   baseURL: resolveBaseURL(),
-  timeout: 15000
+  timeout: 120000  // 增加到120秒（2分钟），确保LSTM有足够时间
 })
 
 let isRefreshing = false
