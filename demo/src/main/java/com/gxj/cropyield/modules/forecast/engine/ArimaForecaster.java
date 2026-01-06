@@ -63,17 +63,57 @@ class ArimaForecaster {
             // 4. 逆差分恢复原始尺度
             List<Double> forecast = reverseDifferencing(differencedForecast, historyValues, d);
 
-            // 5. 确保预测值为正
+            // 5. 后处理：确保预测值合理
+            double lastActual = historyValues.get(historyValues.size() - 1);
+            double mean = historyValues.stream().mapToDouble(Double::doubleValue).average().orElse(lastActual);
+            double stdDev = calculateStdDev(historyValues, mean);
+            
             for (int i = 0; i < forecast.size(); i++) {
-                if (forecast.get(i) < 0) {
-                    forecast.set(i, Math.max(0, historyValues.get(historyValues.size() - 1) * 0.9));
+                double value = forecast.get(i);
+                
+                // 检查是否为有限数
+                if (!Double.isFinite(value)) {
+                    value = lastActual;
                 }
+                
+                // 确保预测值为正（对于产量数据）
+                if (value < 0) {
+                    value = Math.max(0, lastActual * 0.95);
+                }
+                
+                // 限制预测值的变化幅度（避免极端预测）
+                double maxChange = stdDev * 3;  // 最多变化3个标准差
+                if (i == 0) {
+                    // 第一个预测值不应该与最后实际值相差太大
+                    if (Math.abs(value - lastActual) > maxChange) {
+                        value = lastActual + Math.signum(value - lastActual) * maxChange;
+                    }
+                } else {
+                    // 后续预测值不应该与前一个预测值相差太大
+                    double prevForecast = forecast.get(i - 1);
+                    if (Math.abs(value - prevForecast) > maxChange) {
+                        value = prevForecast + Math.signum(value - prevForecast) * maxChange;
+                    }
+                }
+                
+                forecast.set(i, value);
             }
 
             return Optional.of(forecast);
         } catch (Exception e) {
             return Optional.empty();
         }
+    }
+    
+    /**
+     * 计算标准差
+     */
+    private double calculateStdDev(List<Double> data, double mean) {
+        double sumSq = 0;
+        for (double value : data) {
+            sumSq += Math.pow(value - mean, 2);
+        }
+        return Math.sqrt(sumSq / data.size());
     }
 
     /**
@@ -106,12 +146,23 @@ class ArimaForecaster {
 
         List<Double> result = new ArrayList<>(differenced);
         
+        // 保存原始数据的最后d个值用于逆差分
+        List<Double> baseValues = new ArrayList<>();
+        for (int i = Math.max(0, original.size() - d); i < original.size(); i++) {
+            baseValues.add(original.get(i));
+        }
+        
         for (int order = 0; order < d; order++) {
             List<Double> integrated = new ArrayList<>();
-            double lastValue = original.get(original.size() - d + order);
+            // 使用正确的基准值
+            double lastValue = order < baseValues.size() ? baseValues.get(order) : original.get(original.size() - 1);
             
             for (double diff : result) {
                 double value = lastValue + diff;
+                // 添加数值稳定性检查
+                if (!Double.isFinite(value)) {
+                    value = lastValue;  // 如果出现异常，保持不变
+                }
                 integrated.add(value);
                 lastValue = value;
             }

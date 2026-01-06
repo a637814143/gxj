@@ -51,6 +51,9 @@ class ProphetForecaster {
             // 3. 生成预测
             List<Double> forecast = new ArrayList<>();
             int n = historyValues.size();
+            double lastActual = historyValues.get(historyValues.size() - 1);
+            double mean = historyValues.stream().mapToDouble(Double::doubleValue).average().orElse(lastActual);
+            double stdDev = calculateStdDev(historyValues, mean);
             
             for (int step = 1; step <= periods; step++) {
                 int t = n + step;
@@ -64,8 +67,28 @@ class ProphetForecaster {
                 // 组合预测
                 double prediction = trendValue + seasonalValue;
                 
+                // 数值稳定性检查
+                if (!Double.isFinite(prediction)) {
+                    prediction = lastActual;
+                }
+                
                 // 确保非负
                 prediction = Math.max(0, prediction);
+                
+                // 限制预测值的变化幅度
+                double maxChange = stdDev * 3;
+                if (step == 1) {
+                    // 第一个预测值不应该与最后实际值相差太大
+                    if (Math.abs(prediction - lastActual) > maxChange) {
+                        prediction = lastActual + Math.signum(prediction - lastActual) * maxChange;
+                    }
+                } else {
+                    // 后续预测值不应该与前一个预测值相差太大
+                    double prevForecast = forecast.get(forecast.size() - 1);
+                    if (Math.abs(prediction - prevForecast) > maxChange) {
+                        prediction = prevForecast + Math.signum(prediction - prevForecast) * maxChange;
+                    }
+                }
                 
                 forecast.add(prediction);
             }
@@ -74,6 +97,17 @@ class ProphetForecaster {
         } catch (Exception e) {
             return Optional.empty();
         }
+    }
+    
+    /**
+     * 计算标准差
+     */
+    private double calculateStdDev(List<Double> data, double mean) {
+        double sumSq = 0;
+        for (double value : data) {
+            sumSq += Math.pow(value - mean, 2);
+        }
+        return Math.sqrt(sumSq / data.size());
     }
 
     /**

@@ -52,14 +52,16 @@ class Dl4jLstmForecaster {
             return Optional.of(repeat(historyValues.get(historyValues.size() - 1), periods));
         }
 
-        int windowSize = Math.min(MAX_WINDOW_SIZE, Math.max(MIN_WINDOW_SIZE, historyValues.size() / 2));
+        // 改进窗口大小计算：更保守的策略
+        int windowSize = Math.min(MAX_WINDOW_SIZE, Math.max(MIN_WINDOW_SIZE, historyValues.size() / 3));
         if (windowSize >= historyValues.size()) {
-            windowSize = historyValues.size() - 1;
+            windowSize = Math.max(MIN_WINDOW_SIZE, historyValues.size() - 1);
         }
         if (windowSize < MIN_WINDOW_SIZE) {
             return Optional.empty();
         }
 
+        // 使用更稳健的归一化方法（Min-Max归一化）
         double[] scaledSeries = historyValues.stream()
             .mapToDouble(v -> (v - min) / range)
             .toArray();
@@ -86,18 +88,36 @@ class Dl4jLstmForecaster {
         network.init();
         network.setListeners(new ScoreIterationListener(Math.max(10, sampleCount)));
         
-        // Use epochs from parameters if provided, otherwise use improved calculation
-        // 更智能的epoch计算：基于数据量，但有更合理的范围
-        int epochs = epochsParam != null ? epochsParam : calculateOptimalEpochs(sampleCount);
+        // 改进的epoch计算：基于数据量和样本数
+        int epochs = epochsParam != null ? epochsParam : calculateOptimalEpochs(sampleCount, historyValues.size());
+        
+        // 训练模型，添加早停机制
+        double previousScore = Double.MAX_VALUE;
+        int noImprovementCount = 0;
         for (int epoch = 0; epoch < epochs; epoch++) {
             network.fit(trainingData);
+            double currentScore = network.score();
+            
+            // 早停：如果连续3轮没有改善，提前停止
+            if (epoch > 5 && currentScore >= previousScore * 0.999) {
+                noImprovementCount++;
+                if (noImprovementCount >= 3) {
+                    break;
+                }
+            } else {
+                noImprovementCount = 0;
+            }
+            previousScore = currentScore;
         }
 
+        // 生成预测值，添加平滑处理
         List<Double> normalizedWorking = new ArrayList<>();
         for (double value : scaledSeries) {
             normalizedWorking.add(value);
         }
         List<Double> forecasts = new ArrayList<>();
+        double lastActual = historyValues.get(historyValues.size() - 1);
+        
         for (int step = 0; step < periods; step++) {
             double[] window = new double[windowSize];
             for (int i = 0; i < windowSize; i++) {
@@ -112,6 +132,23 @@ class Dl4jLstmForecaster {
             if (!Double.isFinite(denormalized)) {
                 return Optional.empty();
             }
+            
+            // 添加平滑处理：限制预测值的变化幅度
+            if (step == 0) {
+                // 第一个预测值不应该与最后一个实际值相差太大
+                double maxChange = range * 0.3; // 最多变化30%的范围
+                if (Math.abs(denormalized - lastActual) > maxChange) {
+                    denormalized = lastActual + Math.signum(denormalized - lastActual) * maxChange;
+                }
+            } else {
+                // 后续预测值不应该与前一个预测值相差太大
+                double maxChange = range * 0.2;
+                double lastForecast = forecasts.get(forecasts.size() - 1);
+                if (Math.abs(denormalized - lastForecast) > maxChange) {
+                    denormalized = lastForecast + Math.signum(denormalized - lastForecast) * maxChange;
+                }
+            }
+            
             forecasts.add(denormalized);
             normalizedWorking.add(prediction);
         }
@@ -168,19 +205,27 @@ class Dl4jLstmForecaster {
     
     /**
      * 计算最优训练轮数
-     * 大幅降低以确保在15秒内完成
+     * 改进版：考虑数据量和样本数
      */
-    private int calculateOptimalEpochs(int sampleCount) {
-        // 所有情况都使用很少的epochs
+    private int calculateOptimalEpochs(int sampleCount, int totalDataPoints) {
+        // 数据越少，需要更多epochs来学习模式
+        // 但要避免过拟合，所以设置上限
         if (sampleCount < 5) {
-            return 15;
+            return 25;  // 极少样本，需要更多训练
         } else if (sampleCount < 10) {
-            return DEFAULT_EPOCHS;  // 20
+            return 20;
         } else if (sampleCount < 20) {
             return 18;
         } else {
-            return 15;  // 大数据集用最少epochs
+            return 15;  // 大数据集用较少epochs避免过拟合
         }
+    }
+    
+    /**
+     * 重载方法保持向后兼容
+     */
+    private int calculateOptimalEpochs(int sampleCount) {
+        return calculateOptimalEpochs(sampleCount, sampleCount + MAX_WINDOW_SIZE);
     }
 
     private double extractDoubleParameter(Map<String, Object> parameters, String key, double defaultValue) {
