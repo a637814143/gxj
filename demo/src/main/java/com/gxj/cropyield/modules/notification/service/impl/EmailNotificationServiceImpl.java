@@ -42,16 +42,13 @@ public class EmailNotificationServiceImpl implements EmailNotificationService {
         Map<String, String> context = Objects.requireNonNullElse(request.context(), Map.of());
 
         String html = renderTemplate(template, subject, context);
-        try {
-            emailSender.sendHtmlAsync(to, subject, html).join();
-        } catch (CompletionException ex) {
-            Throwable cause = ex.getCause();
-            if (cause instanceof BusinessException businessException) {
-                throw businessException;
-            }
-            log.error("Failed to send notification email to {}: {}", to, ex.getMessage(), ex);
-            throw new BusinessException(ResultCode.SERVER_ERROR, "邮件发送失败，请检查邮箱服务配置");
-        }
+        // 异步发送邮件，不等待结果，避免阻塞事务
+        emailSender.sendHtmlAsync(to, subject, html)
+            .exceptionally(ex -> {
+                log.error("Failed to send notification email to {}: {}", to, ex.getMessage(), ex);
+                return null;
+            });
+        log.info("邮件发送任务已提交 - 收件人: {}, 主题: {}", to, subject);
     }
 
     private String renderTemplate(String template, String subject, Map<String, String> context) {

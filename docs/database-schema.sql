@@ -13,6 +13,7 @@ DROP TABLE IF EXISTS dataset_yield_record;
 DROP TABLE IF EXISTS dataset_file;
 DROP TABLE IF EXISTS base_crop;
 DROP TABLE IF EXISTS base_region;
+DROP TABLE IF EXISTS sys_audit_log;
 DROP TABLE IF EXISTS sys_log;
 DROP TABLE IF EXISTS sys_role_permission;
 DROP TABLE IF EXISTS sys_user_role;
@@ -308,6 +309,29 @@ CREATE TABLE sys_log (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '系统操作日志';
+
+CREATE TABLE sys_audit_log (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(100),
+    operation VARCHAR(50) NOT NULL,
+    module VARCHAR(50) NOT NULL,
+    entity_type VARCHAR(100),
+    entity_id BIGINT,
+    description VARCHAR(500),
+    ip_address VARCHAR(50),
+    user_agent VARCHAR(500),
+    request_uri VARCHAR(200),
+    request_method VARCHAR(10),
+    request_params TEXT,
+    result VARCHAR(20),
+    error_message TEXT,
+    execution_time BIGINT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_audit_username (username),
+    KEY idx_audit_operation (operation),
+    KEY idx_audit_module (module),
+    KEY idx_audit_created (created_at)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '系统审计日志';
 
 -- 初始化默认角色与管理员账户，支持重复执行
 INSERT INTO sys_role (code, name, description) VALUES

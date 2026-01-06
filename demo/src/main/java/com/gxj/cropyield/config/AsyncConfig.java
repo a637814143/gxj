@@ -126,6 +126,33 @@ public class AsyncConfig implements AsyncConfigurer {
     }
     
     /**
+     * 配置邮件发送专用执行器
+     * 
+     * 用于异步发送邮件（密码重置、通知等）
+     */
+    @Bean(name = "mailTaskExecutor")
+    public Executor getMailTaskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        
+        // 邮件发送通常很快，使用较小的线程池
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(5);
+        executor.setQueueCapacity(100);
+        executor.setThreadNamePrefix("mail-task-");
+        executor.setKeepAliveSeconds(60);
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(30);
+        
+        executor.initialize();
+        
+        log.info("邮件任务执行器初始化完成 - 核心线程: {}, 最大线程: {}, 队列容量: {}", 
+                executor.getCorePoolSize(), executor.getMaxPoolSize(), executor.getQueueCapacity());
+        
+        return executor;
+    }
+    
+    /**
      * 异步任务异常处理器
      * 
      * 捕获异步任务中未处理的异常，记录日志

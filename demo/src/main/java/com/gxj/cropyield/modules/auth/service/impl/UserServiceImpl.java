@@ -152,19 +152,17 @@ public class UserServiceImpl implements UserService {
     public void updatePassword(Long userId, UserPasswordRequest request) {
         log.info("开始重置用户密码 - ID: {}", userId);
         
-        try {
-            User user = userRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "用户不存在"));
-            
-            String defaultPassword = user.getUsername() + "123456";
-            user.setPassword(passwordEncoder.encode(defaultPassword));
-            userRepository.save(user);
+        User user = userRepository.findById(userId)
+            .orElseThrow(() -> new BusinessException(ResultCode.NOT_FOUND, "用户不存在"));
+        
+        String defaultPassword = user.getUsername() + "123456";
+        user.setPassword(passwordEncoder.encode(defaultPassword));
+        userRepository.save(user);
 
-            String email = user.getEmail();
-            if (!StringUtils.hasText(email)) {
-                throw new BusinessException(ResultCode.BAD_REQUEST, "用户未绑定邮箱，无法发送重置密码通知");
-            }
-
+        String email = user.getEmail();
+        if (!StringUtils.hasText(email)) {
+            log.warn("用户未绑定邮箱，无法发送重置密码通知 - ID: {}, 用户名: {}", userId, user.getUsername());
+        } else {
             emailNotificationService.sendEmailNotification(new EmailNotificationRequest(
                 email.trim(),
                 "密码已重置通知",
@@ -174,13 +172,9 @@ public class UserServiceImpl implements UserService {
                     "newPassword", defaultPassword
                 )
             ));
-            
-            log.info("用户密码重置成功 - ID: {}, 用户名: {}, 已发送邮件通知", userId, user.getUsername());
-            
-        } catch (Exception e) {
-            log.error("用户密码重置失败 - ID: {}, 错误: {}", userId, e.getMessage());
-            throw e;
         }
+        
+        log.info("用户密码重置成功 - ID: {}, 用户名: {}", userId, user.getUsername());
     }
 
     @Override
