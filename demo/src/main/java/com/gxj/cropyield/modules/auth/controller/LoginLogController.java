@@ -28,6 +28,9 @@ import java.time.LocalDate;
  * <p>核心方法：list、summary、detail、create、update、delete。</p>
  */
 
+/**
+ * 登录日志控制器 - 登录记录查询、安全审计
+ */
 @RestController
 @RequestMapping("/api/system/login-logs")
 public class LoginLogController {

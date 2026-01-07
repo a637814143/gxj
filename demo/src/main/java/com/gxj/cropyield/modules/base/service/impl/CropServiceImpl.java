@@ -17,6 +17,9 @@ import java.util.List;
  * <p>核心方法：listAll、create。</p>
  */
 
+/**
+ * 作物管理服务实现类 - 作物基础数据管理
+ */
 @Service
 public class CropServiceImpl implements CropService {
 

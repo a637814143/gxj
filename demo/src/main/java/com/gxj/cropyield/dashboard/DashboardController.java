@@ -18,6 +18,9 @@ import java.time.LocalDate;
  * <p>核心方法：getSummary、exportForecastDataAsPdf。</p>
  */
 
+/**
+ * 仪表盘控制器 - 数据统计、概览信息
+ */
 @RestController
 @RequestMapping("/api/dashboard")
 public class DashboardController {

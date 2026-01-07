@@ -27,6 +27,9 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>核心方法：listReports、createReport、generate、detail。</p>
  */
 
+/**
+ * 报表管理控制器 - 生成报表、导出Excel、报表删除
+ */
 @RestController
 @RequestMapping("/api/report")
 public class ReportController {

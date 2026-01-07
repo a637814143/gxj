@@ -60,10 +60,7 @@ public class DashboardService {
         this.forecastSnapshotRepository = forecastSnapshotRepository;
     }
 
-    /**
-     * 获取仪表盘摘要数据
-     * 使用缓存优化性能，缓存5分钟后自动过期
-     */
+
     @Cacheable(value = "dashboardSummary", key = "'summary'")
     public DashboardSummaryResponse getSummary() {
         // 使用优化的查询方法，预加载crop和region，避免N+1查询

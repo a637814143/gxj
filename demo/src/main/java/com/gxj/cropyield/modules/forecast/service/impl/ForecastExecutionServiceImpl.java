@@ -57,6 +57,9 @@ import java.util.Set;
  * <p>核心方法：runForecast、persistForecastResults、resolveForecastTask、updateTaskFromRun、createTaskFromRun、buildTaskParameters、buildEvaluationSummary、formatMetricValue。</p>
  */
 
+/**
+ * 预测执行服务实现类 - 执行预测任务、计算评估指标
+ */
 @Service
 public class ForecastExecutionServiceImpl implements ForecastExecutionService {
 

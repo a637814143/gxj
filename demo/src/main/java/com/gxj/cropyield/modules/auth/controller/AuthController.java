@@ -31,6 +31,9 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>核心方法：captcha、register、login、adminLogin、userLogin、refreshToken、currentUser、checkPermission。</p>
  */
 
+/**
+ * 用户认证控制器 - 登录、注册、令牌刷新
+ */
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {

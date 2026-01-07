@@ -27,6 +27,9 @@ import java.util.List;
  * 在线咨询模块的控制器，用于暴露咨询会话相关的 REST 接口。
  * <p>核心方法：listConsultations、createConsultation、getMessages、sendMessage、updateConsultation、markAsRead、closeConsultation。</p>
  */
+/**
+ * 在线咨询控制器 - 咨询会话管理、消息收发
+ */
 @RestController
 @RequestMapping("/api/consultations")
 public class ConsultationController {

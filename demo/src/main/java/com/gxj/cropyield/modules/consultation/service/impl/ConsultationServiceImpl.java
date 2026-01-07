@@ -42,6 +42,9 @@ import java.util.stream.Collectors;
 /**
  * 在线咨询模块的业务实现类，负责落实咨询会话领域的业务逻辑。
  */
+/**
+ * 在线咨询服务实现类 - 咨询会话、消息管理
+ */
 @Service
 @Transactional
 public class ConsultationServiceImpl implements ConsultationService {

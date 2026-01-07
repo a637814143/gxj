@@ -35,6 +35,9 @@ import java.util.stream.Collectors;
  * <p>核心方法：listUsers、createUser、toResponse、updateUser、deleteUser、updatePassword、listRoles、resolveRoles。</p>
  */
 
+/**
+ * 用户管理服务实现类 - 用户CRUD、角色分配、密码重置
+ */
 @Service
 public class UserServiceImpl implements UserService {
     

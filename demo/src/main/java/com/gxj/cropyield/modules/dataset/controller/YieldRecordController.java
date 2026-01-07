@@ -17,6 +17,9 @@ import java.util.List;
  * <p>核心方法：listRecords、createRecord。</p>
  */
 
+/**
+ * 产量数据管理控制器 - 产量数据CRUD、查询统计
+ */
 @RestController
 @RequestMapping("/api/datasets/yield-records")
 public class YieldRecordController {

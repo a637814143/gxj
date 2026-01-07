@@ -14,6 +14,9 @@ import org.springframework.web.bind.annotation.*;
  * 
  * 提供异步预测任务的提交、查询和取消功能
  */
+/**
+ * 异步预测任务控制器 - 异步执行预测、任务状态查询
+ */
 @RestController
 @RequestMapping("/api/forecast/async")
 public class AsyncForecastController {
@@ -24,12 +27,7 @@ public class AsyncForecastController {
         this.asyncForecastService = asyncForecastService;
     }
     
-    /**
-     * 提交异步预测任务
-     * 
-     * @param request 预测请求
-     * @return 任务ID和初始状态
-     */
+
     @PostMapping("/submit")
     @PreAuthorize("hasAnyRole('ADMIN', 'AGRICULTURE_DEPT')")
     public ResponseEntity<ApiResponse<AsyncTaskResponse>> submitTask(
@@ -38,12 +36,7 @@ public class AsyncForecastController {
         return ResponseEntity.ok(ApiResponse.success(response));
     }
     
-    /**
-     * 查询任务状态
-     * 
-     * @param taskId 任务ID
-     * @return 任务状态信息
-     */
+
     @GetMapping("/status/{taskId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'AGRICULTURE_DEPT', 'FARMER')")
     public ResponseEntity<ApiResponse<AsyncTaskStatusResponse>> getTaskStatus(
@@ -52,12 +45,7 @@ public class AsyncForecastController {
         return ResponseEntity.ok(ApiResponse.success(response));
     }
     
-    /**
-     * 取消任务
-     * 
-     * @param taskId 任务ID
-     * @return 成功消息
-     */
+
     @DeleteMapping("/{taskId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'AGRICULTURE_DEPT')")
     public ResponseEntity<ApiResponse<String>> cancelTask(@PathVariable String taskId) {

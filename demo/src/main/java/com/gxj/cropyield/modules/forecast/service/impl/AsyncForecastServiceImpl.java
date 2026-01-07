@@ -21,10 +21,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * 异步预测服务实现
- * 
- * 提供异步执行预测任务的功能
- * 使用独立线程池处理耗时较长的LSTM训练等操作
+ * 异步预测任务服务实现类 - 异步执行预测任务
  */
 @Service
 public class AsyncForecastServiceImpl implements AsyncForecastService {

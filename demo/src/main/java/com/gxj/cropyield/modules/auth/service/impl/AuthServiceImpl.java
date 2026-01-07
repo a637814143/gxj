@@ -43,6 +43,9 @@ import java.util.stream.Collectors;
  * <p>核心方法：login、performLogin、loginAsAdmin、loginAsUser、register、refreshToken、buildTokens、getCurrentUser。</p>
  */
 
+/**
+ * 用户认证服务实现类 - 登录、注册、令牌管理
+ */
 @Service
 public class AuthServiceImpl implements AuthService {
 

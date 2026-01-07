@@ -17,6 +17,9 @@ import java.util.List;
  * <p>核心方法：listCrops、createCrop。</p>
  */
 
+/**
+ * 作物管理控制器 - 作物基础数据管理
+ */
 @RestController
 @RequestMapping("/api/base/crops")
 public class CropController {

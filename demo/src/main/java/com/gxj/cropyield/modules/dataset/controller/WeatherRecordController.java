@@ -18,6 +18,9 @@ import java.util.List;
 /**
  * 气象数据接口。
  */
+/**
+ * 气象数据管理控制器 - 气象数据CRUD、查询统计
+ */
 @RestController
 @RequestMapping("/api/datasets/weather-records")
 public class WeatherRecordController {

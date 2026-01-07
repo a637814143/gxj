@@ -24,16 +24,7 @@ public class AsyncConfig implements AsyncConfigurer {
     
     private static final Logger log = LoggerFactory.getLogger(AsyncConfig.class);
     
-    /**
-     * 配置异步任务执行器
-     * 
-     * 线程池配置：
-     * - 核心线程数：5（常驻线程）
-     * - 最大线程数：10（高峰期最多线程）
-     * - 队列容量：100（等待队列）
-     * - 线程空闲时间：60秒
-     * - 拒绝策略：CallerRunsPolicy（由调用线程执行）
-     */
+
     @Bean(name = "taskExecutor")
     @Override
     public Executor getAsyncExecutor() {
@@ -71,12 +62,7 @@ public class AsyncConfig implements AsyncConfigurer {
         return executor;
     }
     
-    /**
-     * 配置预测任务专用执行器
-     * 
-     * 用于LSTM等耗时较长的预测任务
-     * 线程池较小，避免占用过多资源
-     */
+
     @Bean(name = "forecastExecutor")
     public Executor getForecastExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
@@ -99,11 +85,7 @@ public class AsyncConfig implements AsyncConfigurer {
         return executor;
     }
     
-    /**
-     * 配置数据导入专用执行器
-     * 
-     * 用于大批量数据导入任务
-     */
+
     @Bean(name = "importExecutor")
     public Executor getImportExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
@@ -125,11 +107,7 @@ public class AsyncConfig implements AsyncConfigurer {
         return executor;
     }
     
-    /**
-     * 配置邮件发送专用执行器
-     * 
-     * 用于异步发送邮件（密码重置、通知等）
-     */
+
     @Bean(name = "mailTaskExecutor")
     public Executor getMailTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
@@ -152,11 +130,7 @@ public class AsyncConfig implements AsyncConfigurer {
         return executor;
     }
     
-    /**
-     * 异步任务异常处理器
-     * 
-     * 捕获异步任务中未处理的异常，记录日志
-     */
+
     @Override
     public AsyncUncaughtExceptionHandler getAsyncUncaughtExceptionHandler() {
         return (throwable, method, params) -> {

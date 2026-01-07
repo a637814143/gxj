@@ -35,7 +35,7 @@ import java.util.stream.Collectors;
 import org.springframework.util.StringUtils;
 
 /**
- * 气象数据服务实现。
+ * 气象数据管理服务实现类 - 气象记录CRUD
  */
 @Service
 public class WeatherRecordServiceImpl implements WeatherRecordService {

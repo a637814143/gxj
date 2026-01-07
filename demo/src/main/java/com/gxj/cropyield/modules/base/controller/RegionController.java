@@ -13,6 +13,9 @@ import java.util.List;
  * <p>核心方法：listRegions、createRegion、updateRegion、deleteRegion。</p>
  */
 
+/**
+ * 地区管理控制器 - 地区基础数据管理
+ */
 @RestController
 @RequestMapping("/api/base/regions")
 public class RegionController {

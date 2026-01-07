@@ -26,6 +26,25 @@ import java.util.regex.Pattern;
  * <p>核心方法：listAll、create、update、delete、applyRequest、ensureNameUnique、resolveCode、ensureUniqueCode。</p>
  */
 
+/**
+ * 【地区管理】业务实现类 - 地区基础数据管理业务逻辑
+ * 
+ * 功能说明：
+ * - 地区管理：创建、更新、删除地区信息
+ * - 地区查询：查询所有地区列表、按编码查询
+ * 
+ * 搜索关键词：地区服务、区域管理、地区业务逻辑
+ * 
+ * 核心方法：
+ * - listRegions: 查询地区列表
+ * - createRegion: 创建地区
+ * - updateRegion: 更新地区
+ * - deleteRegion: 删除地区
+ */
+
+/**
+ * 地区管理服务实现类 - 地区基础数据管理
+ */
 @Service
 public class RegionServiceImpl implements RegionService {
 

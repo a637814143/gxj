@@ -14,6 +14,9 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>核心方法：history、deleteHistory。</p>
  */
 
+/**
+ * 预测历史记录控制器 - 历史预测结果查询、对比分析
+ */
 @RestController
 @RequestMapping("/api/forecast")
 public class ForecastHistoryController {

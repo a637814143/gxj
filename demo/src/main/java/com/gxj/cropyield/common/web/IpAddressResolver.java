@@ -11,10 +11,7 @@ import java.util.Enumeration;
 import java.util.List;
 
 /**
- * Utility class that resolves the real client IP address from an HTTP request.
- * <p>
- * It inspects a list of common proxy headers and falls back to {@link HttpServletRequest#getRemoteAddr()}.
- * </p>
+ 主要用于审计日志和安全记录，获取客户端IP地址。
  */
 public final class IpAddressResolver {
 

@@ -15,7 +15,8 @@ import org.springframework.util.StringUtils;
  * 同时保留对 {@code MAIL_PASSWORD} 的覆盖能力。
  */
 @Component
-public class MailCredentialsConfigurator {
+public class
+MailCredentialsConfigurator {
 
     private static final Logger log = LoggerFactory.getLogger(MailCredentialsConfigurator.class);
 

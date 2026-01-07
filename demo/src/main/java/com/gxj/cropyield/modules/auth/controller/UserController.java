@@ -27,6 +27,9 @@ import java.util.List;
  * <p>核心方法：listUsers、createUser、updateUser、deleteUser、updatePassword、listRoles。</p>
  */
 
+/**
+ * 用户管理控制器 - 用户CRUD、角色分配、密码重置
+ */
 @RestController
 @RequestMapping("/api/auth/users")
 public class UserController {

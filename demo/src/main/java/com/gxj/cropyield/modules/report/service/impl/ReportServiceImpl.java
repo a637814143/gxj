@@ -73,6 +73,9 @@ import java.util.stream.Collectors;
  * <p>核心方法：getOverview、create、generate、getDetail、toDetail、toSummary、buildSection、toSectionResponse。</p>
  */
 
+/**
+ * 报表管理服务实现类 - 报表生成、导出、删除
+ */
 @Service
 public class ReportServiceImpl implements ReportService {
 

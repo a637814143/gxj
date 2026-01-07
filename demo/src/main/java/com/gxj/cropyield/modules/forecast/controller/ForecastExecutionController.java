@@ -14,6 +14,9 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>核心方法：predict。</p>
  */
 
+/**
+ * 产量预测执行控制器 - 执行预测任务、获取预测结果
+ */
 @RestController
 @RequestMapping("/api/forecast")
 public class ForecastExecutionController {

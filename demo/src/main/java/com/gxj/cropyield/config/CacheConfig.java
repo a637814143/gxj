@@ -19,17 +19,7 @@ import java.util.concurrent.TimeUnit;
 @EnableCaching
 public class CacheConfig {
     
-    /**
-     * 配置缓存管理器
-     * 
-     * 缓存策略：
-     * - regions: 区域列表，1小时过期
-     * - crops: 作物列表，1小时过期
-     * - forecastModels: 预测模型列表，1小时过期
-     * - dashboardSummary: 仪表盘摘要，5分钟过期
-     * - userDetails: 用户详情，15分钟过期
-     * - reportList: 报告列表，10分钟过期
-     */
+
     @Bean
     public CacheManager cacheManager() {
         CaffeineCacheManager cacheManager = new CaffeineCacheManager(

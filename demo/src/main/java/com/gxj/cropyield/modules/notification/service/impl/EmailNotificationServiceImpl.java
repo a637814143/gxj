@@ -17,6 +17,9 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletionException;
 
+/**
+ * 邮件通知服务实现类 - 异步发送邮件通知
+ */
 @Service
 public class EmailNotificationServiceImpl implements EmailNotificationService {
 

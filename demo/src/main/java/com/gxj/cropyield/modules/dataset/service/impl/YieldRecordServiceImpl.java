@@ -19,6 +19,9 @@ import java.util.List;
  * <p>核心方法：listAll、create。</p>
  */
 
+/**
+ * 产量数据管理服务实现类 - 产量记录CRUD
+ */
 @Service
 public class YieldRecordServiceImpl implements YieldRecordService {
 

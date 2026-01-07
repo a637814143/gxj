@@ -22,97 +22,61 @@ public class AuditLogEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    
-    /**
-     * 操作用户名
-     */
+
     @Column(length = 100)
     private String username;
     
-    /**
-     * 操作类型
-     * 例如：CREATE_USER, UPDATE_USER, DELETE_USER等
-     */
+
     @Column(length = 50, nullable = false)
     private String operation;
     
-    /**
-     * 模块名称
-     * 例如：用户管理、数据管理、预测管理等
-     */
+
     @Column(length = 50, nullable = false)
     private String module;
     
-    /**
-     * 实体类型
-     * 例如：User, YieldRecord, ForecastTask等
-     */
+
     @Column(length = 100)
     private String entityType;
     
-    /**
-     * 实体ID
-     */
+
     private Long entityId;
     
-    /**
-     * 操作描述
-     */
+
     @Column(length = 500)
     private String description;
     
-    /**
-     * IP地址
-     */
+
     @Column(length = 50)
     private String ipAddress;
     
-    /**
-     * 用户代理（浏览器信息）
-     */
+
     @Column(length = 500)
     private String userAgent;
     
-    /**
-     * 请求URI
-     */
+
     @Column(length = 200)
     private String requestUri;
     
-    /**
-     * 请求方法
-     * GET, POST, PUT, DELETE等
-     */
+
     @Column(length = 10)
     private String requestMethod;
     
-    /**
-     * 请求参数（JSON格式）
-     */
+
     @Column(columnDefinition = "TEXT")
     private String requestParams;
     
-    /**
-     * 操作结果
-     * SUCCESS, FAILURE
-     */
+
     @Column(length = 20)
     private String result;
     
-    /**
-     * 错误信息
-     */
+
     @Column(columnDefinition = "TEXT")
     private String errorMessage;
     
-    /**
-     * 执行时间（毫秒）
-     */
+
     private Long executionTime;
     
-    /**
-     * 创建时间
-     */
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
