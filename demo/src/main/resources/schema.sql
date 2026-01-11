@@ -44,6 +44,24 @@ CREATE TABLE IF NOT EXISTS base_crop (
     UNIQUE KEY uq_base_crop_code (code)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '基础作物信息';
 
+-- 如果历史实例中 base_crop 表缺少 harvest_season 列，则启动时补齐，避免 Hibernate 校验失败
+SET @ddl := (
+    SELECT IF(
+        EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = @current_schema
+              AND table_name = 'base_crop'
+              AND column_name = 'harvest_season'
+        ),
+        'SELECT 1',
+        "ALTER TABLE base_crop ADD COLUMN harvest_season VARCHAR(32) NOT NULL DEFAULT 'ANNUAL' AFTER category"
+    )
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
 CREATE TABLE IF NOT EXISTS dataset_file (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(128) NOT NULL,
@@ -75,8 +93,8 @@ CREATE TABLE IF NOT EXISTS data_import_job (
     message VARCHAR(512),
     started_at DATETIME,
     finished_at DATETIME,
-    warnings_payload TEXT,
-    preview_payload TEXT,
+    warnings_payload TINYTEXT,
+    preview_payload TINYTEXT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_import_task (task_id),
@@ -84,6 +102,43 @@ CREATE TABLE IF NOT EXISTS data_import_job (
     KEY idx_import_dataset_file (dataset_file_id),
     CONSTRAINT fk_import_dataset_file FOREIGN KEY (dataset_file_id) REFERENCES dataset_file (id) ON DELETE SET NULL
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '数据导入任务记录';
+
+-- 如果历史实例中 data_import_job 的 LOB 列类型被创建为 TEXT，则在启动时调整为 TINYTEXT 以匹配实体定义
+SET @ddl := (
+    SELECT IF(
+        EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = @current_schema
+              AND table_name = 'data_import_job'
+              AND column_name = 'warnings_payload'
+              AND data_type <> 'tinytext'
+        ),
+        'ALTER TABLE data_import_job MODIFY warnings_payload TINYTEXT NULL',
+        'SELECT 1'
+    )
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @ddl := (
+    SELECT IF(
+        EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = @current_schema
+              AND table_name = 'data_import_job'
+              AND column_name = 'preview_payload'
+              AND data_type <> 'tinytext'
+        ),
+        'ALTER TABLE data_import_job MODIFY preview_payload TINYTEXT NULL',
+        'SELECT 1'
+    )
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 CREATE TABLE IF NOT EXISTS data_import_job_error (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -729,6 +784,20 @@ CREATE TABLE IF NOT EXISTS consultation_message (
     CONSTRAINT fk_message_consultation FOREIGN KEY (consultation_id) REFERENCES consultation (id) ON DELETE CASCADE,
     CONSTRAINT fk_message_sender FOREIGN KEY (sender_id) REFERENCES sys_user (id) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '在线咨询消息';
+
+CREATE TABLE IF NOT EXISTS consultation_attachment (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    message_id BIGINT UNSIGNED NOT NULL,
+    file_name VARCHAR(256) NOT NULL,
+    original_name VARCHAR(256),
+    content_type VARCHAR(128),
+    file_size BIGINT,
+    storage_path VARCHAR(512) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_attachment_message (message_id),
+    CONSTRAINT fk_attachment_message FOREIGN KEY (message_id) REFERENCES consultation_message (id) ON DELETE CASCADE
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '在线咨询消息附件';
 
 -- Backfill recall columns for existing installations without relying on
 -- MySQL 8 "IF NOT EXISTS" support so MySQL 5.7 deployments succeed.
